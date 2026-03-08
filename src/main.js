@@ -8,6 +8,7 @@ const OBA_KEY = 'TEST'
 const ARRIVALS_CACHE_TTL_MS = 20_000
 const OBA_MAX_RETRIES = 3
 const OBA_RETRY_BASE_DELAY_MS = 800
+const THEME_STORAGE_KEY = 'link-pulse-theme'
 const LINE_MATCHERS = {
   '100479': /100479/,
   '2LINE': /2LINE/,
@@ -17,6 +18,7 @@ const state = {
   fetchedAt: '',
   error: '',
   activeTab: 'map',
+  theme: 'dark',
   currentDialogStationId: '',
   lines: [],
   layouts: new Map(),
@@ -37,6 +39,7 @@ document.querySelector('#app').innerHTML = `
         <h1>LINK PULSE</h1>
       </div>
       <div class="screen-meta">
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">Light</button>
         <p id="status-pill" class="status-pill">SYNC</p>
         <p id="updated-at" class="updated-at">Waiting for snapshot</p>
       </div>
@@ -69,6 +72,7 @@ document.querySelector('#app').innerHTML = `
 
 const boardElement = document.querySelector('#board')
 const tabButtons = [...document.querySelectorAll('.tab-button')]
+const themeToggleButton = document.querySelector('#theme-toggle')
 const statusPillElement = document.querySelector('#status-pill')
 const updatedAtElement = document.querySelector('#updated-at')
 const dialog = document.querySelector('#station-dialog')
@@ -92,6 +96,10 @@ tabButtons.forEach((button) => {
     render()
   })
 })
+themeToggleButton.addEventListener('click', () => {
+  setTheme(state.theme === 'dark' ? 'light' : 'dark')
+  render()
+})
 
 function normalizeName(name) {
   return name
@@ -99,6 +107,18 @@ function normalizeName(name) {
     .replace('Univ of Washington', 'UW')
     .replace("Int'l", 'Intl')
     .trim()
+}
+
+function getPreferredTheme() {
+  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
+  if (storedTheme === 'light' || storedTheme === 'dark') return storedTheme
+  return 'dark'
+}
+
+function setTheme(theme) {
+  state.theme = theme
+  document.documentElement.dataset.theme = theme
+  window.localStorage.setItem(THEME_STORAGE_KEY, theme)
 }
 
 function slugifyStation(value) {
@@ -771,6 +791,7 @@ function attachStationClickHandlers() {
 }
 
 function render() {
+  themeToggleButton.textContent = state.theme === 'dark' ? 'Light' : 'Dark'
   statusPillElement.textContent = state.error ? 'HOLD' : 'SYNC'
   statusPillElement.classList.toggle('status-pill-error', Boolean(state.error))
   updatedAtElement.textContent = state.error
@@ -822,6 +843,7 @@ async function refreshVehicles() {
 }
 
 async function init() {
+  setTheme(getPreferredTheme())
   await loadStaticData()
   render()
   await refreshVehicles()
