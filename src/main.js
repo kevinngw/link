@@ -168,12 +168,23 @@ function parseVehicle(rawVehicle, line, layout) {
     id: rawVehicle.vehicleId,
     label: rawVehicle.vehicleId.replace(/^40_/, ''),
     directionSymbol,
+    fromLabel: currentStation.label,
     minutePosition,
+    progress,
+    toLabel: nextStation.label,
     y,
     currentLabel: currentStation.label,
     nextLabel: nextStation.label,
     status: rawVehicle.tripStatus?.status ?? '',
   }
+}
+
+function formatVehicleSegment(vehicle) {
+  if (vehicle.fromLabel === vehicle.toLabel || vehicle.progress === 0) {
+    return `At ${vehicle.fromLabel}`
+  }
+
+  return `${vehicle.fromLabel} -> ${vehicle.toLabel}`
 }
 
 function formatDirectionalHeadway(label, vehicles) {
@@ -234,15 +245,22 @@ function renderLine(line) {
     )
     .join('')
 
-  const readout = vehicles.length
-    ? vehicles
-        .slice(0, 4)
-        .map(
-          (vehicle) =>
-            `<p class="train-readout"><span class="train-id">${vehicle.label}</span><span class="train-inline-direction">${vehicle.directionSymbol}</span>${vehicle.currentLabel}${vehicle.currentLabel !== vehicle.nextLabel ? ` -> ${vehicle.nextLabel}` : ''}</p>`,
-        )
-        .join('')
-    : '<p class="train-readout muted">No trains on latest snapshot</p>'
+  const renderDirectionColumn = (label, directionVehicles) => `
+    <div class="direction-column">
+      <p class="direction-column-title">${label}</p>
+      ${
+        directionVehicles.length
+          ? directionVehicles
+              .sort((left, right) => left.minutePosition - right.minutePosition)
+              .map(
+                (vehicle) =>
+                  `<p class="train-readout"><span class="train-id">${vehicle.label}</span>${formatVehicleSegment(vehicle)}</p>`,
+              )
+              .join('')
+          : '<p class="train-readout muted">No trains</p>'
+      }
+    </div>
+  `
 
   return `
     <article class="line-card">
@@ -264,7 +282,10 @@ function renderLine(line) {
         ${rows}
         ${trainDots}
       </svg>
-      <div class="line-readout">${readout}</div>
+      <div class="line-readout line-readout-grid">
+        ${renderDirectionColumn('NB', northboundVehicles)}
+        ${renderDirectionColumn('SB', southboundVehicles)}
+      </div>
     </article>
   `
 }
