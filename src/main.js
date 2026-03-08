@@ -17,12 +17,14 @@ const state = {
   fetchedAt: '',
   error: '',
   activeTab: 'map',
+  currentDialogStationId: '',
   lines: [],
   layouts: new Map(),
   vehiclesByLine: new Map(),
   rawVehicles: [],
   arrivalsCache: new Map(),
   activeDialogRequest: 0,
+  isSyncingFromUrl: false,
 }
 
 registerSW({ immediate: true })
@@ -31,8 +33,8 @@ document.querySelector('#app').innerHTML = `
   <main class="screen">
     <header class="screen-header">
       <div>
-        <p class="screen-kicker">LINK LIVE BOARD</p>
-        <h1>1 LINE / 2 LINE</h1>
+        <p class="screen-kicker">SEATTLE LIGHT RAIL</p>
+        <h1>LINK PULSE</h1>
       </div>
       <div class="screen-meta">
         <p id="status-pill" class="status-pill">SYNC</p>
@@ -42,7 +44,6 @@ document.querySelector('#app').innerHTML = `
     <section class="tab-bar" aria-label="Board views">
       <button class="tab-button is-active" data-tab="map" type="button">Map</button>
       <button class="tab-button" data-tab="trains" type="button">Trains</button>
-      <button class="tab-button" data-tab="times" type="button">Times</button>
     </section>
     <section id="board" class="board"></section>
   </main>
@@ -76,9 +77,14 @@ const dialogClose = document.querySelector('#dialog-close')
 const arrivalsNb = document.querySelector('#arrivals-nb')
 const arrivalsSb = document.querySelector('#arrivals-sb')
 
-dialogClose.addEventListener('click', () => dialog.close())
+dialogClose.addEventListener('click', () => closeStationDialog())
 dialog.addEventListener('click', (e) => {
-  if (e.target === dialog) dialog.close()
+  if (e.target === dialog) closeStationDialog()
+})
+dialog.addEventListener('close', () => {
+  if (!state.isSyncingFromUrl) {
+    clearStationParam()
+  }
 })
 tabButtons.forEach((button) => {
   button.addEventListener('click', () => {
@@ -93,6 +99,15 @@ function normalizeName(name) {
     .replace('Univ of Washington', 'UW')
     .replace("Int'l", 'Intl')
     .trim()
+}
+
+function slugifyStation(value) {
+  return value
+    .toLowerCase()
+    .replace(/['.]/g, '')
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
 }
 
 function clamp(value, min, max) {
@@ -300,26 +315,6 @@ function formatVehicleSegment(vehicle) {
   return `${vehicle.fromLabel} -> ${vehicle.toLabel}`
 }
 
-function formatDirectionalHeadway(label, vehicles) {
-  if (vehicles.length < 2) return `${label} --`
-
-  const sorted = [...vehicles].sort((left, right) => left.minutePosition - right.minutePosition)
-  const gaps = []
-
-  for (let index = 1; index < sorted.length; index += 1) {
-    gaps.push(Math.max(1, Math.round(sorted[index].minutePosition - sorted[index - 1].minutePosition)))
-  }
-
-  return `${label} ${gaps.slice(0, 4).map((gap) => `${gap}m`).join('  ')}`
-}
-
-function getTerminalHeadwayLabels(layout) {
-  return {
-    up: layout.stations[0]?.label ?? 'Up',
-    down: layout.stations.at(-1)?.label ?? 'Down',
-  }
-}
-
 function getAllVehicles() {
   return state.lines.flatMap((line) =>
     (state.vehiclesByLine.get(line.id) ?? []).map((vehicle) => ({
@@ -397,6 +392,84 @@ function getDialogStations(station) {
       return matchedStation ? { line, station: matchedStation } : null
     })
     .filter(Boolean)
+}
+
+function findStationByParam(stationParam) {
+  if (!stationParam) return null
+
+  const normalizedParam = stationParam.trim().toLowerCase()
+
+  for (const line of state.lines) {
+    for (const station of line.stops) {
+      const candidates = new Set([
+        station.id,
+        `40_${station.id}`,
+        station.name,
+        normalizeName(station.name),
+        slugifyStation(station.name),
+        slugifyStation(normalizeName(station.name)),
+      ])
+
+      for (const alias of line.stationAliases?.[station.id] ?? []) {
+        candidates.add(alias)
+        candidates.add(`40_${alias}`)
+        candidates.add(slugifyStation(alias))
+      }
+
+      if ([...candidates].some((candidate) => String(candidate).toLowerCase() === normalizedParam)) {
+        return station
+      }
+    }
+  }
+
+  return null
+}
+
+function setStationParam(station) {
+  const url = new URL(window.location.href)
+  url.searchParams.set('station', slugifyStation(station.name))
+  window.history.pushState({}, '', url)
+}
+
+function clearStationParam() {
+  const url = new URL(window.location.href)
+  if (!url.searchParams.has('station')) return
+  url.searchParams.delete('station')
+  window.history.pushState({}, '', url)
+}
+
+function closeStationDialog() {
+  state.currentDialogStationId = ''
+  if (dialog.open) {
+    dialog.close()
+  } else {
+    clearStationParam()
+  }
+}
+
+async function syncDialogFromUrl() {
+  const stationParam = new URL(window.location.href).searchParams.get('station')
+  const station = findStationByParam(stationParam)
+
+  state.isSyncingFromUrl = true
+  try {
+    if (!station) {
+      state.currentDialogStationId = ''
+      if (dialog.open) dialog.close()
+      return
+    }
+
+    state.activeTab = 'map'
+    render()
+
+    if (state.currentDialogStationId === station.id && dialog.open) {
+      return
+    }
+
+    await showStationDialog(station, false)
+  } finally {
+    state.isSyncingFromUrl = false
+  }
 }
 
 function classifyArrivalDirection(arrival, line) {
@@ -498,12 +571,16 @@ function mergeArrivalBuckets(collections) {
   return merged
 }
 
-async function showStationDialog(station) {
+async function showStationDialog(station, updateUrl = true) {
   dialogTitle.textContent = station.name
+  state.currentDialogStationId = station.id
 
   const requestId = state.activeDialogRequest + 1
   state.activeDialogRequest = requestId
   renderArrivalLists({ nb: [], sb: [] }, true)
+  if (updateUrl) {
+    setStationParam(station)
+  }
   dialog.showModal()
 
   try {
@@ -527,9 +604,6 @@ function renderLine(line) {
   const vehicles = state.vehiclesByLine.get(line.id) ?? []
   const northboundVehicles = vehicles.filter((vehicle) => vehicle.directionSymbol === '▲')
   const southboundVehicles = vehicles.filter((vehicle) => vehicle.directionSymbol === '▼')
-  const terminalLabels = getTerminalHeadwayLabels(layout)
-  const northboundHeadway = formatDirectionalHeadway(`${terminalLabels.up} HEADWAY`, northboundVehicles)
-  const southboundHeadway = formatDirectionalHeadway(`${terminalLabels.down} HEADWAY`, southboundVehicles)
 
   const rows = layout.stations
     .map((station, index) => {
@@ -594,10 +668,6 @@ function renderLine(line) {
             <h2>${line.name}</h2>
             <p>${vehicles.length} live trains</p>
           </div>
-        </div>
-        <div class="headways">
-          <p class="headway">${northboundHeadway}</p>
-          <p class="headway">${southboundHeadway}</p>
         </div>
       </header>
       <svg viewBox="0 0 360 ${layout.height}" class="line-diagram" role="img" aria-label="${line.name} live LED board">
@@ -681,38 +751,6 @@ function renderTrainList() {
   return groupedRows
 }
 
-function renderTimesView() {
-  const cards = state.lines
-    .map((line) => {
-      const layout = state.layouts.get(line.id)
-      const vehicles = state.vehiclesByLine.get(line.id) ?? []
-      const northboundVehicles = vehicles.filter((vehicle) => vehicle.directionSymbol === '▲')
-      const southboundVehicles = vehicles.filter((vehicle) => vehicle.directionSymbol === '▼')
-      const terminalLabels = getTerminalHeadwayLabels(layout)
-
-      return `
-        <article class="panel-card">
-          <header class="panel-header">
-            <div class="line-title">
-              <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
-              <div>
-                <h2>${line.name}</h2>
-                <p>Terminal headway snapshot</p>
-              </div>
-            </div>
-          </header>
-          <div class="times-grid">
-            <p class="headway">${formatDirectionalHeadway(`${terminalLabels.up} HEADWAY`, northboundVehicles)}</p>
-            <p class="headway">${formatDirectionalHeadway(`${terminalLabels.down} HEADWAY`, southboundVehicles)}</p>
-          </div>
-        </article>
-      `
-    })
-    .join('')
-
-  return `<div class="board">${cards}</div>`
-}
-
 function attachStationClickHandlers() {
   state.lines.forEach(line => {
     const layout = state.layouts.get(line.id)
@@ -723,7 +761,7 @@ function attachStationClickHandlers() {
     stationGroups.forEach(group => {
       group.addEventListener('click', () => {
         const stopId = group.dataset.stopId
-        const station = layout.stations.find(s => s.id === stopId)
+    const station = layout.stations.find(s => s.id === stopId)
         if (station) {
           showStationDialog(station)
         }
@@ -752,9 +790,6 @@ function render() {
     boardElement.innerHTML = renderTrainList()
     return
   }
-
-  boardElement.className = 'board'
-  boardElement.innerHTML = renderTimesView()
 }
 
 async function loadStaticData() {
@@ -790,6 +825,10 @@ async function init() {
   await loadStaticData()
   render()
   await refreshVehicles()
+  await syncDialogFromUrl()
+  window.addEventListener('popstate', () => {
+    syncDialogFromUrl().catch(console.error)
+  })
   window.setInterval(refreshVehicles, 15000)
   window.setInterval(render, 1000)
 }
