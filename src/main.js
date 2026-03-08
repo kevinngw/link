@@ -1,7 +1,7 @@
 import './style.css'
 import { registerSW } from 'virtual:pwa-register'
 
-const DATA_URL = '/link-data.json'
+const DATA_URL = './link-data.json'
 const VEHICLE_URL = 'https://api.pugetsound.onebusaway.org/api/where/vehicles-for-agency/40.json?key=TEST'
 const LINE_MATCHERS = {
   '100479': /100479/,
