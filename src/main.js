@@ -3,6 +3,9 @@ import { registerSW } from 'virtual:pwa-register'
 
 const DATA_URL = './link-data.json'
 const VEHICLE_URL = 'https://api.pugetsound.onebusaway.org/api/where/vehicles-for-agency/40.json?key=TEST'
+const OBA_BASE_URL = 'https://api.pugetsound.onebusaway.org/api/where'
+const OBA_KEY = 'TEST'
+const ARRIVALS_CACHE_TTL_MS = 20_000
 const LINE_MATCHERS = {
   '100479': /100479/,
   '2LINE': /2LINE/,
@@ -15,6 +18,8 @@ const state = {
   layouts: new Map(),
   vehiclesByLine: new Map(),
   rawVehicles: [],
+  arrivalsCache: new Map(),
+  activeDialogRequest: 0,
 }
 
 registerSW({ immediate: true })
@@ -97,7 +102,7 @@ function formatArrivalTime(offsetSeconds) {
 }
 
 function buildLayout(line) {
-  const orderedStops = [...line.stops].sort((left, right) => right.sequence - right.sequence)
+  const orderedStops = [...line.stops].sort((left, right) => right.sequence - left.sequence)
   const stationGap = 48
   const topPadding = 44
   const bottomPadding = 28
@@ -242,74 +247,183 @@ function formatDirectionalHeadway(label, vehicles) {
   return `${label} ${gaps.slice(0, 4).map((gap) => `${gap}m`).join('  ')}`
 }
 
-function getArrivalsForStation(stationId, lineId, layout) {
-  const vehicles = state.vehiclesByLine.get(lineId) || []
-  const stationIndex = layout.stationIndexByStopId.get(stationId)
-  if (stationIndex == null) return { nb: [], sb: [] }
-
-  const nbArrivals = []
-  const sbArrivals = []
-
-  vehicles.forEach(vehicle => {
-    const rv = vehicle.rawVehicle
-    if (!rv || !rv.tripStatus) return
-    
-    const stopTimes = rv.tripStatus.stopTimes || []
-    stopTimes.forEach(st => {
-      if (st.stopId === stationId || st.stopId === `40_${stationId}`) {
-        const arrival = {
-          vehicleId: vehicle.label,
-          arrivalTime: st.arrivalTime,
-          departureTime: st.departureTime,
-          distance: st.distanceFromVehicle,
-        }
-        if (vehicle.directionSymbol === '▲') {
-          nbArrivals.push(arrival)
-        } else if (vehicle.directionSymbol === '▼') {
-          sbArrivals.push(arrival)
-        }
-      }
-    })
-  })
-
+function renderArrivalLists(arrivals, loading = false) {
   const now = Date.now()
-  const sortByArrival = (a, b) => a.arrivalTime - b.arrivalTime
-  const filterFuture = a => a.arrivalTime * 1000 > now
 
-  return {
-    nb: nbArrivals.filter(filterFuture).sort(sortByArrival).slice(0, 4),
-    sb: sbArrivals.filter(filterFuture).sort(sortByArrival).slice(0, 4),
-  }
-}
-
-function showStationDialog(station, line, layout) {
-  dialogTitle.textContent = station.name
-  
-  const arrivals = getArrivalsForStation(station.id, line.id, layout)
-  
-  const now = Date.now()
-  
-  const renderArrival = (a) => {
-    const arrivalMs = a.arrivalTime * 1000
+  const renderArrival = (arrival) => {
+    const arrivalMs = arrival.arrivalTime
     const diffSec = Math.floor((arrivalMs - now) / 1000)
     const timeStr = formatArrivalTime(diffSec)
     return `
       <div class="arrival-item">
-        <span class="arrival-vehicle">Train ${a.vehicleId}</span>
+        <span class="arrival-meta">
+          <span class="arrival-line-token" style="--line-color:${arrival.lineColor};">${arrival.lineToken}</span>
+          <span class="arrival-vehicle">Train ${arrival.vehicleId}</span>
+        </span>
         <span class="arrival-time">${timeStr}</span>
       </div>
     `
   }
-  
-  arrivalsNb.innerHTML = arrivals.nb.length 
+
+  if (loading) {
+    arrivalsNb.innerHTML = '<div class="arrival-item muted">Loading arrivals...</div>'
+    arrivalsSb.innerHTML = '<div class="arrival-item muted">Loading arrivals...</div>'
+    return
+  }
+
+  arrivalsNb.innerHTML = arrivals.nb.length
     ? arrivals.nb.map(renderArrival).join('')
     : '<div class="arrival-item muted">No upcoming trains</div>'
-    
+
   arrivalsSb.innerHTML = arrivals.sb.length
     ? arrivals.sb.map(renderArrival).join('')
     : '<div class="arrival-item muted">No upcoming trains</div>'
-  
+}
+
+function getStationStopIds(station, line) {
+  const aliases = new Set(line.stationAliases?.[station.id] ?? [])
+  aliases.add(station.id)
+
+  const candidates = new Set()
+  for (const alias of aliases) {
+    const normalized = alias.startsWith('40_') ? alias : `40_${alias}`
+    candidates.add(normalized)
+  }
+
+  const baseId = station.id.replace(/-T\d+$/, '')
+  candidates.add(baseId.startsWith('40_') ? baseId : `40_${baseId}`)
+
+  return [...candidates]
+}
+
+function getDialogStations(station) {
+  const exactMatches = state.lines
+    .map((line) => {
+      const matchedStation = line.stops.find((stop) => stop.id === station.id)
+      return matchedStation ? { line, station: matchedStation } : null
+    })
+    .filter(Boolean)
+
+  if (exactMatches.length > 0) return exactMatches
+
+  return state.lines
+    .map((line) => {
+      const matchedStation = line.stops.find((stop) => stop.name === station.name)
+      return matchedStation ? { line, station: matchedStation } : null
+    })
+    .filter(Boolean)
+}
+
+function classifyArrivalDirection(arrival, line) {
+  const tripKey = extractTripKey(line.id, arrival.tripId ?? '')
+  const lookedUpDirection = line.directionLookup?.[tripKey]
+  if (lookedUpDirection === '1') return 'nb'
+  if (lookedUpDirection === '0') return 'sb'
+
+  const headsign = arrival.tripHeadsign ?? ''
+  if (/Lynnwood|Downtown Redmond/i.test(headsign)) return 'nb'
+  if (/Federal Way|South Bellevue/i.test(headsign)) return 'sb'
+  return ''
+}
+
+function getLineRouteId(line) {
+  return `40_${line.id}`
+}
+
+async function fetchArrivalsForStop(stopId) {
+  const url = `${OBA_BASE_URL}/arrivals-and-departures-for-stop/${stopId}.json?key=${OBA_KEY}&minutesAfter=120`
+  const response = await fetch(url, { cache: 'no-store' })
+  if (!response.ok) {
+    throw new Error(`Arrivals request failed with ${response.status}`)
+  }
+
+  const payload = await response.json()
+  if (payload.code !== 200) {
+    throw new Error(payload.text || `Arrivals request failed for ${stopId}`)
+  }
+
+  return payload.data?.entry?.arrivalsAndDepartures ?? []
+}
+
+async function getArrivalsForStation(station, line) {
+  const cacheKey = `${line.id}:${station.id}`
+  const cached = state.arrivalsCache.get(cacheKey)
+  if (cached && Date.now() - cached.fetchedAt < ARRIVALS_CACHE_TTL_MS) {
+    return cached.value
+  }
+
+  const stopIds = getStationStopIds(station, line)
+  const results = await Promise.allSettled(stopIds.map((stopId) => fetchArrivalsForStop(stopId)))
+  const now = Date.now()
+  const seen = new Set()
+  const arrivals = { nb: [], sb: [] }
+
+  for (const result of results) {
+    if (result.status !== 'fulfilled') continue
+
+    for (const arrival of result.value) {
+      if (arrival.routeId !== getLineRouteId(line)) continue
+      const arrivalTime = arrival.predictedArrivalTime || arrival.scheduledArrivalTime
+      if (!arrivalTime || arrivalTime <= now) continue
+
+      const bucket = classifyArrivalDirection(arrival, line)
+      if (!bucket) continue
+
+      const dedupeKey = `${arrival.tripId}:${arrival.stopId}:${arrivalTime}`
+      if (seen.has(dedupeKey)) continue
+      seen.add(dedupeKey)
+
+      arrivals[bucket].push({
+        vehicleId: (arrival.vehicleId || '').replace(/^40_/, '') || '--',
+        arrivalTime,
+        tripId: arrival.tripId,
+        lineColor: line.color,
+        lineToken: line.name[0],
+      })
+    }
+  }
+
+  arrivals.nb.sort((left, right) => left.arrivalTime - right.arrivalTime)
+  arrivals.sb.sort((left, right) => left.arrivalTime - right.arrivalTime)
+  arrivals.nb = arrivals.nb.slice(0, 4)
+  arrivals.sb = arrivals.sb.slice(0, 4)
+  state.arrivalsCache.set(cacheKey, { fetchedAt: Date.now(), value: arrivals })
+  return arrivals
+}
+
+function mergeArrivalBuckets(collections) {
+  const merged = { nb: [], sb: [] }
+
+  for (const arrivals of collections) {
+    merged.nb.push(...arrivals.nb)
+    merged.sb.push(...arrivals.sb)
+  }
+
+  merged.nb.sort((left, right) => left.arrivalTime - right.arrivalTime)
+  merged.sb.sort((left, right) => left.arrivalTime - right.arrivalTime)
+  merged.nb = merged.nb.slice(0, 6)
+  merged.sb = merged.sb.slice(0, 6)
+  return merged
+}
+
+async function showStationDialog(station) {
+  dialogTitle.textContent = station.name
+
+  const requestId = state.activeDialogRequest + 1
+  state.activeDialogRequest = requestId
+  renderArrivalLists({ nb: [], sb: [] }, true)
   dialog.showModal()
+
+  try {
+    const dialogStations = getDialogStations(station)
+    const arrivalsByLine = await Promise.all(dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line)))
+    if (state.activeDialogRequest !== requestId || !dialog.open) return
+    renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
+  } catch (error) {
+    if (state.activeDialogRequest !== requestId || !dialog.open) return
+    arrivalsNb.innerHTML = `<div class="arrival-item muted">${error.message}</div>`
+    arrivalsSb.innerHTML = '<div class="arrival-item muted">Retry in a moment</div>'
+  }
 }
 
 function renderLine(line) {
@@ -415,7 +529,7 @@ function attachStationClickHandlers() {
         const stopId = group.dataset.stopId
         const station = layout.stations.find(s => s.id === stopId)
         if (station) {
-          showStationDialog(station, line, layout)
+          showStationDialog(station)
         }
       })
     })

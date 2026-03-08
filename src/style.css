@@ -397,6 +397,25 @@ h1 {
   border: 1px solid #1a2838;
 }
 
+.arrival-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.arrival-line-token {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--line-color);
+  color: #051018;
+  font-size: 0.78rem;
+  font-weight: 900;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--line-color) 60%, transparent);
+}
+
 .arrival-vehicle {
   font-size: 0.85rem;
   color: #c8d8e8;
