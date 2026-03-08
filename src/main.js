@@ -6,6 +6,8 @@ const VEHICLE_URL = 'https://api.pugetsound.onebusaway.org/api/where/vehicles-fo
 const OBA_BASE_URL = 'https://api.pugetsound.onebusaway.org/api/where'
 const OBA_KEY = 'TEST'
 const ARRIVALS_CACHE_TTL_MS = 20_000
+const OBA_MAX_RETRIES = 3
+const OBA_RETRY_BASE_DELAY_MS = 800
 const LINE_MATCHERS = {
   '100479': /100479/,
   '2LINE': /2LINE/,
@@ -14,6 +16,7 @@ const LINE_MATCHERS = {
 const state = {
   fetchedAt: '',
   error: '',
+  activeTab: 'map',
   lines: [],
   layouts: new Map(),
   vehiclesByLine: new Map(),
@@ -36,6 +39,11 @@ document.querySelector('#app').innerHTML = `
         <p id="updated-at" class="updated-at">Waiting for snapshot</p>
       </div>
     </header>
+    <section class="tab-bar" aria-label="Board views">
+      <button class="tab-button is-active" data-tab="map" type="button">Map</button>
+      <button class="tab-button" data-tab="trains" type="button">Trains</button>
+      <button class="tab-button" data-tab="times" type="button">Times</button>
+    </section>
     <section id="board" class="board"></section>
   </main>
   <dialog id="station-dialog" class="station-dialog">
@@ -59,6 +67,7 @@ document.querySelector('#app').innerHTML = `
 `
 
 const boardElement = document.querySelector('#board')
+const tabButtons = [...document.querySelectorAll('.tab-button')]
 const statusPillElement = document.querySelector('#status-pill')
 const updatedAtElement = document.querySelector('#updated-at')
 const dialog = document.querySelector('#station-dialog')
@@ -70,6 +79,12 @@ const arrivalsSb = document.querySelector('#arrivals-sb')
 dialogClose.addEventListener('click', () => dialog.close())
 dialog.addEventListener('click', (e) => {
   if (e.target === dialog) dialog.close()
+})
+tabButtons.forEach((button) => {
+  button.addEventListener('click', () => {
+    state.activeTab = button.dataset.tab
+    render()
+  })
 })
 
 function normalizeName(name) {
@@ -99,6 +114,42 @@ function formatArrivalTime(offsetSeconds) {
   const seconds = offsetSeconds % 60
   if (minutes > 0) return `${minutes}m ${seconds}s`
   return `${seconds}s`
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+function isRateLimitedPayload(payload) {
+  return payload?.code === 429 || /rate limit/i.test(payload?.text ?? '')
+}
+
+async function fetchJsonWithRetry(url, label) {
+  for (let attempt = 0; attempt <= OBA_MAX_RETRIES; attempt += 1) {
+    const response = await fetch(url, { cache: 'no-store' })
+    let payload = null
+
+    try {
+      payload = await response.json()
+    } catch {
+      payload = null
+    }
+
+    const isRateLimitedResponse = response.status === 429 || isRateLimitedPayload(payload)
+    if (response.ok && !isRateLimitedResponse) {
+      return payload
+    }
+
+    if (attempt === OBA_MAX_RETRIES || !isRateLimitedResponse) {
+      if (payload?.text) throw new Error(payload.text)
+      throw new Error(`${label} request failed with ${response.status}`)
+    }
+
+    const delayMs = OBA_RETRY_BASE_DELAY_MS * 2 ** attempt
+    await sleep(delayMs)
+  }
+
+  throw new Error(`${label} request failed`)
 }
 
 function buildLayout(line) {
@@ -164,6 +215,20 @@ function extractTripKey(routeId, tripId) {
   return tripId.slice(markerIndex + marker.length).replace(/\.\d+$/, '')
 }
 
+function classifyVehicleStatus(rawVehicle) {
+  const tripStatus = rawVehicle.tripStatus ?? {}
+  const status = String(tripStatus.status ?? '').toLowerCase()
+  const closestOffset = tripStatus.closestStopTimeOffset ?? 0
+  const nextOffset = tripStatus.nextStopTimeOffset ?? 0
+  const scheduleDeviation = tripStatus.scheduleDeviation ?? 0
+  const isAtPlatform = tripStatus.closestStop && tripStatus.nextStop && tripStatus.closestStop === tripStatus.nextStop
+  const isApproaching = status === 'approaching' || (isAtPlatform && Math.abs(nextOffset) <= 90)
+
+  if (isApproaching) return 'ARR'
+  if (scheduleDeviation >= 120) return 'DELAY'
+  return 'OK'
+}
+
 function parseVehicle(rawVehicle, line, layout) {
   const tripId = rawVehicle.tripStatus?.activeTripId ?? ''
   if (!LINE_MATCHERS[line.id].test(tripId)) return null
@@ -213,6 +278,7 @@ function parseVehicle(rawVehicle, line, layout) {
     fromLabel: currentStation.label,
     minutePosition,
     progress,
+    serviceStatus: classifyVehicleStatus(rawVehicle),
     toLabel: nextStation.label,
     y,
     currentLabel: currentStation.label,
@@ -247,6 +313,25 @@ function formatDirectionalHeadway(label, vehicles) {
   return `${label} ${gaps.slice(0, 4).map((gap) => `${gap}m`).join('  ')}`
 }
 
+function getTerminalHeadwayLabels(layout) {
+  return {
+    up: layout.stations[0]?.label ?? 'Up',
+    down: layout.stations.at(-1)?.label ?? 'Down',
+  }
+}
+
+function getAllVehicles() {
+  return state.lines.flatMap((line) =>
+    (state.vehiclesByLine.get(line.id) ?? []).map((vehicle) => ({
+      ...vehicle,
+      lineColor: line.color,
+      lineId: line.id,
+      lineName: line.name,
+      lineToken: line.name[0],
+    })),
+  )
+}
+
 function renderArrivalLists(arrivals, loading = false) {
   const now = Date.now()
 
@@ -258,7 +343,7 @@ function renderArrivalLists(arrivals, loading = false) {
       <div class="arrival-item">
         <span class="arrival-meta">
           <span class="arrival-line-token" style="--line-color:${arrival.lineColor};">${arrival.lineToken}</span>
-          <span class="arrival-vehicle">Train ${arrival.vehicleId}</span>
+          <span class="arrival-vehicle">${arrival.lineName} Train ${arrival.vehicleId}</span>
         </span>
         <span class="arrival-time">${timeStr}</span>
       </div>
@@ -332,20 +417,61 @@ function getLineRouteId(line) {
 
 async function fetchArrivalsForStop(stopId) {
   const url = `${OBA_BASE_URL}/arrivals-and-departures-for-stop/${stopId}.json?key=${OBA_KEY}&minutesAfter=120`
-  const response = await fetch(url, { cache: 'no-store' })
-  if (!response.ok) {
-    throw new Error(`Arrivals request failed with ${response.status}`)
-  }
-
-  const payload = await response.json()
+  const payload = await fetchJsonWithRetry(url, 'Arrivals')
   if (payload.code !== 200) {
     throw new Error(payload.text || `Arrivals request failed for ${stopId}`)
   }
-
   return payload.data?.entry?.arrivalsAndDepartures ?? []
 }
 
-async function getArrivalsForStation(station, line) {
+async function fetchArrivalsForStopIds(stopIds) {
+  const dedupedStopIds = [...new Set(stopIds)]
+  const results = await Promise.allSettled(dedupedStopIds.map((stopId) => fetchArrivalsForStop(stopId)))
+  const arrivals = []
+
+  for (const result of results) {
+    if (result.status !== 'fulfilled') continue
+    arrivals.push(...result.value)
+  }
+
+  return arrivals
+}
+
+function buildArrivalsForLine(arrivalFeed, line) {
+  const now = Date.now()
+  const seen = new Set()
+  const arrivals = { nb: [], sb: [] }
+
+  for (const arrival of arrivalFeed) {
+    if (arrival.routeId !== getLineRouteId(line)) continue
+    const arrivalTime = arrival.predictedArrivalTime || arrival.scheduledArrivalTime
+    if (!arrivalTime || arrivalTime <= now) continue
+
+    const bucket = classifyArrivalDirection(arrival, line)
+    if (!bucket) continue
+
+    const dedupeKey = `${arrival.tripId}:${arrival.stopId}:${arrivalTime}`
+    if (seen.has(dedupeKey)) continue
+    seen.add(dedupeKey)
+
+    arrivals[bucket].push({
+      vehicleId: (arrival.vehicleId || '').replace(/^40_/, '') || '--',
+      arrivalTime,
+      tripId: arrival.tripId,
+      lineColor: line.color,
+      lineName: line.name,
+      lineToken: line.name[0],
+    })
+  }
+
+  arrivals.nb.sort((left, right) => left.arrivalTime - right.arrivalTime)
+  arrivals.sb.sort((left, right) => left.arrivalTime - right.arrivalTime)
+  arrivals.nb = arrivals.nb.slice(0, 4)
+  arrivals.sb = arrivals.sb.slice(0, 4)
+  return arrivals
+}
+
+async function getArrivalsForStation(station, line, prefetchedFeed = null) {
   const cacheKey = `${line.id}:${station.id}`
   const cached = state.arrivalsCache.get(cacheKey)
   if (cached && Date.now() - cached.fetchedAt < ARRIVALS_CACHE_TTL_MS) {
@@ -353,40 +479,8 @@ async function getArrivalsForStation(station, line) {
   }
 
   const stopIds = getStationStopIds(station, line)
-  const results = await Promise.allSettled(stopIds.map((stopId) => fetchArrivalsForStop(stopId)))
-  const now = Date.now()
-  const seen = new Set()
-  const arrivals = { nb: [], sb: [] }
-
-  for (const result of results) {
-    if (result.status !== 'fulfilled') continue
-
-    for (const arrival of result.value) {
-      if (arrival.routeId !== getLineRouteId(line)) continue
-      const arrivalTime = arrival.predictedArrivalTime || arrival.scheduledArrivalTime
-      if (!arrivalTime || arrivalTime <= now) continue
-
-      const bucket = classifyArrivalDirection(arrival, line)
-      if (!bucket) continue
-
-      const dedupeKey = `${arrival.tripId}:${arrival.stopId}:${arrivalTime}`
-      if (seen.has(dedupeKey)) continue
-      seen.add(dedupeKey)
-
-      arrivals[bucket].push({
-        vehicleId: (arrival.vehicleId || '').replace(/^40_/, '') || '--',
-        arrivalTime,
-        tripId: arrival.tripId,
-        lineColor: line.color,
-        lineToken: line.name[0],
-      })
-    }
-  }
-
-  arrivals.nb.sort((left, right) => left.arrivalTime - right.arrivalTime)
-  arrivals.sb.sort((left, right) => left.arrivalTime - right.arrivalTime)
-  arrivals.nb = arrivals.nb.slice(0, 4)
-  arrivals.sb = arrivals.sb.slice(0, 4)
+  const arrivalFeed = prefetchedFeed ?? (await fetchArrivalsForStopIds(stopIds))
+  const arrivals = buildArrivalsForLine(arrivalFeed, line)
   state.arrivalsCache.set(cacheKey, { fetchedAt: Date.now(), value: arrivals })
   return arrivals
 }
@@ -401,8 +495,6 @@ function mergeArrivalBuckets(collections) {
 
   merged.nb.sort((left, right) => left.arrivalTime - right.arrivalTime)
   merged.sb.sort((left, right) => left.arrivalTime - right.arrivalTime)
-  merged.nb = merged.nb.slice(0, 6)
-  merged.sb = merged.sb.slice(0, 6)
   return merged
 }
 
@@ -416,7 +508,11 @@ async function showStationDialog(station) {
 
   try {
     const dialogStations = getDialogStations(station)
-    const arrivalsByLine = await Promise.all(dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line)))
+    const sharedStopIds = dialogStations.flatMap(({ station: matchedStation, line }) => getStationStopIds(matchedStation, line))
+    const arrivalFeed = await fetchArrivalsForStopIds(sharedStopIds)
+    const arrivalsByLine = await Promise.all(
+      dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line, arrivalFeed)),
+    )
     if (state.activeDialogRequest !== requestId || !dialog.open) return
     renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
   } catch (error) {
@@ -431,8 +527,9 @@ function renderLine(line) {
   const vehicles = state.vehiclesByLine.get(line.id) ?? []
   const northboundVehicles = vehicles.filter((vehicle) => vehicle.directionSymbol === '▲')
   const southboundVehicles = vehicles.filter((vehicle) => vehicle.directionSymbol === '▼')
-  const northboundHeadway = formatDirectionalHeadway('NB HEADWAY', northboundVehicles)
-  const southboundHeadway = formatDirectionalHeadway('SB HEADWAY', southboundVehicles)
+  const terminalLabels = getTerminalHeadwayLabels(layout)
+  const northboundHeadway = formatDirectionalHeadway(`${terminalLabels.up} HEADWAY`, northboundVehicles)
+  const southboundHeadway = formatDirectionalHeadway(`${terminalLabels.down} HEADWAY`, southboundVehicles)
 
   const rows = layout.stations
     .map((station, index) => {
@@ -465,8 +562,7 @@ function renderLine(line) {
       (vehicle, index) => `
         <g transform="translate(${layout.trackX}, ${vehicle.y + ((index % 3) - 1) * 1.5})" class="train">
           <circle r="13" class="train-wave" style="--line-color:${line.color}; animation-delay:${index * 0.18}s;"></circle>
-          <circle r="5.5" class="train-dot" style="--line-color:${line.color};"></circle>
-          <text x="14" y="4" class="train-direction">${vehicle.directionSymbol}</text>
+          <path d="M 0 -8 L 7 6 L -7 6 Z" transform="${vehicle.directionSymbol === '▼' ? 'rotate(180)' : ''}" class="train-arrow" style="--line-color:${line.color};"></path>
         </g>
       `,
     )
@@ -517,6 +613,106 @@ function renderLine(line) {
   `
 }
 
+function renderTrainList() {
+  const vehicles = getAllVehicles().sort((left, right) => left.minutePosition - right.minutePosition)
+
+  if (!vehicles.length) {
+    return `
+      <section class="line-card">
+        <header class="panel-header">
+          <h2>Active Trains</h2>
+          <p>No live trains</p>
+        </header>
+      </section>
+    `
+  }
+
+  const groupedRows = state.lines
+    .map((line) => {
+      const lineVehicles = vehicles.filter((vehicle) => vehicle.lineId === line.id)
+      const northboundVehicles = lineVehicles.filter((vehicle) => vehicle.directionSymbol === '▲')
+      const southboundVehicles = lineVehicles.filter((vehicle) => vehicle.directionSymbol === '▼')
+      const renderTrainColumn = (label, directionVehicles) => `
+        <div class="train-direction-column">
+          <p class="direction-column-title">${label}</p>
+          ${
+            directionVehicles.length
+              ? directionVehicles
+                  .map(
+                    (vehicle) => `
+                      <article class="train-list-item">
+                        <div class="train-list-main">
+                          <span class="line-token train-list-token" style="--line-color:${vehicle.lineColor};">${vehicle.lineToken}</span>
+                          <div>
+                            <p class="train-list-title">${vehicle.lineName} Train ${vehicle.label}</p>
+                            <p class="train-list-subtitle">${formatVehicleSegment(vehicle)}</p>
+                            <p class="train-list-status train-list-status-${vehicle.serviceStatus.toLowerCase()}">${vehicle.serviceStatus}</p>
+                          </div>
+                        </div>
+                      </article>
+                    `,
+                  )
+                  .join('')
+              : '<p class="train-readout muted">No trains</p>'
+          }
+        </div>
+      `
+
+      return `
+        <article class="line-card train-line-card">
+          <header class="line-card-header train-list-section-header">
+            <div class="line-title">
+              <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
+              <div>
+                <h2>${line.name}</h2>
+                <p>${lineVehicles.length} trains in service</p>
+              </div>
+            </div>
+          </header>
+          <div class="line-readout line-readout-grid train-columns">
+            ${renderTrainColumn('NB', northboundVehicles)}
+            ${renderTrainColumn('SB', southboundVehicles)}
+          </div>
+        </article>
+      `
+    })
+    .join('')
+
+  return groupedRows
+}
+
+function renderTimesView() {
+  const cards = state.lines
+    .map((line) => {
+      const layout = state.layouts.get(line.id)
+      const vehicles = state.vehiclesByLine.get(line.id) ?? []
+      const northboundVehicles = vehicles.filter((vehicle) => vehicle.directionSymbol === '▲')
+      const southboundVehicles = vehicles.filter((vehicle) => vehicle.directionSymbol === '▼')
+      const terminalLabels = getTerminalHeadwayLabels(layout)
+
+      return `
+        <article class="panel-card">
+          <header class="panel-header">
+            <div class="line-title">
+              <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
+              <div>
+                <h2>${line.name}</h2>
+                <p>Terminal headway snapshot</p>
+              </div>
+            </div>
+          </header>
+          <div class="times-grid">
+            <p class="headway">${formatDirectionalHeadway(`${terminalLabels.up} HEADWAY`, northboundVehicles)}</p>
+            <p class="headway">${formatDirectionalHeadway(`${terminalLabels.down} HEADWAY`, southboundVehicles)}</p>
+          </div>
+        </article>
+      `
+    })
+    .join('')
+
+  return `<div class="board">${cards}</div>`
+}
+
 function attachStationClickHandlers() {
   state.lines.forEach(line => {
     const layout = state.layouts.get(line.id)
@@ -542,8 +738,23 @@ function render() {
   updatedAtElement.textContent = state.error
     ? 'Using last successful snapshot'
     : formatRelativeTime(state.fetchedAt)
-  boardElement.innerHTML = state.lines.map(renderLine).join('')
-  attachStationClickHandlers()
+  tabButtons.forEach((button) => button.classList.toggle('is-active', button.dataset.tab === state.activeTab))
+
+  if (state.activeTab === 'map') {
+    boardElement.className = 'board'
+    boardElement.innerHTML = state.lines.map(renderLine).join('')
+    attachStationClickHandlers()
+    return
+  }
+
+  if (state.activeTab === 'trains') {
+    boardElement.className = 'board'
+    boardElement.innerHTML = renderTrainList()
+    return
+  }
+
+  boardElement.className = 'board'
+  boardElement.innerHTML = renderTimesView()
 }
 
 async function loadStaticData() {
@@ -555,10 +766,7 @@ async function loadStaticData() {
 
 async function refreshVehicles() {
   try {
-    const response = await fetch(VEHICLE_URL, { cache: 'no-store' })
-    if (!response.ok) throw new Error(`Realtime request failed with ${response.status}`)
-
-    const payload = await response.json()
+    const payload = await fetchJsonWithRetry(VEHICLE_URL, 'Realtime')
     state.error = ''
     state.fetchedAt = new Date().toISOString()
     state.rawVehicles = payload.data.list
