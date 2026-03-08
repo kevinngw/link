@@ -1,64 +1,79 @@
-# Link Pulse
+# 🚇 Link Pulse
 
-西雅图 Link 轻轨实时脉动地图，聚焦 1 Line 和 2 Line 的实时列车位置、方向、终点 headway 与站点到站信息。
+西雅图 Link 轻轨实时追踪 PWA，聚焦 `1 Line` 和 `2 Line` 的列车位置、到站时间与运行频率。
 
-[在线演示](https://kevinngw.github.io/link/)
+[🌐 在线演示](https://kevinngw.github.io/link/) &nbsp;|&nbsp; [English README](./README.md)
 
-英文说明请见：[README.md](./README.md)
+## ✨ 功能
 
-## 功能
+- **实时列车追踪** — 每 15 秒刷新，数据来自 Puget Sound OneBusAway API
+- **LED 风格线路图** — 黑底霓虹显示屏，带动态列车指示灯
+- **三个视图** — `Map`（地图）、`Trains`（列车列表）、`Times`（发车间隔）
+- **站点到站弹窗** — 点击任意站点，查看南北两向各 4 班次到站时间
+- **共线站点合并显示** — 同时运营 1 Line 和 2 Line 的站点统一展示到站信息
+- **运行状态标识** — `OK`（正常）、`DELAY`（晚点 ≥ 2 分钟）、`ARR`（即将到站）
+- **PWA 支持** — 可安装至桌面或手机主屏幕
 
-- 实时列车追踪，数据来自 Puget Sound OneBusAway
-- 黑底 LED 风格线路图
-- `Map / Trains / Times` 三个视图
-- 站点弹窗，显示混合排序的到站时间
-- 共线车站同时显示 1 Line 和 2 Line 到站信息
-- PWA 支持，可安装到桌面或手机
+## 🛠 技术栈
 
-## 本地开发
+- [Vite](https://vitejs.dev/) + [vite-plugin-pwa](https://vite-pwa-org.netlify.app/)
+- 原生 JavaScript，SVG 渲染
+- 等宽字体 UI（SF Mono / Roboto Mono / IBM Plex Mono）
 
-环境要求：
+## 📡 数据来源
 
-- Node.js 18+
-- npm 9+
+| 数据 | 接口 |
+|------|------|
+| 实时车辆位置 | Puget Sound OneBusAway `vehicles-for-agency/40.json` |
+| 站点到站信息 | `arrivals-and-departures-for-stop/{stopId}.json` |
+| 静态线路数据 | Sound Transit GTFS rail feed，经 [`scripts/build-link-data.mjs`](./scripts/build-link-data.mjs) 处理生成 |
 
-安装并启动：
+> **说明：** 默认使用公开测试 key `TEST`。遇到限流时，前端会自动进行指数退避重试。生产部署建议替换为正式 [OBA API key](https://developer.onebusaway.org/)。
+
+## 🚀 本地开发
+
+**环境要求：** Node.js 18+，npm 9+
 
 ```bash
+# 安装依赖并启动开发服务器
 npm install
 npm run dev
 ```
 
-构建：
+`predev` 脚本会自动拉取最新的 Sound Transit GTFS 数据并重新生成 `public/link-data.json`。
 
 ```bash
+# 生产构建
 npm run build
+
+# 本地预览生产构建
+npm run preview
 ```
 
-## 数据来源
+## 📁 项目结构
 
-- 实时车辆：`vehicles-for-agency/40.json`
-- 站点到站：`arrivals-and-departures-for-stop/{stopId}.json`
-- 静态线路：Sound Transit GTFS rail feed，经 `scripts/build-link-data.mjs` 处理
-
-说明：
-
-- 当前默认使用测试 key `TEST`
-- 遇到限流时，前端会做 backoff retry
-- 生产部署建议换成正式 OBA key
-
-## 项目结构
-
-```text
+```
 public/
-  icon.svg
-  link-data.json
+  icon.svg              PWA 图标
+  link-data.json        生成的静态线路数据
 scripts/
-  build-link-data.mjs
+  build-link-data.mjs   GTFS 处理脚本 — 拉取并转换 Sound Transit 数据
 src/
-  main.js
-  style.css
+  main.js               应用主逻辑（约 800 行）
+  style.css             样式（约 620 行）
 .github/workflows/
-  deploy.yml
+  deploy.yml            GitHub Pages CI/CD 配置
+index.html
 vite.config.js
 ```
+
+## ⚙️ 部署
+
+通过 [`deploy.yml`](./.github/workflows/deploy.yml) 配置自动部署至 GitHub Pages。推送到任意已跟踪的分支，均会构建并部署到 `gh-pages` 分支下对应的子路径。
+
+| 分支 | 地址 |
+|------|------|
+| `main` | https://kevinngw.github.io/link/ |
+| `dev` | https://kevinngw.github.io/link/dev/ |
+
+每个分支构建前会将 `VITE_BASE` 设置为对应子路径，确保静态资源和 PWA manifest 路径正确。

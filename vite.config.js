@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const base = process.env.VITE_BASE ?? '/link/'
+
 export default defineConfig({
-  base: '/link/',
+  base,
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
@@ -13,13 +15,23 @@ export default defineConfig({
         theme_color: '#08141f',
         background_color: '#08141f',
         display: 'standalone',
-        start_url: '/',
+        display_override: ['standalone', 'browser'],
+        start_url: base,
         icons: [
           {
-            src: '/icon.svg',
+            src: `${base}icon-192.png`,
+            sizes: '192x192',
+            type: 'image/png',
+          },
+          {
+            src: `${base}icon-512.png`,
+            sizes: '512x512',
+            type: 'image/png',
+          },
+          {
+            src: `${base}icon.svg`,
             sizes: 'any',
             type: 'image/svg+xml',
-            purpose: 'any maskable',
           },
         ],
       },

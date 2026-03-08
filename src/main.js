@@ -18,6 +18,8 @@ const state = {
   fetchedAt: '',
   error: '',
   activeTab: 'map',
+  activeLineId: '100479',
+  compactLayout: false,
   theme: 'dark',
   currentDialogStationId: '',
   lines: [],
@@ -119,6 +121,10 @@ function setTheme(theme) {
   state.theme = theme
   document.documentElement.dataset.theme = theme
   window.localStorage.setItem(THEME_STORAGE_KEY, theme)
+}
+
+function updateViewportState() {
+  state.compactLayout = window.matchMedia('(max-width: 900px)').matches
 }
 
 function slugifyStation(value) {
@@ -345,6 +351,28 @@ function getAllVehicles() {
       lineToken: line.name[0],
     })),
   )
+}
+
+function renderLineSwitcher() {
+  if (!state.compactLayout || state.lines.length < 2) return ''
+
+  const buttons = state.lines
+    .map(
+      (line) => `
+        <button
+          class="line-switcher-button ${line.id === state.activeLineId ? 'is-active' : ''}"
+          data-line-switch="${line.id}"
+          type="button"
+          style="--line-color:${line.color};"
+        >
+          <span class="line-token line-switcher-token" style="--line-color:${line.color};">${line.name[0]}</span>
+          <span>${line.name}</span>
+        </button>
+      `,
+    )
+    .join('')
+
+  return `<section class="line-switcher">${buttons}</section>`
 }
 
 function renderArrivalLists(arrivals, loading = false) {
@@ -717,7 +745,8 @@ function renderTrainList() {
     `
   }
 
-  const groupedRows = state.lines
+  const visibleLines = state.compactLayout ? state.lines.filter((line) => line.id === state.activeLineId) : state.lines
+  const groupedRows = visibleLines
     .map((line) => {
       const lineVehicles = vehicles.filter((vehicle) => vehicle.lineId === line.id)
       const northboundVehicles = lineVehicles.filter((vehicle) => vehicle.directionSymbol === '▲')
@@ -771,6 +800,16 @@ function renderTrainList() {
   return groupedRows
 }
 
+function attachLineSwitcherHandlers() {
+  const buttons = document.querySelectorAll('[data-line-switch]')
+  buttons.forEach((button) => {
+    button.addEventListener('click', () => {
+      state.activeLineId = button.dataset.lineSwitch
+      render()
+    })
+  })
+}
+
 function attachStationClickHandlers() {
   state.lines.forEach(line => {
     const layout = state.layouts.get(line.id)
@@ -801,14 +840,17 @@ function render() {
 
   if (state.activeTab === 'map') {
     boardElement.className = 'board'
-    boardElement.innerHTML = state.lines.map(renderLine).join('')
+    const visibleLines = state.compactLayout ? state.lines.filter((line) => line.id === state.activeLineId) : state.lines
+    boardElement.innerHTML = `${renderLineSwitcher()}${visibleLines.map(renderLine).join('')}`
+    attachLineSwitcherHandlers()
     attachStationClickHandlers()
     return
   }
 
   if (state.activeTab === 'trains') {
     boardElement.className = 'board'
-    boardElement.innerHTML = renderTrainList()
+    boardElement.innerHTML = `${renderLineSwitcher()}${renderTrainList()}`
+    attachLineSwitcherHandlers()
     return
   }
 }
@@ -844,12 +886,20 @@ async function refreshVehicles() {
 
 async function init() {
   setTheme(getPreferredTheme())
+  updateViewportState()
   await loadStaticData()
   render()
   await refreshVehicles()
   await syncDialogFromUrl()
   window.addEventListener('popstate', () => {
     syncDialogFromUrl().catch(console.error)
+  })
+  window.addEventListener('resize', () => {
+    const previousCompactLayout = state.compactLayout
+    updateViewportState()
+    if (previousCompactLayout !== state.compactLayout) {
+      render()
+    }
   })
   window.setInterval(refreshVehicles, 15000)
   window.setInterval(render, 1000)
