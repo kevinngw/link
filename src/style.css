@@ -186,10 +186,29 @@ h1 {
   font-size: 12px;
 }
 
+.station-group {
+  cursor: pointer;
+}
+
+.station-group:hover .station-stop {
+  stroke: var(--line-color);
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 8px var(--line-color));
+}
+
+.station-group:hover .terminal-stop {
+  filter: drop-shadow(0 0 16px color-mix(in srgb, var(--line-color) 80%, transparent));
+}
+
+.station-group:hover .station-label {
+  fill: var(--line-color);
+}
+
 .station-stop {
   fill: #081018;
   stroke: #eaf5ff;
   stroke-width: 1.5;
+  transition: all 0.2s ease;
 }
 
 .terminal-stop {
@@ -197,6 +216,7 @@ h1 {
   stroke: #eaf5ff;
   stroke-width: 1.5;
   filter: drop-shadow(0 0 12px color-mix(in srgb, var(--line-color) 55%, transparent));
+  transition: all 0.2s ease;
 }
 
 .terminal-mark {
@@ -208,6 +228,11 @@ h1 {
 .station-label {
   fill: #f2f8ff;
   font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.station-hitbox {
+  cursor: pointer;
 }
 
 .train-wave {
@@ -279,6 +304,111 @@ h1 {
   color: #6e8195;
 }
 
+/* Station Dialog Styles */
+.station-dialog {
+  padding: 0;
+  border: 1px solid #1a2431;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #0d1320 0%, #080c12 100%);
+  box-shadow:
+    0 25px 50px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  color: #e8f6ff;
+  max-width: 420px;
+  width: 90vw;
+}
+
+.station-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.dialog-content {
+  padding: 20px 24px 24px;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #1a2431;
+}
+
+.dialog-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #f6fbff;
+}
+
+.dialog-close {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #2a3a4f;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #8a9bb0;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dialog-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f6fbff;
+  border-color: #3a4a5f;
+}
+
+.dialog-body {
+  display: grid;
+  gap: 20px;
+}
+
+.arrivals-section {
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  border: 1px solid #152030;
+}
+
+.arrivals-title {
+  margin: 0 0 12px 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #8df0b8;
+  letter-spacing: 0.05em;
+}
+
+.arrivals-list {
+  display: grid;
+  gap: 8px;
+}
+
+.arrival-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid #1a2838;
+}
+
+.arrival-vehicle {
+  font-size: 0.85rem;
+  color: #c8d8e8;
+}
+
+.arrival-time {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #f6fbff;
+  font-variant-numeric: tabular-nums;
+}
+
 @keyframes wave {
   0% {
     opacity: 0.9;
@@ -307,5 +437,11 @@ h1 {
 
   .line-readout-grid {
     grid-template-columns: 1fr;
+  }
+  
+  .station-dialog {
+    max-width: 100%;
+    width: 95vw;
+    margin: auto;
   }
 }

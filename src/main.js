@@ -14,6 +14,7 @@ const state = {
   lines: [],
   layouts: new Map(),
   vehiclesByLine: new Map(),
+  rawVehicles: [],
 }
 
 registerSW({ immediate: true })
@@ -32,11 +33,39 @@ document.querySelector('#app').innerHTML = `
     </header>
     <section id="board" class="board"></section>
   </main>
+  <dialog id="station-dialog" class="station-dialog">
+    <div class="dialog-content">
+      <header class="dialog-header">
+        <h3 id="dialog-title">Station</h3>
+        <button id="dialog-close" class="dialog-close">&times;</button>
+      </header>
+      <div class="dialog-body">
+        <div class="arrivals-section">
+          <h4 class="arrivals-title">Northbound (▲)</h4>
+          <div id="arrivals-nb" class="arrivals-list"></div>
+        </div>
+        <div class="arrivals-section">
+          <h4 class="arrivals-title">Southbound (▼)</h4>
+          <div id="arrivals-sb" class="arrivals-list"></div>
+        </div>
+      </div>
+    </div>
+  </dialog>
 `
 
 const boardElement = document.querySelector('#board')
 const statusPillElement = document.querySelector('#status-pill')
 const updatedAtElement = document.querySelector('#updated-at')
+const dialog = document.querySelector('#station-dialog')
+const dialogTitle = document.querySelector('#dialog-title')
+const dialogClose = document.querySelector('#dialog-close')
+const arrivalsNb = document.querySelector('#arrivals-nb')
+const arrivalsSb = document.querySelector('#arrivals-sb')
+
+dialogClose.addEventListener('click', () => dialog.close())
+dialog.addEventListener('click', (e) => {
+  if (e.target === dialog) dialog.close()
+})
 
 function normalizeName(name) {
   return name
@@ -47,7 +76,7 @@ function normalizeName(name) {
 }
 
 function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value))
+  return Math.max(min, Math.min(value, max))
 }
 
 function formatRelativeTime(dateString) {
@@ -59,9 +88,17 @@ function formatRelativeTime(dateString) {
   return `Updated ${Math.round(deltaSeconds / 60)}m ago`
 }
 
+function formatArrivalTime(offsetSeconds) {
+  if (offsetSeconds <= 0) return 'Arriving'
+  const minutes = Math.floor(offsetSeconds / 60)
+  const seconds = offsetSeconds % 60
+  if (minutes > 0) return `${minutes}m ${seconds}s`
+  return `${seconds}s`
+}
+
 function buildLayout(line) {
-  const orderedStops = [...line.stops].sort((left, right) => right.sequence - left.sequence)
-  const stationGap = 28
+  const orderedStops = [...line.stops].sort((left, right) => right.sequence - right.sequence)
+  const stationGap = 48
   const topPadding = 44
   const bottomPadding = 28
   const trackX = 88
@@ -176,6 +213,11 @@ function parseVehicle(rawVehicle, line, layout) {
     currentLabel: currentStation.label,
     nextLabel: nextStation.label,
     status: rawVehicle.tripStatus?.status ?? '',
+    closestStop,
+    nextStop,
+    closestOffset,
+    nextOffset,
+    rawVehicle,
   }
 }
 
@@ -200,6 +242,76 @@ function formatDirectionalHeadway(label, vehicles) {
   return `${label} ${gaps.slice(0, 4).map((gap) => `${gap}m`).join('  ')}`
 }
 
+function getArrivalsForStation(stationId, lineId, layout) {
+  const vehicles = state.vehiclesByLine.get(lineId) || []
+  const stationIndex = layout.stationIndexByStopId.get(stationId)
+  if (stationIndex == null) return { nb: [], sb: [] }
+
+  const nbArrivals = []
+  const sbArrivals = []
+
+  vehicles.forEach(vehicle => {
+    const rv = vehicle.rawVehicle
+    if (!rv || !rv.tripStatus) return
+    
+    const stopTimes = rv.tripStatus.stopTimes || []
+    stopTimes.forEach(st => {
+      if (st.stopId === stationId || st.stopId === `40_${stationId}`) {
+        const arrival = {
+          vehicleId: vehicle.label,
+          arrivalTime: st.arrivalTime,
+          departureTime: st.departureTime,
+          distance: st.distanceFromVehicle,
+        }
+        if (vehicle.directionSymbol === '▲') {
+          nbArrivals.push(arrival)
+        } else if (vehicle.directionSymbol === '▼') {
+          sbArrivals.push(arrival)
+        }
+      }
+    })
+  })
+
+  const now = Date.now()
+  const sortByArrival = (a, b) => a.arrivalTime - b.arrivalTime
+  const filterFuture = a => a.arrivalTime * 1000 > now
+
+  return {
+    nb: nbArrivals.filter(filterFuture).sort(sortByArrival).slice(0, 4),
+    sb: sbArrivals.filter(filterFuture).sort(sortByArrival).slice(0, 4),
+  }
+}
+
+function showStationDialog(station, line, layout) {
+  dialogTitle.textContent = station.name
+  
+  const arrivals = getArrivalsForStation(station.id, line.id, layout)
+  
+  const now = Date.now()
+  
+  const renderArrival = (a) => {
+    const arrivalMs = a.arrivalTime * 1000
+    const diffSec = Math.floor((arrivalMs - now) / 1000)
+    const timeStr = formatArrivalTime(diffSec)
+    return `
+      <div class="arrival-item">
+        <span class="arrival-vehicle">Train ${a.vehicleId}</span>
+        <span class="arrival-time">${timeStr}</span>
+      </div>
+    `
+  }
+  
+  arrivalsNb.innerHTML = arrivals.nb.length 
+    ? arrivals.nb.map(renderArrival).join('')
+    : '<div class="arrival-item muted">No upcoming trains</div>'
+    
+  arrivalsSb.innerHTML = arrivals.sb.length
+    ? arrivals.sb.map(renderArrival).join('')
+    : '<div class="arrival-item muted">No upcoming trains</div>'
+  
+  dialog.showModal()
+}
+
 function renderLine(line) {
   const layout = state.layouts.get(line.id)
   const vehicles = state.vehiclesByLine.get(line.id) ?? []
@@ -214,20 +326,21 @@ function renderLine(line) {
       const minute = index > 0 ? prevStation.segmentMinutes : ''
 
       return `
-        <g transform="translate(0, ${station.y})">
+        <g transform="translate(0, ${station.y})" class="station-group" data-stop-id="${station.id}" style="cursor: pointer;">
           ${
             index > 0
-              ? `<text x="0" y="-10" class="segment-time">${minute}</text>
-                 <line x1="18" x2="${layout.trackX - 16}" y1="-14" y2="-14" class="segment-line"></line>`
+              ? `<text x="0" y="-14" class="segment-time">${minute}</text>
+                 <line x1="18" x2="${layout.trackX - 16}" y1="-18" y2="-18" class="segment-line"></line>`
               : ''
           }
-          <circle cx="${layout.trackX}" cy="0" r="${station.isTerminal ? 9 : 4}" class="${station.isTerminal ? 'terminal-stop' : 'station-stop'}" style="--line-color:${line.color};"></circle>
+          <circle cx="${layout.trackX}" cy="0" r="${station.isTerminal ? 11 : 5}" class="${station.isTerminal ? 'terminal-stop' : 'station-stop'}" style="--line-color:${line.color};"></circle>
           ${
             station.isTerminal
               ? `<text x="${layout.trackX}" y="4" text-anchor="middle" class="terminal-mark">${line.name[0]}</text>`
               : ''
           }
           <text x="${layout.labelX}" y="5" class="station-label">${station.label}</text>
+          <rect x="0" y="-24" width="300" height="48" fill="transparent" class="station-hitbox"></rect>
         </g>
       `
     })
@@ -263,7 +376,7 @@ function renderLine(line) {
   `
 
   return `
-    <article class="line-card">
+    <article class="line-card" data-line-id="${line.id}">
       <header class="line-card-header">
         <div class="line-title">
           <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
@@ -290,6 +403,25 @@ function renderLine(line) {
   `
 }
 
+function attachStationClickHandlers() {
+  state.lines.forEach(line => {
+    const layout = state.layouts.get(line.id)
+    const card = document.querySelector(`.line-card[data-line-id="${line.id}"]`)
+    if (!card) return
+    
+    const stationGroups = card.querySelectorAll('.station-group')
+    stationGroups.forEach(group => {
+      group.addEventListener('click', () => {
+        const stopId = group.dataset.stopId
+        const station = layout.stations.find(s => s.id === stopId)
+        if (station) {
+          showStationDialog(station, line, layout)
+        }
+      })
+    })
+  })
+}
+
 function render() {
   statusPillElement.textContent = state.error ? 'HOLD' : 'SYNC'
   statusPillElement.classList.toggle('status-pill-error', Boolean(state.error))
@@ -297,6 +429,7 @@ function render() {
     ? 'Using last successful snapshot'
     : formatRelativeTime(state.fetchedAt)
   boardElement.innerHTML = state.lines.map(renderLine).join('')
+  attachStationClickHandlers()
 }
 
 async function loadStaticData() {
@@ -314,6 +447,7 @@ async function refreshVehicles() {
     const payload = await response.json()
     state.error = ''
     state.fetchedAt = new Date().toISOString()
+    state.rawVehicles = payload.data.list
 
     for (const line of state.lines) {
       const layout = state.layouts.get(line.id)
