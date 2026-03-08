@@ -32,7 +32,12 @@ const state = {
   isSyncingFromUrl: false,
 }
 
-registerSW({ immediate: true })
+const updateSW = registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    updateSW(true)
+  },
+})
 
 document.querySelector('#app').innerHTML = `
   <main class="screen">
@@ -125,9 +130,25 @@ function setTheme(theme) {
 }
 
 function updateViewportState() {
-  const visualViewportWidth = window.visualViewport?.width ?? window.innerWidth
-  const viewportWidth = Math.min(window.innerWidth, visualViewportWidth)
+  const visualViewportWidth = window.visualViewport?.width ?? Number.POSITIVE_INFINITY
+  const innerWidth = window.innerWidth || Number.POSITIVE_INFINITY
+  const documentWidth = document.documentElement?.clientWidth || Number.POSITIVE_INFINITY
+  const viewportWidth = Math.min(innerWidth, visualViewportWidth, documentWidth)
   state.compactLayout = viewportWidth <= COMPACT_LAYOUT_BREAKPOINT
+}
+
+function syncCompactLayoutFromBoard() {
+  const gridTemplateColumns = window.getComputedStyle(boardElement).gridTemplateColumns
+  const columnCount = gridTemplateColumns
+    .split(' ')
+    .map((part) => part.trim())
+    .filter(Boolean).length
+  const shouldCompact = columnCount <= 1
+
+  if (shouldCompact !== state.compactLayout) {
+    state.compactLayout = shouldCompact
+    render()
+  }
 }
 
 function slugifyStation(value) {
@@ -847,6 +868,7 @@ function render() {
     boardElement.innerHTML = `${renderLineSwitcher()}${visibleLines.map(renderLine).join('')}`
     attachLineSwitcherHandlers()
     attachStationClickHandlers()
+    queueMicrotask(syncCompactLayoutFromBoard)
     return
   }
 
@@ -854,6 +876,7 @@ function render() {
     boardElement.className = 'board'
     boardElement.innerHTML = `${renderLineSwitcher()}${renderTrainList()}`
     attachLineSwitcherHandlers()
+    queueMicrotask(syncCompactLayoutFromBoard)
     return
   }
 }
@@ -897,21 +920,26 @@ async function init() {
   window.addEventListener('popstate', () => {
     syncDialogFromUrl().catch(console.error)
   })
-window.addEventListener('resize', () => {
-  const previousCompactLayout = state.compactLayout
-  updateViewportState()
-  if (previousCompactLayout !== state.compactLayout) {
-    render()
-  }
-})
 
-window.visualViewport?.addEventListener('resize', () => {
-  const previousCompactLayout = state.compactLayout
-  updateViewportState()
-  if (previousCompactLayout !== state.compactLayout) {
-    render()
+  const handleViewportResize = () => {
+    const previousCompactLayout = state.compactLayout
+    updateViewportState()
+    if (previousCompactLayout !== state.compactLayout) {
+      render()
+      return
+    }
+
+    syncCompactLayoutFromBoard()
   }
-})
+
+  window.addEventListener('resize', handleViewportResize)
+  window.visualViewport?.addEventListener('resize', handleViewportResize)
+
+  const boardResizeObserver = new ResizeObserver(() => {
+    syncCompactLayoutFromBoard()
+  })
+  boardResizeObserver.observe(boardElement)
+
   window.setInterval(refreshVehicles, 15000)
   window.setInterval(render, 1000)
 }
