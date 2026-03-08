@@ -8,6 +8,7 @@ const OBA_KEY = 'TEST'
 const ARRIVALS_CACHE_TTL_MS = 20_000
 const OBA_MAX_RETRIES = 3
 const OBA_RETRY_BASE_DELAY_MS = 800
+const COMPACT_LAYOUT_BREAKPOINT = 1100
 const THEME_STORAGE_KEY = 'link-pulse-theme'
 const LINE_MATCHERS = {
   '100479': /100479/,
@@ -124,7 +125,9 @@ function setTheme(theme) {
 }
 
 function updateViewportState() {
-  state.compactLayout = window.matchMedia('(max-width: 900px)').matches
+  const visualViewportWidth = window.visualViewport?.width ?? window.innerWidth
+  const viewportWidth = Math.min(window.innerWidth, visualViewportWidth)
+  state.compactLayout = viewportWidth <= COMPACT_LAYOUT_BREAKPOINT
 }
 
 function slugifyStation(value) {
@@ -894,13 +897,21 @@ async function init() {
   window.addEventListener('popstate', () => {
     syncDialogFromUrl().catch(console.error)
   })
-  window.addEventListener('resize', () => {
-    const previousCompactLayout = state.compactLayout
-    updateViewportState()
-    if (previousCompactLayout !== state.compactLayout) {
-      render()
-    }
-  })
+window.addEventListener('resize', () => {
+  const previousCompactLayout = state.compactLayout
+  updateViewportState()
+  if (previousCompactLayout !== state.compactLayout) {
+    render()
+  }
+})
+
+window.visualViewport?.addEventListener('resize', () => {
+  const previousCompactLayout = state.compactLayout
+  updateViewportState()
+  if (previousCompactLayout !== state.compactLayout) {
+    render()
+  }
+})
   window.setInterval(refreshVehicles, 15000)
   window.setInterval(render, 1000)
 }

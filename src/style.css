@@ -195,7 +195,11 @@ h1 {
 }
 
 .line-switcher {
-  display: none;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 2px;
 }
 
 .line-switcher-button {
@@ -650,16 +654,9 @@ h1 {
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .board {
     grid-template-columns: 1fr;
-  }
-
-  .line-switcher {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    margin-bottom: 2px;
   }
 
   .screen-header {
