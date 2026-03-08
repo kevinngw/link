@@ -1,0 +1,1 @@
+{"name":"Link Pulse","short_name":"Link Pulse","description":"Realtime pulse map for Seattle Link 1 Line and 2 Line trains.","start_url":"/link/dev/","display":"standalone","background_color":"#08141f","theme_color":"#08141f","lang":"en","scope":"/link/dev/","icons":[{"src":"/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
