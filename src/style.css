@@ -556,6 +556,11 @@ h1 {
   gap: 10px;
 }
 
+.dialog-meta {
+  display: none;
+  margin-top: 12px;
+}
+
 .dialog-header h3 {
   margin: 0;
   font-size: 1.25rem;
@@ -721,11 +726,28 @@ h1 {
 .station-dialog.is-display-mode .dialog-header {
   margin-bottom: 24px;
   padding-bottom: 20px;
+  align-items: start;
 }
 
 .station-dialog.is-display-mode .dialog-header h3 {
   font-size: clamp(2.4rem, 4vw, 4rem);
   letter-spacing: 0.04em;
+}
+
+.station-dialog.is-display-mode .dialog-meta {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}
+
+.station-dialog.is-display-mode .dialog-meta .status-pill {
+  font-size: 1.2rem;
+  padding: 12px 18px;
+}
+
+.station-dialog.is-display-mode .dialog-meta .updated-at {
+  margin-top: 0;
+  font-size: 1.6rem;
 }
 
 .station-dialog.is-display-mode .dialog-body {
@@ -844,6 +866,15 @@ h1 {
 
   .station-dialog.is-display-mode .dialog-header h3 {
     font-size: 2rem;
+  }
+
+  .station-dialog.is-display-mode .dialog-meta .status-pill {
+    font-size: 0.95rem;
+    padding: 10px 14px;
+  }
+
+  .station-dialog.is-display-mode .dialog-meta .updated-at {
+    font-size: 1.15rem;
   }
 
   .station-dialog.is-display-mode .arrivals-title {

@@ -68,7 +68,13 @@ document.querySelector('#app').innerHTML = `
   <dialog id="station-dialog" class="station-dialog">
     <div class="dialog-content">
       <header class="dialog-header">
-        <h3 id="dialog-title">Station</h3>
+        <div>
+          <h3 id="dialog-title">Station</h3>
+          <div id="dialog-meta" class="dialog-meta">
+            <p id="dialog-status-pill" class="status-pill">SYNC</p>
+            <p id="dialog-updated-at" class="updated-at">Waiting for snapshot</p>
+          </div>
+        </div>
         <div class="dialog-actions">
           <button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
         </div>
@@ -96,6 +102,8 @@ const statusPillElement = document.querySelector('#status-pill')
 const updatedAtElement = document.querySelector('#updated-at')
 const dialog = document.querySelector('#station-dialog')
 const dialogTitle = document.querySelector('#dialog-title')
+const dialogStatusPillElement = document.querySelector('#dialog-status-pill')
+const dialogUpdatedAtElement = document.querySelector('#dialog-updated-at')
 const dialogDisplay = document.querySelector('#dialog-display')
 const arrivalsNbPinned = document.querySelector('#arrivals-nb-pinned')
 const arrivalsNb = document.querySelector('#arrivals-nb')
@@ -1021,6 +1029,9 @@ function render() {
   updatedAtElement.textContent = state.error
     ? 'Using last successful snapshot'
     : formatRelativeTime(state.fetchedAt)
+  dialogStatusPillElement.textContent = statusPillElement.textContent
+  dialogStatusPillElement.classList.toggle('status-pill-error', Boolean(state.error))
+  dialogUpdatedAtElement.textContent = updatedAtElement.textContent
   tabButtons.forEach((button) => button.classList.toggle('is-active', button.dataset.tab === state.activeTab))
 
   if (state.activeTab === 'map') {
