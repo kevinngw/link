@@ -556,6 +556,32 @@ h1 {
   gap: 10px;
 }
 
+.dialog-direction-tabs {
+  display: none;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--surface-strong);
+}
+
+.dialog-direction-tab {
+  min-width: 72px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+}
+
+.dialog-direction-tab.is-active {
+  background: var(--surface-active);
+  color: var(--text-primary);
+}
+
 .dialog-meta {
   display: none;
   margin-top: 12px;
@@ -740,6 +766,10 @@ h1 {
   gap: 12px;
 }
 
+.station-dialog.is-display-mode .dialog-direction-tabs {
+  display: inline-flex;
+}
+
 .station-dialog.is-display-mode .dialog-meta .status-pill {
   font-size: 1.2rem;
   padding: 12px 18px;
@@ -754,6 +784,16 @@ h1 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px;
   overflow: hidden;
+}
+
+.station-dialog.is-display-mode.show-nb-only .dialog-body,
+.station-dialog.is-display-mode.show-sb-only .dialog-body {
+  grid-template-columns: 1fr;
+}
+
+.station-dialog.is-display-mode.show-nb-only [data-direction-section="sb"],
+.station-dialog.is-display-mode.show-sb-only [data-direction-section="nb"] {
+  display: none;
 }
 
 .station-dialog.is-display-mode .arrivals-section {
@@ -866,6 +906,15 @@ h1 {
 
   .station-dialog.is-display-mode .dialog-header h3 {
     font-size: 2rem;
+  }
+
+  .station-dialog.is-display-mode .dialog-direction-tabs {
+    width: 100%;
+  }
+
+  .dialog-direction-tab {
+    min-width: 0;
+    flex: 1 1 0;
   }
 
   .station-dialog.is-display-mode .dialog-meta .status-pill {

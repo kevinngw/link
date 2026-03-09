@@ -86,7 +86,89 @@ function extractTripKey(routeId, tripId) {
   return tripId.slice(markerIndex + marker.length)
 }
 
-function buildLine(routeId, config, representativeTrip, routeTrips, stopTimesByTrip, stopsById, shapesById) {
+function formatDateKey(value) {
+  return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`
+}
+
+function getActiveServiceIdsByDate(calendar, calendarDates) {
+  const activeByDate = new Map()
+
+  for (const row of calendar) {
+    const start = new Date(`${formatDateKey(row.start_date)}T00:00:00Z`)
+    const end = new Date(`${formatDateKey(row.end_date)}T00:00:00Z`)
+
+    for (let cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+      const dateKey = cursor.toISOString().slice(0, 10)
+      const weekdayName = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][
+        cursor.getUTCDay()
+      ]
+
+      if (row[weekdayName] !== '1') continue
+      const services = activeByDate.get(dateKey) ?? new Set()
+      services.add(row.service_id)
+      activeByDate.set(dateKey, services)
+    }
+  }
+
+  for (const row of calendarDates) {
+    const dateKey = formatDateKey(row.date)
+    const services = activeByDate.get(dateKey) ?? new Set()
+    if (row.exception_type === '1') {
+      services.add(row.service_id)
+    } else if (row.exception_type === '2') {
+      services.delete(row.service_id)
+    }
+    activeByDate.set(dateKey, services)
+  }
+
+  return activeByDate
+}
+
+function buildServiceSpansByDate(routeTrips, stopTimesByTrip, activeServiceIdsByDate) {
+  const firstStopTimesByTrip = new Map()
+  const lastStopTimesByTrip = new Map()
+
+  for (const trip of routeTrips) {
+    const stopTimes = stopTimesByTrip.get(trip.trip_id) ?? []
+    if (!stopTimes.length) continue
+    firstStopTimesByTrip.set(trip.trip_id, stopTimes[0].departure_time)
+    lastStopTimesByTrip.set(trip.trip_id, stopTimes.at(-1).arrival_time)
+  }
+
+  const spansByDate = {}
+
+  for (const [dateKey, activeServiceIds] of activeServiceIdsByDate.entries()) {
+    let firstDeparture = null
+    let lastArrival = null
+
+    for (const trip of routeTrips) {
+      if (!activeServiceIds.has(trip.service_id)) continue
+
+      const departureTime = firstStopTimesByTrip.get(trip.trip_id)
+      const arrivalTime = lastStopTimesByTrip.get(trip.trip_id)
+      if (!departureTime || !arrivalTime) continue
+
+      if (firstDeparture == null || parseClockToSeconds(departureTime) < parseClockToSeconds(firstDeparture)) {
+        firstDeparture = departureTime
+      }
+
+      if (lastArrival == null || parseClockToSeconds(arrivalTime) > parseClockToSeconds(lastArrival)) {
+        lastArrival = arrivalTime
+      }
+    }
+
+    if (firstDeparture && lastArrival) {
+      spansByDate[dateKey] = {
+        start: firstDeparture,
+        end: lastArrival,
+      }
+    }
+  }
+
+  return spansByDate
+}
+
+function buildLine(routeId, config, representativeTrip, routeTrips, stopTimesByTrip, stopsById, shapesById, activeServiceIdsByDate) {
   const stopTimes = stopTimesByTrip.get(representativeTrip.trip_id) ?? []
   const stops = stopTimes.map((stopTime, index) => {
     const stop = stopsById.get(stopTime.stop_id)
@@ -133,6 +215,7 @@ function buildLine(routeId, config, representativeTrip, routeTrips, stopTimesByT
     ),
     headsign: representativeTrip.trip_headsign,
     shapeId: representativeTrip.shape_id,
+    serviceSpansByDate: buildServiceSpansByDate(routeTrips, stopTimesByTrip, activeServiceIdsByDate),
     stationAliases: Object.fromEntries(
       stops.map((stop) => [
         stop.id,
@@ -149,9 +232,12 @@ function buildLine(routeId, config, representativeTrip, routeTrips, stopTimesByT
 async function main() {
   const zip = new AdmZip(await loadZipBuffer())
   const trips = readCsv(zip, 'trips.txt')
+  const calendar = readCsv(zip, 'calendar.txt')
+  const calendarDates = readCsv(zip, 'calendar_dates.txt')
   const stopTimes = readCsv(zip, 'stop_times.txt')
   const stops = readCsv(zip, 'stops.txt')
   const shapes = readCsv(zip, 'shapes.txt')
+  const activeServiceIdsByDate = getActiveServiceIdsByDate(calendar, calendarDates)
 
   const stopTimesByTrip = new Map()
   for (const stopTime of stopTimes) {
@@ -200,6 +286,7 @@ async function main() {
       stopTimesByTrip,
       stopsById,
       shapesById,
+      activeServiceIdsByDate,
     )
 
     line.stationAliases = Object.fromEntries(

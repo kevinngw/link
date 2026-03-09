@@ -11,6 +11,7 @@ const OBA_RETRY_BASE_DELAY_MS = 800
 const COMPACT_LAYOUT_BREAKPOINT = 1100
 const DIALOG_REFRESH_INTERVAL_MS = 30_000
 const DIALOG_DISPLAY_SCROLL_INTERVAL_MS = 4_000
+const DIALOG_DISPLAY_DIRECTION_ROTATE_MS = 15_000
 const THEME_STORAGE_KEY = 'link-pulse-theme'
 const LINE_MATCHERS = {
   '100479': /100479/,
@@ -35,6 +36,9 @@ const state = {
   currentDialogStation: null,
   dialogRefreshTimer: 0,
   dialogDisplayMode: false,
+  dialogDisplayDirection: 'both',
+  dialogDisplayAutoPhase: 'nb',
+  dialogDisplayDirectionTimer: 0,
   dialogDisplayTimer: 0,
   dialogDisplayIndexes: { nb: 0, sb: 0 },
 }
@@ -56,6 +60,7 @@ document.querySelector('#app').innerHTML = `
       <div class="screen-meta">
         <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">Light</button>
         <p id="status-pill" class="status-pill">SYNC</p>
+        <p id="current-time" class="updated-at">Now --:--</p>
         <p id="updated-at" class="updated-at">Waiting for snapshot</p>
       </div>
     </header>
@@ -76,16 +81,22 @@ document.querySelector('#app').innerHTML = `
           </div>
         </div>
         <div class="dialog-actions">
+          <div id="dialog-direction-tabs" class="dialog-direction-tabs" aria-label="Board direction view">
+            <button class="dialog-direction-tab is-active" data-dialog-direction="both" type="button">Both</button>
+            <button class="dialog-direction-tab" data-dialog-direction="nb" type="button">NB</button>
+            <button class="dialog-direction-tab" data-dialog-direction="sb" type="button">SB</button>
+            <button class="dialog-direction-tab" data-dialog-direction="auto" type="button">Auto</button>
+          </div>
           <button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
         </div>
       </header>
       <div class="dialog-body">
-        <div class="arrivals-section">
+        <div class="arrivals-section" data-direction-section="nb">
           <h4 class="arrivals-title">Northbound (▲)</h4>
           <div id="arrivals-nb-pinned" class="arrivals-pinned"></div>
           <div class="arrivals-viewport"><div id="arrivals-nb" class="arrivals-list"></div></div>
         </div>
-        <div class="arrivals-section">
+        <div class="arrivals-section" data-direction-section="sb">
           <h4 class="arrivals-title">Southbound (▼)</h4>
           <div id="arrivals-sb-pinned" class="arrivals-pinned"></div>
           <div class="arrivals-viewport"><div id="arrivals-sb" class="arrivals-list"></div></div>
@@ -99,24 +110,36 @@ const boardElement = document.querySelector('#board')
 const tabButtons = [...document.querySelectorAll('.tab-button')]
 const themeToggleButton = document.querySelector('#theme-toggle')
 const statusPillElement = document.querySelector('#status-pill')
+const currentTimeElement = document.querySelector('#current-time')
 const updatedAtElement = document.querySelector('#updated-at')
 const dialog = document.querySelector('#station-dialog')
 const dialogTitle = document.querySelector('#dialog-title')
 const dialogStatusPillElement = document.querySelector('#dialog-status-pill')
 const dialogUpdatedAtElement = document.querySelector('#dialog-updated-at')
 const dialogDisplay = document.querySelector('#dialog-display')
+const dialogDirectionTabs = [...document.querySelectorAll('[data-dialog-direction]')]
 const arrivalsNbPinned = document.querySelector('#arrivals-nb-pinned')
 const arrivalsNb = document.querySelector('#arrivals-nb')
 const arrivalsSbPinned = document.querySelector('#arrivals-sb-pinned')
 const arrivalsSb = document.querySelector('#arrivals-sb')
 
 dialogDisplay.addEventListener('click', () => toggleDialogDisplayMode())
+dialogDirectionTabs.forEach((button) => {
+  button.addEventListener('click', () => {
+    state.dialogDisplayDirection = button.dataset.dialogDirection
+    if (state.dialogDisplayDirection === 'auto') {
+      state.dialogDisplayAutoPhase = 'nb'
+    }
+    renderDialogDirectionView()
+  })
+})
 dialog.addEventListener('click', (e) => {
   if (e.target === dialog) closeStationDialog()
 })
 dialog.addEventListener('close', () => {
   stopDialogAutoRefresh()
   stopDialogDisplayScroll()
+  stopDialogDirectionRotation()
   setDialogDisplayMode(false)
   if (!state.isSyncingFromUrl) {
     clearStationParam()
@@ -197,12 +220,48 @@ function formatRelativeTime(dateString) {
   return `Updated ${Math.round(deltaSeconds / 60)}m ago`
 }
 
+function formatCurrentTime() {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date())
+}
+
 function formatArrivalTime(offsetSeconds) {
   if (offsetSeconds <= 0) return 'Arriving'
   const minutes = Math.floor(offsetSeconds / 60)
   const seconds = offsetSeconds % 60
   if (minutes > 0) return `${minutes}m ${seconds}s`
   return `${seconds}s`
+}
+
+function getTodayDateKey() {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  return formatter.format(new Date())
+}
+
+function formatServiceClock(clockValue) {
+  if (!clockValue) return ''
+  const [rawHours = '0', rawMinutes = '0'] = String(clockValue).split(':')
+  const hours24 = Number(rawHours)
+  const minutes = Number(rawMinutes)
+  const normalizedHours = ((hours24 % 24) + 24) % 24
+  const period = normalizedHours >= 12 ? 'PM' : 'AM'
+  const hours12 = normalizedHours % 12 || 12
+  return `${hours12}:${String(minutes).padStart(2, '0')} ${period}`
+}
+
+function getTodayServiceSpan(line) {
+  const todayKey = getTodayDateKey()
+  const span = line.serviceSpansByDate?.[todayKey]
+  if (!span) return 'Today service hours unavailable'
+  return `Today ${formatServiceClock(span.start)} - ${formatServiceClock(span.end)}`
 }
 
 function sleep(ms) {
@@ -315,7 +374,7 @@ function classifyVehicleStatus(rawVehicle) {
 
   if (isApproaching) return 'ARR'
   if (scheduleDeviation >= 120) return 'DELAY'
-  return 'OK'
+  return 'ON TIME'
 }
 
 function parseVehicle(rawVehicle, line, layout) {
@@ -431,6 +490,7 @@ function renderArrivalLists(arrivals, loading = false) {
     const diffSec = Math.floor((arrivalMs - now) / 1000)
     const timeStr = formatArrivalTime(diffSec)
     const serviceStatus = getArrivalServiceStatus(arrival.arrivalTime, arrival.scheduleDeviation ?? 0)
+    const serviceTone = getStatusTone(serviceStatus)
     return `
       <div class="arrival-item" data-arrival-time="${arrival.arrivalTime}" data-schedule-deviation="${arrival.scheduleDeviation ?? 0}">
         <span class="arrival-meta">
@@ -441,7 +501,7 @@ function renderArrivalLists(arrivals, loading = false) {
           </span>
         </span>
         <span class="arrival-side">
-          <span class="arrival-status arrival-status-${serviceStatus.toLowerCase()}">${serviceStatus}</span>
+          <span class="arrival-status arrival-status-${serviceTone}">${serviceStatus}</span>
           <span class="arrival-time">${timeStr}</span>
         </span>
       </div>
@@ -564,6 +624,9 @@ function setDialogDisplayMode(isDisplayMode) {
   dialog.classList.toggle('is-display-mode', isDisplayMode)
   dialogDisplay.textContent = isDisplayMode ? 'Exit' : 'Board'
   dialogDisplay.setAttribute('aria-label', isDisplayMode ? 'Exit display mode' : 'Toggle display mode')
+  state.dialogDisplayDirection = 'both'
+  state.dialogDisplayAutoPhase = 'nb'
+  renderDialogDirectionView()
 
   if (dialog.open && state.currentDialogStation) {
     refreshStationDialog(state.currentDialogStation).catch(console.error)
@@ -574,6 +637,32 @@ function setDialogDisplayMode(isDisplayMode) {
 
 function toggleDialogDisplayMode() {
   setDialogDisplayMode(!state.dialogDisplayMode)
+}
+
+function stopDialogDirectionRotation() {
+  if (state.dialogDisplayDirectionTimer) {
+    window.clearInterval(state.dialogDisplayDirectionTimer)
+    state.dialogDisplayDirectionTimer = 0
+  }
+}
+
+function renderDialogDirectionView() {
+  stopDialogDirectionRotation()
+  const requestedDirection = state.dialogDisplayDirection
+  const direction = requestedDirection === 'auto' ? state.dialogDisplayAutoPhase : requestedDirection
+  dialogDirectionTabs.forEach((button) => {
+    button.classList.toggle('is-active', button.dataset.dialogDirection === requestedDirection)
+  })
+
+  dialog.classList.toggle('show-nb-only', state.dialogDisplayMode && direction === 'nb')
+  dialog.classList.toggle('show-sb-only', state.dialogDisplayMode && direction === 'sb')
+
+  if (state.dialogDisplayMode && requestedDirection === 'auto') {
+    state.dialogDisplayDirectionTimer = window.setInterval(() => {
+      state.dialogDisplayAutoPhase = state.dialogDisplayAutoPhase === 'nb' ? 'sb' : 'nb'
+      renderDialogDirectionView()
+    }, DIALOG_DISPLAY_DIRECTION_ROTATE_MS)
+  }
 }
 
 function stopDialogAutoRefresh() {
@@ -637,8 +726,9 @@ function refreshArrivalCountdowns() {
     timeElement.textContent = formatArrivalTime(Math.floor((arrivalTime - Date.now()) / 1000))
 
     const serviceStatus = getArrivalServiceStatus(arrivalTime, scheduleDeviation)
+    const serviceTone = getStatusTone(serviceStatus)
     statusElement.textContent = serviceStatus
-    statusElement.className = `arrival-status arrival-status-${serviceStatus.toLowerCase()}`
+    statusElement.className = `arrival-status arrival-status-${serviceTone}`
   })
 }
 
@@ -660,6 +750,7 @@ function closeStationDialog() {
   } else {
     stopDialogAutoRefresh()
     stopDialogDisplayScroll()
+    stopDialogDirectionRotation()
     setDialogDisplayMode(false)
     clearStationParam()
   }
@@ -717,7 +808,13 @@ function getArrivalServiceStatus(arrivalTime, scheduleDeviation) {
 
   if (secondsUntilArrival <= 90) return 'ARR'
   if (scheduleDeviation >= 120) return 'DELAY'
-  return 'OK'
+  return 'ON TIME'
+}
+
+function getStatusTone(status) {
+  if (status === 'DELAY') return 'delay'
+  if (status === 'ARR') return 'arr'
+  return 'ok'
 }
 
 async function fetchArrivalsForStop(stopId) {
@@ -908,6 +1005,7 @@ function renderLine(line) {
           <div>
             <h2>${line.name}</h2>
             <p>${vehicles.length} live trains</p>
+            <p>${getTodayServiceSpan(line)}</p>
           </div>
         </div>
       </header>
@@ -1026,6 +1124,7 @@ function render() {
   themeToggleButton.textContent = state.theme === 'dark' ? 'Light' : 'Dark'
   statusPillElement.textContent = state.error ? 'HOLD' : 'SYNC'
   statusPillElement.classList.toggle('status-pill-error', Boolean(state.error))
+  currentTimeElement.textContent = `Now ${formatCurrentTime()}`
   updatedAtElement.textContent = state.error
     ? 'Using last successful snapshot'
     : formatRelativeTime(state.fetchedAt)
