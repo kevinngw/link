@@ -3,6 +3,7 @@ import { registerSW } from 'virtual:pwa-register'
 
 const DATA_URL = './link-data.json'
 const VEHICLE_URL = 'https://api.pugetsound.onebusaway.org/api/where/vehicles-for-agency/40.json?key=TEST'
+const ALERTS_URL = 'https://s3.amazonaws.com/st-service-alerts-prod/alerts_pb.json'
 const OBA_BASE_URL = 'https://api.pugetsound.onebusaway.org/api/where'
 const OBA_KEY = 'TEST'
 const ARRIVALS_CACHE_TTL_MS = 20_000
@@ -42,6 +43,7 @@ const state = {
   dialogDisplayTimer: 0,
   dialogDisplayIndexes: { nb: 0, sb: 0 },
   currentTrainId: '',
+  alerts: [],
 }
 
 const updateSW = registerSW({
@@ -76,19 +78,21 @@ document.querySelector('#app').innerHTML = `
       <header class="dialog-header">
         <div>
           <h3 id="dialog-title">Station</h3>
-          <div id="dialog-meta" class="dialog-meta">
-            <p id="dialog-status-pill" class="status-pill">SYNC</p>
-            <p id="dialog-updated-at" class="updated-at">Waiting for snapshot</p>
-          </div>
         </div>
         <div class="dialog-actions">
-          <div id="dialog-direction-tabs" class="dialog-direction-tabs" aria-label="Board direction view">
-            <button class="dialog-direction-tab is-active" data-dialog-direction="both" type="button">Both</button>
-            <button class="dialog-direction-tab" data-dialog-direction="nb" type="button">NB</button>
-            <button class="dialog-direction-tab" data-dialog-direction="sb" type="button">SB</button>
-            <button class="dialog-direction-tab" data-dialog-direction="auto" type="button">Auto</button>
+          <div class="dialog-actions-top">
+            <div id="dialog-direction-tabs" class="dialog-direction-tabs" aria-label="Board direction view">
+              <button class="dialog-direction-tab is-active" data-dialog-direction="both" type="button">Both</button>
+              <button class="dialog-direction-tab" data-dialog-direction="nb" type="button">NB</button>
+              <button class="dialog-direction-tab" data-dialog-direction="sb" type="button">SB</button>
+              <button class="dialog-direction-tab" data-dialog-direction="auto" type="button">Auto</button>
+            </div>
+            <p id="dialog-status-pill" class="status-pill">SYNC</p>
+            <button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
           </div>
-          <button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
+          <div id="dialog-meta" class="dialog-meta">
+            <p id="dialog-updated-at" class="updated-at">Waiting for snapshot</p>
+          </div>
         </div>
       </header>
       <div class="dialog-body">
@@ -122,6 +126,24 @@ document.querySelector('#app').innerHTML = `
       </div>
     </div>
   </dialog>
+  <dialog id="alert-dialog" class="station-dialog alert-dialog">
+    <div class="dialog-content">
+      <header class="dialog-header">
+        <div>
+          <h3 id="alert-dialog-title">Service Alert</h3>
+          <p id="alert-dialog-subtitle" class="updated-at">Link rail advisory</p>
+        </div>
+        <div class="dialog-actions">
+          <button id="alert-dialog-close" class="dialog-close" type="button" aria-label="Close alert dialog">&times;</button>
+        </div>
+      </header>
+      <div class="train-dialog-body">
+        <p id="alert-dialog-lines" class="train-detail-status"></p>
+        <p id="alert-dialog-body" class="alert-dialog-body"></p>
+        <a id="alert-dialog-link" class="alert-dialog-link" href="" target="_blank" rel="noreferrer">Read official alert</a>
+      </div>
+    </div>
+  </dialog>
 `
 
 const boardElement = document.querySelector('#board')
@@ -146,9 +168,17 @@ const trainDialogSubtitle = document.querySelector('#train-dialog-subtitle')
 const trainDialogLine = document.querySelector('#train-dialog-line')
 const trainDialogStatus = document.querySelector('#train-dialog-status')
 const trainDialogClose = document.querySelector('#train-dialog-close')
+const alertDialog = document.querySelector('#alert-dialog')
+const alertDialogTitle = document.querySelector('#alert-dialog-title')
+const alertDialogSubtitle = document.querySelector('#alert-dialog-subtitle')
+const alertDialogLines = document.querySelector('#alert-dialog-lines')
+const alertDialogBody = document.querySelector('#alert-dialog-body')
+const alertDialogLink = document.querySelector('#alert-dialog-link')
+const alertDialogClose = document.querySelector('#alert-dialog-close')
 
 dialogDisplay.addEventListener('click', () => toggleDialogDisplayMode())
 trainDialogClose.addEventListener('click', () => closeTrainDialog())
+alertDialogClose.addEventListener('click', () => closeAlertDialog())
 dialogDirectionTabs.forEach((button) => {
   button.addEventListener('click', () => {
     state.dialogDisplayDirection = button.dataset.dialogDirection
@@ -163,6 +193,9 @@ dialog.addEventListener('click', (e) => {
 })
 trainDialog.addEventListener('click', (e) => {
   if (e.target === trainDialog) closeTrainDialog()
+})
+alertDialog.addEventListener('click', (e) => {
+  if (e.target === alertDialog) closeAlertDialog()
 })
 dialog.addEventListener('close', () => {
   stopDialogAutoRefresh()
@@ -264,6 +297,10 @@ function formatArrivalTime(offsetSeconds) {
   return `${seconds}s`
 }
 
+function getTranslationText(field) {
+  return field?.translation?.find((entry) => entry.text)?.text ?? ''
+}
+
 function getTodayDateKey() {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Los_Angeles',
@@ -290,6 +327,53 @@ function getTodayServiceSpan(line) {
   const span = line.serviceSpansByDate?.[todayKey]
   if (!span) return 'Today service hours unavailable'
   return `Today ${formatServiceClock(span.start)} - ${formatServiceClock(span.end)}`
+}
+
+function parseAlertEntity(entity) {
+  const alert = entity.alert ?? {}
+  const informedEntities = alert.informed_entity ?? []
+  const lineIds = [...new Set(informedEntities.map((item) => item.route_id).filter((routeId) => routeId === '100479' || routeId === '2LINE'))]
+  if (!lineIds.length) return null
+
+  return {
+    id: entity.id,
+    effect: alert.effect ?? 'UNKNOWN_EFFECT',
+    severity: alert.severity_level ?? 'INFO',
+    title: getTranslationText(alert.header_text),
+    description: getTranslationText(alert.description_text),
+    url: getTranslationText(alert.url),
+    lineIds,
+    stopIds: [...new Set(informedEntities.map((item) => item.stop_id).filter(Boolean))],
+  }
+}
+
+function getAlertsForLine(lineId) {
+  return state.alerts.filter((alert) => alert.lineIds.includes(lineId))
+}
+
+function formatAlertEffect(effect) {
+  return String(effect || 'SERVICE ALERT')
+    .replaceAll('_', ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (match) => match.toUpperCase())
+}
+
+function formatAlertSeverity(severity) {
+  return String(severity || 'INFO')
+    .replaceAll('_', ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (match) => match.toUpperCase())
+}
+
+function renderInlineAlerts(lineAlerts, lineId) {
+  if (!lineAlerts.length) return ''
+
+  return `
+    <button class="line-alert-badge" type="button" data-alert-line-id="${lineId}">
+      <span class="line-alert-badge-count">${lineAlerts.length}</span>
+      <span class="line-alert-badge-copy">alert${lineAlerts.length === 1 ? '' : 's'}</span>
+    </button>
+  `
 }
 
 function sleep(ms) {
@@ -981,6 +1065,7 @@ async function refreshStationDialog(station) {
 function renderLine(line) {
   const layout = state.layouts.get(line.id)
   const vehicles = state.vehiclesByLine.get(line.id) ?? []
+  const lineAlerts = getAlertsForLine(line.id)
   const northboundVehicles = vehicles.filter((vehicle) => vehicle.directionSymbol === '▲')
   const southboundVehicles = vehicles.filter((vehicle) => vehicle.directionSymbol === '▼')
 
@@ -1044,7 +1129,10 @@ function renderLine(line) {
         <div class="line-title">
           <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
           <div>
-            <h2>${line.name}</h2>
+            <div class="line-title-row">
+              <h2>${line.name}</h2>
+              ${renderInlineAlerts(lineAlerts, line.id)}
+            </div>
             <p>${vehicles.length} live trains</p>
             <p>${getTodayServiceSpan(line)}</p>
           </div>
@@ -1081,6 +1169,7 @@ function renderTrainList() {
   const groupedRows = visibleLines
     .map((line) => {
       const lineVehicles = vehicles.filter((vehicle) => vehicle.lineId === line.id)
+      const lineAlerts = getAlertsForLine(line.id)
       const northboundVehicles = lineVehicles.filter((vehicle) => vehicle.directionSymbol === '▲')
       const southboundVehicles = lineVehicles.filter((vehicle) => vehicle.directionSymbol === '▼')
       const renderTrainColumn = (label, directionVehicles) => `
@@ -1115,7 +1204,10 @@ function renderTrainList() {
             <div class="line-title">
               <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
               <div>
-                <h2>${line.name}</h2>
+                <div class="line-title-row">
+                  <h2>${line.name}</h2>
+                  ${renderInlineAlerts(lineAlerts, line.id)}
+                </div>
                 <p>${lineVehicles.length} trains in service</p>
               </div>
             </div>
@@ -1145,6 +1237,62 @@ function attachLineSwitcherHandlers() {
 function closeTrainDialog() {
   state.currentTrainId = ''
   if (trainDialog.open) trainDialog.close()
+}
+
+function closeAlertDialog() {
+  if (alertDialog.open) alertDialog.close()
+}
+
+function renderAlertDialog(alert) {
+  alertDialogTitle.textContent = alert.title || 'Service Alert'
+  alertDialogSubtitle.textContent = `${formatAlertEffect(alert.effect)} • ${formatAlertSeverity(alert.severity)}`
+  alertDialogLines.textContent = 'Link light rail'
+  alertDialogBody.textContent = alert.description || 'No additional alert details available.'
+  alertDialogLink.hidden = true
+  alertDialogLink.removeAttribute('href')
+
+  if (!alertDialog.open) alertDialog.showModal()
+}
+
+function renderAlertListDialog(line) {
+  const lineAlerts = getAlertsForLine(line.id)
+  alertDialogTitle.textContent = `${line.name} Alerts`
+  alertDialogSubtitle.textContent = `${lineAlerts.length} active alert${lineAlerts.length === 1 ? '' : 's'}`
+  alertDialogLines.textContent = line.name
+  alertDialogBody.textContent = ''
+  alertDialogBody.innerHTML = lineAlerts.length
+    ? lineAlerts
+        .map(
+          (alert) => `
+            <article class="alert-dialog-item">
+              <p class="alert-dialog-item-meta">${formatAlertSeverity(alert.severity)} • ${formatAlertEffect(alert.effect)}</p>
+              <p class="alert-dialog-item-title">${alert.title || 'Service alert'}</p>
+              <p class="alert-dialog-item-copy">${alert.description || 'No additional alert details available.'}</p>
+              ${
+                alert.url
+                  ? `<p class="alert-dialog-item-link-wrap"><a class="alert-dialog-link" href="${alert.url}" target="_blank" rel="noreferrer">Read official alert</a></p>`
+                  : ''
+              }
+            </article>
+          `,
+        )
+        .join('')
+    : '<p class="alert-dialog-item-copy">No active alerts.</p>'
+  alertDialogLink.hidden = true
+  alertDialogLink.removeAttribute('href')
+
+  if (!alertDialog.open) alertDialog.showModal()
+}
+
+function attachAlertClickHandlers() {
+  const alertButtons = document.querySelectorAll('[data-alert-line-id]')
+  alertButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const line = state.lines.find((candidate) => candidate.id === button.dataset.alertLineId)
+      if (!line) return
+      renderAlertListDialog(line)
+    })
+  })
 }
 
 function renderTrainDialog(vehicle) {
@@ -1247,6 +1395,7 @@ function render() {
     const visibleLines = state.compactLayout ? state.lines.filter((line) => line.id === state.activeLineId) : state.lines
     boardElement.innerHTML = `${renderLineSwitcher()}${visibleLines.map(renderLine).join('')}`
     attachLineSwitcherHandlers()
+    attachAlertClickHandlers()
     attachStationClickHandlers()
     queueMicrotask(syncCompactLayoutFromBoard)
     return
@@ -1256,6 +1405,7 @@ function render() {
     boardElement.className = 'board'
     boardElement.innerHTML = `${renderLineSwitcher()}${renderTrainList()}`
     attachLineSwitcherHandlers()
+    attachAlertClickHandlers()
     attachTrainClickHandlers()
     queueMicrotask(syncCompactLayoutFromBoard)
     return
@@ -1291,12 +1441,25 @@ async function refreshVehicles() {
   render()
 }
 
+async function refreshAlerts() {
+  try {
+    const payload = await fetchJsonWithRetry(ALERTS_URL, 'Alerts')
+    const entities = payload.entity ?? []
+    state.alerts = entities.map(parseAlertEntity).filter(Boolean)
+  } catch (error) {
+    console.error(error)
+  }
+
+  render()
+}
+
 async function init() {
   setTheme(getPreferredTheme())
   updateViewportState()
   await loadStaticData()
   render()
   await refreshVehicles()
+  await refreshAlerts()
   await syncDialogFromUrl()
   window.addEventListener('popstate', () => {
     syncDialogFromUrl().catch(console.error)
@@ -1322,6 +1485,7 @@ async function init() {
   boardResizeObserver.observe(boardElement)
 
   window.setInterval(refreshVehicles, 15000)
+  window.setInterval(refreshAlerts, 60000)
   window.setInterval(() => {
     render()
     refreshArrivalCountdowns()
