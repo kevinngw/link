@@ -41,6 +41,7 @@ const state = {
   dialogDisplayDirectionTimer: 0,
   dialogDisplayTimer: 0,
   dialogDisplayIndexes: { nb: 0, sb: 0 },
+  currentTrainId: '',
 }
 
 const updateSW = registerSW({
@@ -104,6 +105,23 @@ document.querySelector('#app').innerHTML = `
       </div>
     </div>
   </dialog>
+  <dialog id="train-dialog" class="station-dialog train-dialog">
+    <div class="dialog-content">
+      <header class="dialog-header">
+        <div>
+          <h3 id="train-dialog-title">Train</h3>
+          <p id="train-dialog-subtitle" class="updated-at">Current movement</p>
+        </div>
+        <div class="dialog-actions">
+          <button id="train-dialog-close" class="dialog-close" type="button" aria-label="Close train dialog">&times;</button>
+        </div>
+      </header>
+      <div class="train-dialog-body">
+        <div id="train-dialog-line" class="train-detail-line"></div>
+        <div id="train-dialog-status" class="train-detail-status"></div>
+      </div>
+    </div>
+  </dialog>
 `
 
 const boardElement = document.querySelector('#board')
@@ -122,8 +140,15 @@ const arrivalsNbPinned = document.querySelector('#arrivals-nb-pinned')
 const arrivalsNb = document.querySelector('#arrivals-nb')
 const arrivalsSbPinned = document.querySelector('#arrivals-sb-pinned')
 const arrivalsSb = document.querySelector('#arrivals-sb')
+const trainDialog = document.querySelector('#train-dialog')
+const trainDialogTitle = document.querySelector('#train-dialog-title')
+const trainDialogSubtitle = document.querySelector('#train-dialog-subtitle')
+const trainDialogLine = document.querySelector('#train-dialog-line')
+const trainDialogStatus = document.querySelector('#train-dialog-status')
+const trainDialogClose = document.querySelector('#train-dialog-close')
 
 dialogDisplay.addEventListener('click', () => toggleDialogDisplayMode())
+trainDialogClose.addEventListener('click', () => closeTrainDialog())
 dialogDirectionTabs.forEach((button) => {
   button.addEventListener('click', () => {
     state.dialogDisplayDirection = button.dataset.dialogDirection
@@ -135,6 +160,9 @@ dialogDirectionTabs.forEach((button) => {
 })
 dialog.addEventListener('click', (e) => {
   if (e.target === dialog) closeStationDialog()
+})
+trainDialog.addEventListener('click', (e) => {
+  if (e.target === trainDialog) closeTrainDialog()
 })
 dialog.addEventListener('close', () => {
   stopDialogAutoRefresh()
@@ -418,6 +446,16 @@ function parseVehicle(rawVehicle, line, layout) {
   const y = currentStation.y + (nextStation.y - currentStation.y) * progress
   const segmentMinutes = fromIndex !== toIndex ? currentStation.segmentMinutes : 0
   const minutePosition = currentStation.cumulativeMinutes + segmentMinutes * progress
+  const currentIndex = closestIndex ?? nextIndex ?? fromIndex
+  const currentStop = layout.stations[currentIndex] ?? currentStation
+  const movingNorth = directionSymbol === '▲'
+  const previousStopIndex = clamp(currentIndex + (movingNorth ? 1 : -1), 0, layout.stations.length - 1)
+  const upcomingStopIndex =
+    closestIndex != null && nextIndex != null && closestIndex !== nextIndex
+      ? nextIndex
+      : clamp(currentIndex + (movingNorth ? -1 : 1), 0, layout.stations.length - 1)
+  const previousStop = layout.stations[previousStopIndex] ?? currentStop
+  const upcomingStop = layout.stations[upcomingStopIndex] ?? nextStation
 
   return {
     id: rawVehicle.vehicleId,
@@ -431,6 +469,9 @@ function parseVehicle(rawVehicle, line, layout) {
     y,
     currentLabel: currentStation.label,
     nextLabel: nextStation.label,
+    previousLabel: previousStop.label,
+    currentStopLabel: currentStop.label,
+    upcomingLabel: upcomingStop.label,
     status: rawVehicle.tripStatus?.status ?? '',
     closestStop,
     nextStop,
@@ -1050,7 +1091,7 @@ function renderTrainList() {
               ? directionVehicles
                   .map(
                     (vehicle) => `
-                      <article class="train-list-item">
+                      <article class="train-list-item" data-train-id="${vehicle.id}">
                         <div class="train-list-main">
                           <span class="line-token train-list-token" style="--line-color:${vehicle.lineColor};">${vehicle.lineToken}</span>
                           <div>
@@ -1101,6 +1142,74 @@ function attachLineSwitcherHandlers() {
   })
 }
 
+function closeTrainDialog() {
+  state.currentTrainId = ''
+  if (trainDialog.open) trainDialog.close()
+}
+
+function renderTrainDialog(vehicle) {
+  const isBetweenStops = vehicle.fromLabel !== vehicle.toLabel && vehicle.progress > 0 && vehicle.progress < 1
+  const previousName = isBetweenStops ? vehicle.fromLabel : vehicle.previousLabel
+  const currentName = isBetweenStops ? `${vehicle.fromLabel} -> ${vehicle.toLabel}` : vehicle.currentStopLabel
+  const currentLabel = isBetweenStops ? 'Between' : 'Now'
+  const nextName = isBetweenStops ? vehicle.toLabel : vehicle.upcomingLabel
+  const segmentProgress = isBetweenStops ? vehicle.progress : 0.5
+
+  trainDialogTitle.textContent = `${vehicle.lineName} Train ${vehicle.label}`
+  trainDialogSubtitle.textContent = vehicle.directionSymbol === '▲' ? 'Northbound movement' : 'Southbound movement'
+  trainDialogStatus.className = `train-detail-status train-list-status-${getStatusTone(vehicle.serviceStatus)}`
+  trainDialogStatus.textContent = vehicle.serviceStatus
+  trainDialogLine.innerHTML = `
+    <div class="train-detail-spine" style="--line-color:${vehicle.lineColor};"></div>
+    <div
+      class="train-detail-marker-floating"
+      style="--line-color:${vehicle.lineColor}; --segment-progress:${segmentProgress}; --direction-offset:${vehicle.directionSymbol === '▼' ? '10px' : '-10px'};"
+    >
+      <span class="train-detail-vehicle-marker">
+        <svg viewBox="-10 -10 20 20" class="train-detail-arrow" aria-hidden="true">
+          <path d="M 0 -8 L 7 6 L -7 6 Z" transform="${vehicle.directionSymbol === '▼' ? 'rotate(180)' : ''}"></path>
+        </svg>
+      </span>
+    </div>
+    <div class="train-detail-stop">
+      <span class="train-detail-marker"></span>
+      <div>
+        <p class="train-detail-label">Previous</p>
+        <p class="train-detail-name">${previousName}</p>
+      </div>
+    </div>
+    <div class="train-detail-stop is-current">
+      <span class="train-detail-marker train-detail-marker-ghost"></span>
+      <div>
+        <p class="train-detail-label">${currentLabel}</p>
+        <p class="train-detail-name">${currentName}</p>
+      </div>
+    </div>
+    <div class="train-detail-stop">
+      <span class="train-detail-marker"></span>
+      <div>
+        <p class="train-detail-label">Next</p>
+        <p class="train-detail-name">${nextName}</p>
+      </div>
+    </div>
+  `
+
+  if (!trainDialog.open) trainDialog.showModal()
+}
+
+function attachTrainClickHandlers() {
+  const trainItems = document.querySelectorAll('[data-train-id]')
+  trainItems.forEach((item) => {
+    item.addEventListener('click', () => {
+      const trainId = item.dataset.trainId
+      const vehicle = getAllVehicles().find((candidate) => candidate.id === trainId)
+      if (!vehicle) return
+      state.currentTrainId = trainId
+      renderTrainDialog(vehicle)
+    })
+  })
+}
+
 function attachStationClickHandlers() {
   state.lines.forEach(line => {
     const layout = state.layouts.get(line.id)
@@ -1147,6 +1256,7 @@ function render() {
     boardElement.className = 'board'
     boardElement.innerHTML = `${renderLineSwitcher()}${renderTrainList()}`
     attachLineSwitcherHandlers()
+    attachTrainClickHandlers()
     queueMicrotask(syncCompactLayoutFromBoard)
     return
   }
