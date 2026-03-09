@@ -550,6 +550,12 @@ h1 {
   border-bottom: 1px solid var(--border-color);
 }
 
+.dialog-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .dialog-header h3 {
   margin: 0;
   font-size: 1.25rem;
@@ -570,6 +576,14 @@ h1 {
   transition: all 0.2s ease;
 }
 
+.dialog-mode-button {
+  width: auto;
+  min-width: 72px;
+  padding: 0 12px;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+}
+
 .dialog-close:hover {
   background: var(--surface-active);
   color: var(--text-primary);
@@ -588,6 +602,12 @@ h1 {
   border: 1px solid var(--border-soft);
 }
 
+.arrivals-pinned {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
 .arrivals-title {
   margin: 0 0 12px 0;
   font-size: 0.9rem;
@@ -599,12 +619,18 @@ h1 {
 .arrivals-list {
   display: grid;
   gap: 8px;
+  transition: transform 0.6s ease;
+}
+
+.arrivals-viewport {
+  overflow: hidden;
 }
 
 .arrival-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 14px;
   padding: 10px 12px;
   background: var(--surface-soft);
   border-radius: 8px;
@@ -615,6 +641,11 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+}
+
+.arrival-copy {
+  display: grid;
+  gap: 2px;
 }
 
 .arrival-line-token {
@@ -635,11 +666,126 @@ h1 {
   color: color-mix(in srgb, var(--text-primary) 80%, transparent);
 }
 
+.arrival-destination {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
 .arrival-time {
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
+}
+
+.arrival-side {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.arrival-status {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.arrival-status-ok {
+  color: var(--accent-strong);
+}
+
+.arrival-status-delay {
+  color: #ff9a6a;
+}
+
+.arrival-status-arr {
+  color: #ffd166;
+}
+
+.station-dialog.is-display-mode {
+  max-width: none;
+  width: 100vw;
+  min-height: 100vh;
+  margin: 0;
+  border-radius: 0;
+}
+
+.station-dialog.is-display-mode .dialog-content {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 100vh;
+  padding: 26px 32px 32px;
+}
+
+.station-dialog.is-display-mode .dialog-header {
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+}
+
+.station-dialog.is-display-mode .dialog-header h3 {
+  font-size: clamp(2.4rem, 4vw, 4rem);
+  letter-spacing: 0.04em;
+}
+
+.station-dialog.is-display-mode .dialog-body {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  overflow: hidden;
+}
+
+.station-dialog.is-display-mode .arrivals-section {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  min-height: 0;
+  padding: 22px;
+}
+
+.station-dialog.is-display-mode .arrivals-pinned {
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.station-dialog.is-display-mode .arrivals-title {
+  margin-bottom: 18px;
+  font-size: 1.6rem;
+}
+
+.station-dialog.is-display-mode .arrivals-viewport {
+  min-height: 0;
+}
+
+.station-dialog.is-display-mode .arrivals-list {
+  gap: 14px;
+}
+
+.station-dialog.is-display-mode .arrival-item {
+  padding: 18px 20px;
+  border-radius: 14px;
+}
+
+.station-dialog.is-display-mode .arrival-line-token {
+  width: 42px;
+  height: 42px;
+  font-size: 1.3rem;
+}
+
+.station-dialog.is-display-mode .arrival-vehicle {
+  font-size: 1.45rem;
+  line-height: 1.15;
+}
+
+.station-dialog.is-display-mode .arrival-destination {
+  font-size: 1.15rem;
+}
+
+.station-dialog.is-display-mode .arrival-time {
+  font-size: 2rem;
+  white-space: nowrap;
+}
+
+.station-dialog.is-display-mode .arrival-status {
+  font-size: 1rem;
 }
 
 @keyframes wave {
@@ -686,5 +832,37 @@ h1 {
     max-width: 100%;
     width: 95vw;
     margin: auto;
+  }
+
+  .station-dialog.is-display-mode .dialog-content {
+    padding: 18px 18px 22px;
+  }
+
+  .station-dialog.is-display-mode .dialog-body {
+    grid-template-columns: 1fr;
+  }
+
+  .station-dialog.is-display-mode .dialog-header h3 {
+    font-size: 2rem;
+  }
+
+  .station-dialog.is-display-mode .arrivals-title {
+    font-size: 1.2rem;
+  }
+
+  .station-dialog.is-display-mode .arrival-vehicle {
+    font-size: 1.05rem;
+  }
+
+  .station-dialog.is-display-mode .arrival-destination {
+    font-size: 0.92rem;
+  }
+
+  .station-dialog.is-display-mode .arrival-time {
+    font-size: 1.35rem;
+  }
+
+  .station-dialog.is-display-mode .arrival-status {
+    font-size: 0.82rem;
   }
 }

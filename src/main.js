@@ -9,6 +9,8 @@ const ARRIVALS_CACHE_TTL_MS = 20_000
 const OBA_MAX_RETRIES = 3
 const OBA_RETRY_BASE_DELAY_MS = 800
 const COMPACT_LAYOUT_BREAKPOINT = 1100
+const DIALOG_REFRESH_INTERVAL_MS = 30_000
+const DIALOG_DISPLAY_SCROLL_INTERVAL_MS = 4_000
 const THEME_STORAGE_KEY = 'link-pulse-theme'
 const LINE_MATCHERS = {
   '100479': /100479/,
@@ -30,6 +32,11 @@ const state = {
   arrivalsCache: new Map(),
   activeDialogRequest: 0,
   isSyncingFromUrl: false,
+  currentDialogStation: null,
+  dialogRefreshTimer: 0,
+  dialogDisplayMode: false,
+  dialogDisplayTimer: 0,
+  dialogDisplayIndexes: { nb: 0, sb: 0 },
 }
 
 const updateSW = registerSW({
@@ -62,16 +69,20 @@ document.querySelector('#app').innerHTML = `
     <div class="dialog-content">
       <header class="dialog-header">
         <h3 id="dialog-title">Station</h3>
-        <button id="dialog-close" class="dialog-close">&times;</button>
+        <div class="dialog-actions">
+          <button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
+        </div>
       </header>
       <div class="dialog-body">
         <div class="arrivals-section">
           <h4 class="arrivals-title">Northbound (▲)</h4>
-          <div id="arrivals-nb" class="arrivals-list"></div>
+          <div id="arrivals-nb-pinned" class="arrivals-pinned"></div>
+          <div class="arrivals-viewport"><div id="arrivals-nb" class="arrivals-list"></div></div>
         </div>
         <div class="arrivals-section">
           <h4 class="arrivals-title">Southbound (▼)</h4>
-          <div id="arrivals-sb" class="arrivals-list"></div>
+          <div id="arrivals-sb-pinned" class="arrivals-pinned"></div>
+          <div class="arrivals-viewport"><div id="arrivals-sb" class="arrivals-list"></div></div>
         </div>
       </div>
     </div>
@@ -85,15 +96,20 @@ const statusPillElement = document.querySelector('#status-pill')
 const updatedAtElement = document.querySelector('#updated-at')
 const dialog = document.querySelector('#station-dialog')
 const dialogTitle = document.querySelector('#dialog-title')
-const dialogClose = document.querySelector('#dialog-close')
+const dialogDisplay = document.querySelector('#dialog-display')
+const arrivalsNbPinned = document.querySelector('#arrivals-nb-pinned')
 const arrivalsNb = document.querySelector('#arrivals-nb')
+const arrivalsSbPinned = document.querySelector('#arrivals-sb-pinned')
 const arrivalsSb = document.querySelector('#arrivals-sb')
 
-dialogClose.addEventListener('click', () => closeStationDialog())
+dialogDisplay.addEventListener('click', () => toggleDialogDisplayMode())
 dialog.addEventListener('click', (e) => {
   if (e.target === dialog) closeStationDialog()
 })
 dialog.addEventListener('close', () => {
+  stopDialogAutoRefresh()
+  stopDialogDisplayScroll()
+  setDialogDisplayMode(false)
   if (!state.isSyncingFromUrl) {
     clearStationParam()
   }
@@ -406,30 +422,55 @@ function renderArrivalLists(arrivals, loading = false) {
     const arrivalMs = arrival.arrivalTime
     const diffSec = Math.floor((arrivalMs - now) / 1000)
     const timeStr = formatArrivalTime(diffSec)
+    const serviceStatus = getArrivalServiceStatus(arrival.arrivalTime, arrival.scheduleDeviation ?? 0)
     return `
-      <div class="arrival-item">
+      <div class="arrival-item" data-arrival-time="${arrival.arrivalTime}" data-schedule-deviation="${arrival.scheduleDeviation ?? 0}">
         <span class="arrival-meta">
           <span class="arrival-line-token" style="--line-color:${arrival.lineColor};">${arrival.lineToken}</span>
-          <span class="arrival-vehicle">${arrival.lineName} Train ${arrival.vehicleId}</span>
+          <span class="arrival-copy">
+            <span class="arrival-vehicle">${arrival.lineName} Train ${arrival.vehicleId}</span>
+            <span class="arrival-destination">To ${arrival.destination}</span>
+          </span>
         </span>
-        <span class="arrival-time">${timeStr}</span>
+        <span class="arrival-side">
+          <span class="arrival-status arrival-status-${serviceStatus.toLowerCase()}">${serviceStatus}</span>
+          <span class="arrival-time">${timeStr}</span>
+        </span>
       </div>
     `
   }
 
   if (loading) {
+    arrivalsNbPinned.innerHTML = ''
+    arrivalsSbPinned.innerHTML = ''
     arrivalsNb.innerHTML = '<div class="arrival-item muted">Loading arrivals...</div>'
     arrivalsSb.innerHTML = '<div class="arrival-item muted">Loading arrivals...</div>'
+    syncDialogDisplayScroll()
     return
   }
 
-  arrivalsNb.innerHTML = arrivals.nb.length
-    ? arrivals.nb.map(renderArrival).join('')
-    : '<div class="arrival-item muted">No upcoming trains</div>'
+  const renderBucket = (bucket, pinnedElement, listElement) => {
+    if (!bucket.length) {
+      pinnedElement.innerHTML = ''
+      listElement.innerHTML = '<div class="arrival-item muted">No upcoming trains</div>'
+      return
+    }
 
-  arrivalsSb.innerHTML = arrivals.sb.length
-    ? arrivals.sb.map(renderArrival).join('')
-    : '<div class="arrival-item muted">No upcoming trains</div>'
+    const pinnedItems = state.dialogDisplayMode ? bucket.slice(0, 2) : []
+    const scrollingItems = state.dialogDisplayMode ? bucket.slice(2) : bucket
+
+    pinnedElement.innerHTML = pinnedItems.map(renderArrival).join('')
+    listElement.innerHTML = scrollingItems.length
+      ? scrollingItems.map(renderArrival).join('')
+      : state.dialogDisplayMode
+        ? '<div class="arrival-item muted">No additional trains</div>'
+        : ''
+  }
+
+  renderBucket(arrivals.nb, arrivalsNbPinned, arrivalsNb)
+  renderBucket(arrivals.sb, arrivalsSbPinned, arrivalsSb)
+
+  syncDialogDisplayScroll()
 }
 
 function getStationStopIds(station, line) {
@@ -510,11 +551,108 @@ function clearStationParam() {
   window.history.pushState({}, '', url)
 }
 
+function setDialogDisplayMode(isDisplayMode) {
+  state.dialogDisplayMode = isDisplayMode
+  dialog.classList.toggle('is-display-mode', isDisplayMode)
+  dialogDisplay.textContent = isDisplayMode ? 'Exit' : 'Board'
+  dialogDisplay.setAttribute('aria-label', isDisplayMode ? 'Exit display mode' : 'Toggle display mode')
+
+  if (dialog.open && state.currentDialogStation) {
+    refreshStationDialog(state.currentDialogStation).catch(console.error)
+  }
+
+  syncDialogDisplayScroll()
+}
+
+function toggleDialogDisplayMode() {
+  setDialogDisplayMode(!state.dialogDisplayMode)
+}
+
+function stopDialogAutoRefresh() {
+  if (state.dialogRefreshTimer) {
+    window.clearInterval(state.dialogRefreshTimer)
+    state.dialogRefreshTimer = 0
+  }
+}
+
+function stopDialogDisplayScroll() {
+  if (state.dialogDisplayTimer) {
+    window.clearInterval(state.dialogDisplayTimer)
+    state.dialogDisplayTimer = 0
+  }
+}
+
+function applyDialogDisplayOffset(listElement, key) {
+  const items = [...listElement.querySelectorAll('.arrival-item:not(.muted)')]
+  listElement.style.transform = 'translateY(0)'
+
+  if (!state.dialogDisplayMode || items.length <= 3) return
+
+  const rowGap = Number.parseFloat(window.getComputedStyle(listElement).rowGap || '0') || 0
+  const itemHeight = items[0].getBoundingClientRect().height + rowGap
+  const maxIndex = Math.max(0, items.length - 3)
+  const safeIndex = Math.min(state.dialogDisplayIndexes[key], maxIndex)
+  listElement.style.transform = `translateY(-${safeIndex * itemHeight}px)`
+}
+
+function syncDialogDisplayScroll() {
+  stopDialogDisplayScroll()
+  state.dialogDisplayIndexes = { nb: 0, sb: 0 }
+  applyDialogDisplayOffset(arrivalsNb, 'nb')
+  applyDialogDisplayOffset(arrivalsSb, 'sb')
+
+  if (!state.dialogDisplayMode) return
+
+  state.dialogDisplayTimer = window.setInterval(() => {
+    for (const [key, listElement] of [['nb', arrivalsNb], ['sb', arrivalsSb]]) {
+      const items = [...listElement.querySelectorAll('.arrival-item:not(.muted)')]
+      if (items.length <= 3) continue
+
+      const maxIndex = Math.max(0, items.length - 3)
+      state.dialogDisplayIndexes[key] = state.dialogDisplayIndexes[key] >= maxIndex ? 0 : state.dialogDisplayIndexes[key] + 1
+      applyDialogDisplayOffset(listElement, key)
+    }
+  }, DIALOG_DISPLAY_SCROLL_INTERVAL_MS)
+}
+
+function refreshArrivalCountdowns() {
+  if (!dialog.open) return
+
+  const arrivalItems = dialog.querySelectorAll('.arrival-item[data-arrival-time]')
+  arrivalItems.forEach((item) => {
+    const arrivalTime = Number(item.dataset.arrivalTime)
+    const scheduleDeviation = Number(item.dataset.scheduleDeviation || 0)
+    const timeElement = item.querySelector('.arrival-time')
+    const statusElement = item.querySelector('.arrival-status')
+    if (!timeElement || !statusElement) return
+
+    timeElement.textContent = formatArrivalTime(Math.floor((arrivalTime - Date.now()) / 1000))
+
+    const serviceStatus = getArrivalServiceStatus(arrivalTime, scheduleDeviation)
+    statusElement.textContent = serviceStatus
+    statusElement.className = `arrival-status arrival-status-${serviceStatus.toLowerCase()}`
+  })
+}
+
+function startDialogAutoRefresh() {
+  stopDialogAutoRefresh()
+  if (!state.currentDialogStation) return
+
+  state.dialogRefreshTimer = window.setInterval(() => {
+    if (!dialog.open || !state.currentDialogStation) return
+    refreshStationDialog(state.currentDialogStation).catch(console.error)
+  }, DIALOG_REFRESH_INTERVAL_MS)
+}
+
 function closeStationDialog() {
   state.currentDialogStationId = ''
+  state.currentDialogStation = null
   if (dialog.open) {
     dialog.close()
   } else {
+    stopDialogAutoRefresh()
+    stopDialogDisplayScroll()
+    setDialogDisplayMode(false)
     clearStationParam()
   }
 }
@@ -560,6 +698,20 @@ function getLineRouteId(line) {
   return `40_${line.id}`
 }
 
+function formatArrivalDestination(arrival) {
+  const headsign = arrival.tripHeadsign?.trim()
+  if (headsign) return normalizeName(headsign.replace(/^to\s+/i, ''))
+  return 'Terminal'
+}
+
+function getArrivalServiceStatus(arrivalTime, scheduleDeviation) {
+  const secondsUntilArrival = Math.floor((arrivalTime - Date.now()) / 1000)
+
+  if (secondsUntilArrival <= 90) return 'ARR'
+  if (scheduleDeviation >= 120) return 'DELAY'
+  return 'OK'
+}
+
 async function fetchArrivalsForStop(stopId) {
   const url = `${OBA_BASE_URL}/arrivals-and-departures-for-stop/${stopId}.json?key=${OBA_KEY}&minutesAfter=120`
   const payload = await fetchJsonWithRetry(url, 'Arrivals')
@@ -602,6 +754,8 @@ function buildArrivalsForLine(arrivalFeed, line) {
     arrivals[bucket].push({
       vehicleId: (arrival.vehicleId || '').replace(/^40_/, '') || '--',
       arrivalTime,
+      destination: formatArrivalDestination(arrival),
+      scheduleDeviation: arrival.scheduleDeviation ?? 0,
       tripId: arrival.tripId,
       lineColor: line.color,
       lineName: line.name,
@@ -646,14 +800,21 @@ function mergeArrivalBuckets(collections) {
 async function showStationDialog(station, updateUrl = true) {
   dialogTitle.textContent = station.name
   state.currentDialogStationId = station.id
+  state.currentDialogStation = station
 
-  const requestId = state.activeDialogRequest + 1
-  state.activeDialogRequest = requestId
   renderArrivalLists({ nb: [], sb: [] }, true)
   if (updateUrl) {
     setStationParam(station)
   }
   dialog.showModal()
+  startDialogAutoRefresh()
+
+  await refreshStationDialog(station)
+}
+
+async function refreshStationDialog(station) {
+  const requestId = state.activeDialogRequest + 1
+  state.activeDialogRequest = requestId
 
   try {
     const dialogStations = getDialogStations(station)
@@ -941,7 +1102,10 @@ async function init() {
   boardResizeObserver.observe(boardElement)
 
   window.setInterval(refreshVehicles, 15000)
-  window.setInterval(render, 1000)
+  window.setInterval(() => {
+    render()
+    refreshArrivalCountdowns()
+  }, 1000)
 }
 
 init().catch((error) => {
