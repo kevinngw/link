@@ -6,7 +6,7 @@
 
 ## ✨ 功能
 
-- **实时列车追踪** — 每 15 秒刷新，数据来自 Puget Sound OneBusAway API
+- **实时列车追踪** — 自适应刷新，数据来自 Puget Sound OneBusAway API，公开 `TEST` key 下会自动降频
 - **LED 风格线路图** — 黑底霓虹显示屏，带动态列车指示灯
 - **三个视图** — `Map`（地图）、`Trains`（列车列表）、`Times`（发车间隔）
 - **站点到站弹窗** — 点击任意站点，查看南北两向各 4 班次到站时间
@@ -28,7 +28,7 @@
 | 站点到站信息 | `arrivals-and-departures-for-stop/{stopId}.json` |
 | 静态线路数据 | Sound Transit GTFS rail feed，经 [`scripts/build-link-data.mjs`](./scripts/build-link-data.mjs) 处理生成 |
 
-> **说明：** 默认使用公开测试 key `TEST`。遇到限流时，前端会自动进行指数退避重试。生产部署建议替换为正式 [OBA API key](https://developer.onebusaway.org/)。
+> **说明：** 默认使用公开测试 key `TEST`。使用该 key 时，车辆轮询、站点弹窗自动刷新和到站缓存都会自动放慢；一旦遇到限流，所有 OBA 请求会共享冷却窗口，并使用带抖动的指数退避重试。生产部署建议替换为正式 [OBA API key](https://developer.onebusaway.org/)。
 
 ## 🚀 本地开发
 

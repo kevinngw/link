@@ -4,25 +4,53 @@ import path from 'node:path'
 import AdmZip from 'adm-zip'
 import { parse } from 'csv-parse/sync'
 
-const GTFS_URL = 'https://www.soundtransit.org/GTFS-rail/40_gtfs.zip'
 const OUTPUT_FILE = path.resolve('public/link-data.json')
-const LINE_CONFIG = {
-  '100479': {
-    slug: '1line',
-    name: '1 Line',
-    color: '#28813F',
-    stopCodeStart: 40,
+
+const SYSTEM_CONFIG = {
+  link: {
+    id: 'link',
+    name: 'Link',
+    gtfsUrl: 'https://www.soundtransit.org/GTFS-rail/40_gtfs.zip',
+    agencyId: '40',
+    lines: {
+      '100479': {
+        slug: '1line',
+        name: '1 Line',
+        color: '#28813F',
+        stopCodeStart: 40,
+      },
+      '2LINE': {
+        slug: '2line',
+        name: '2 Line',
+        color: '#007CAD',
+        stopCodeStart: 56,
+      },
+    },
   },
-  '2LINE': {
-    slug: '2line',
-    name: '2 Line',
-    color: '#007CAD',
-    stopCodeStart: 56,
+  rapidride: {
+    id: 'rapidride',
+    name: 'RapidRide',
+    gtfsUrl: 'https://metro.kingcounty.gov/GTFS/google_transit.zip',
+    agencyId: '1',
+    lineOrder: ['A Line', 'B Line', 'C Line', 'D Line', 'E Line', 'F Line', 'G Line', 'H Line'],
+    lineFilter(route) {
+      return /Line$/i.test(route.route_short_name || '')
+    },
+    buildLineConfig(route, index) {
+      const shortName = route.route_short_name.trim()
+      const slug = shortName.toLowerCase().replace(/\s+/g, '-')
+      return {
+        slug,
+        name: shortName,
+        color: route.route_color ? `#${route.route_color}` : '#9C182F',
+        stopCodeStart: 100 + index * 100,
+      }
+    },
   },
 }
 
-async function loadZipBuffer() {
-  const response = await fetch(GTFS_URL)
+async function loadZipBuffer(url) {
+  const response = await fetch(url)
 
   if (!response.ok) {
     throw new Error(`Failed to download GTFS: ${response.status} ${response.statusText}`)
@@ -77,13 +105,6 @@ function simplifyPoints(points, minimumGap = 0.0012) {
 function parseClockToSeconds(value) {
   const [hours = '0', minutes = '0', seconds = '0'] = String(value).split(':')
   return Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds)
-}
-
-function extractTripKey(routeId, tripId) {
-  const marker = `_${routeId}_`
-  const markerIndex = tripId.lastIndexOf(marker)
-  if (markerIndex === -1) return ''
-  return tripId.slice(markerIndex + marker.length)
 }
 
 function formatDateKey(value) {
@@ -168,7 +189,18 @@ function buildServiceSpansByDate(routeTrips, stopTimesByTrip, activeServiceIdsBy
   return spansByDate
 }
 
-function buildLine(routeId, config, representativeTrip, routeTrips, stopTimesByTrip, stopsById, shapesById, activeServiceIdsByDate) {
+function buildDirectionLookup(routeTrips, agencyId) {
+  const entries = []
+
+  for (const trip of routeTrips) {
+    entries.push([trip.trip_id, trip.direction_id])
+    entries.push([`${agencyId}_${trip.trip_id}`, trip.direction_id])
+  }
+
+  return Object.fromEntries(entries)
+}
+
+function buildLine(route, config, representativeTrip, routeTrips, stopTimesByTrip, stopsById, shapesById, activeServiceIdsByDate, agencyId) {
   const stopTimes = stopTimesByTrip.get(representativeTrip.trip_id) ?? []
   const stops = stopTimes.map((stopTime, index) => {
     const stop = stopsById.get(stopTime.stop_id)
@@ -204,33 +236,25 @@ function buildLine(routeId, config, representativeTrip, routeTrips, stopTimesByT
   )
 
   return {
-    id: routeId,
+    agencyId,
+    id: route.route_id,
+    routeKey: `${agencyId}_${route.route_id}`,
     name: config.name,
     slug: config.slug,
     color: config.color,
-    directionLookup: Object.fromEntries(
-      routeTrips
-        .map((trip) => [extractTripKey(routeId, trip.trip_id), trip.direction_id])
-        .filter(([key]) => key),
-    ),
+    directionLookup: buildDirectionLookup(routeTrips, agencyId),
     headsign: representativeTrip.trip_headsign,
     shapeId: representativeTrip.shape_id,
     serviceSpansByDate: buildServiceSpansByDate(routeTrips, stopTimesByTrip, activeServiceIdsByDate),
-    stationAliases: Object.fromEntries(
-      stops.map((stop) => [
-        stop.id,
-        stops
-          .filter((candidate) => candidate.name === stop.name)
-          .map((candidate) => candidate.id),
-      ]),
-    ),
+    stationAliases: {},
     stops,
     shapePoints,
   }
 }
 
-async function main() {
-  const zip = new AdmZip(await loadZipBuffer())
+async function buildSystem(systemConfig) {
+  const zip = new AdmZip(await loadZipBuffer(systemConfig.gtfsUrl))
+  const routes = readCsv(zip, 'routes.txt')
   const trips = readCsv(zip, 'trips.txt')
   const calendar = readCsv(zip, 'calendar.txt')
   const calendarDates = readCsv(zip, 'calendar_dates.txt')
@@ -257,6 +281,7 @@ async function main() {
     list.push(stop.stop_id)
     stopIdsByName.set(stop.stop_name, list)
   }
+
   const shapesById = new Map()
   for (const shape of shapes) {
     const list = shapesById.get(shape.shape_id) ?? []
@@ -270,7 +295,30 @@ async function main() {
     )
   }
 
-  const lines = Object.entries(LINE_CONFIG).map(([routeId, config]) => {
+  const lineDefinitions =
+    systemConfig.lines
+      ? Object.entries(systemConfig.lines).map(([routeId, config]) => ({
+          routeId,
+          route: routes.find((candidate) => candidate.route_id === routeId),
+          config,
+        }))
+      : routes
+          .filter((route) => systemConfig.lineFilter(route))
+          .sort(
+            (left, right) =>
+              systemConfig.lineOrder.indexOf(left.route_short_name) - systemConfig.lineOrder.indexOf(right.route_short_name),
+          )
+          .map((route, index) => ({
+            routeId: route.route_id,
+            route,
+            config: systemConfig.buildLineConfig(route, index),
+          }))
+
+  const lines = lineDefinitions.map(({ routeId, route, config }) => {
+    if (!route) {
+      throw new Error(`No route found for ${systemConfig.id}:${routeId}`)
+    }
+
     const routeTrips = trips.filter((trip) => trip.route_id === routeId)
     const representativeTrip = chooseRepresentativeTrip(routeId, trips, stopTimesByTrip)
 
@@ -279,7 +327,7 @@ async function main() {
     }
 
     const line = buildLine(
-      routeId,
+      route,
       config,
       representativeTrip,
       routeTrips,
@@ -287,6 +335,7 @@ async function main() {
       stopsById,
       shapesById,
       activeServiceIdsByDate,
+      systemConfig.agencyId,
     )
 
     line.stationAliases = Object.fromEntries(
@@ -296,14 +345,25 @@ async function main() {
     return line
   })
 
+  return {
+    id: systemConfig.id,
+    name: systemConfig.name,
+    agencyId: systemConfig.agencyId,
+    source: systemConfig.gtfsUrl,
+    lines,
+  }
+}
+
+async function main() {
+  const systems = await Promise.all(Object.values(SYSTEM_CONFIG).map((config) => buildSystem(config)))
+
   await fs.mkdir(path.dirname(OUTPUT_FILE), { recursive: true })
   await fs.writeFile(
     OUTPUT_FILE,
     JSON.stringify(
       {
         generatedAt: new Date().toISOString(),
-        source: GTFS_URL,
-        lines,
+        systems,
       },
       null,
       2,

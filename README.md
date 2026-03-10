@@ -6,7 +6,7 @@ Realtime PWA for Seattle Link light rail, tracking live train positions on the `
 
 ## ✨ Features
 
-- **Live train positions** — refreshes every 15 seconds via Puget Sound OneBusAway API
+- **Live train positions** — adaptive refresh via Puget Sound OneBusAway API, with slower polling on the public `TEST` key
 - **LED-style line diagram** — black-background neon display with animated train indicators
 - **Three views** — `Map`, `Trains`, and `Times` tabs
 - **Times board** — line-wide northbound/southbound upcoming arrivals with countdown + clock time
@@ -29,7 +29,7 @@ Realtime PWA for Seattle Link light rail, tracking live train positions on the `
 | Stop arrivals | `arrivals-and-departures-for-stop/{stopId}.json` |
 | Static rail network | Sound Transit GTFS rail feed, processed by [`scripts/build-link-data.mjs`](./scripts/build-link-data.mjs) |
 
-> **Note:** The app uses the public `TEST` API key by default. Requests include exponential backoff retry when the test key is rate-limited. For production use, replace `TEST` with your own [OBA API key](https://developer.onebusaway.org/).
+> **Note:** The app uses the public `TEST` API key by default. When that key is in use, vehicle polling, station auto-refresh, and arrival caching all slow down automatically, and OBA requests honor a shared cooldown with jittered exponential backoff after rate limiting. For production use, replace `TEST` with your own [OBA API key](https://developer.onebusaway.org/).
 
 ## 🚀 Development
 
