@@ -76,6 +76,8 @@ const state = {
   dialogDisplayDirectionTimer: 0,
   dialogDisplayTimer: 0,
   dialogDisplayIndexes: { nb: 0, sb: 0 },
+  insightsTickerIndex: 0,
+  insightsTickerTimer: 0,
   currentTrainId: '',
   alerts: [],
   obaCooldownUntil: 0,
@@ -769,25 +771,43 @@ function computeLineHeadways(nb, sb) {
   return { nbGaps: gaps(sortedNb), sbGaps: gaps(sortedSb) }
 }
 
-function classifyHeadwayHealth(gaps, count) {
-  if (count < 2 || !gaps.length) return { health: 'quiet', avg: null }
-  const avg = gaps.reduce((s, v) => s + v, 0) / gaps.length
+function computeGapStats(gaps) {
+  if (!gaps.length) {
+    return { avg: null, max: null, min: null, spread: null, ratio: null }
+  }
+
+  const avg = gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length
   const max = Math.max(...gaps)
-  let health
-  if (max > avg * 2.5 && max > 10) health = 'alert'
-  else if (avg < 14) health = 'balanced'
-  else if (avg < 22) health = 'warn'
-  else health = 'quiet'
-  return { health, avg: Math.round(avg) }
+  const min = Math.min(...gaps)
+  return {
+    avg: Math.round(avg),
+    max,
+    min,
+    spread: max - min,
+    ratio: max / Math.max(min, 1),
+  }
+}
+
+function classifyHeadwayHealth(gaps, count) {
+  const stats = computeGapStats(gaps)
+  if (count < 2 || stats.avg == null) return { health: 'quiet', stats }
+
+  let health = 'healthy'
+  if ((stats.max >= 12 && stats.min <= 4) || stats.ratio >= 3) health = 'bunched'
+  else if (stats.max >= 12 || stats.spread >= 6) health = 'uneven'
+  else if (stats.avg >= 18) health = 'sparse'
+
+  return { health, stats }
 }
 
 function renderHeadwayHealthCard(label, gaps, count) {
-  const { health, avg } = classifyHeadwayHealth(gaps, count)
-  const valueText = avg != null ? `~${avg} min` : '—'
+  const { health, stats } = classifyHeadwayHealth(gaps, count)
+  const valueText = stats.avg != null ? `~${stats.avg} min` : '—'
   const copyText =
-    health === 'balanced' ? 'Consistent spacing'
-    : health === 'warn' ? 'Some irregularity'
-    : health === 'alert' ? 'Bunching detected'
+    health === 'healthy' ? 'Consistent spacing now'
+    : health === 'uneven' ? `Largest gap ${stats.max} min`
+    : health === 'bunched' ? 'Short and long gaps at once'
+    : health === 'sparse' ? 'Service spread is thin'
     : count < 2 ? `Too few ${getVehicleLabelPlural().toLowerCase()}`
     : 'Low frequency'
 
@@ -800,70 +820,211 @@ function renderHeadwayHealthCard(label, gaps, count) {
   `
 }
 
-function renderLineInsights(line, nb, sb) {
+function getDelayBuckets(vehicles) {
+  return vehicles.reduce((acc, vehicle) => {
+    const delay = Number(vehicle.scheduleDeviation ?? 0)
+    if (delay <= 60) acc.onTime += 1
+    else if (delay <= 300) acc.minorLate += 1
+    else acc.severeLate += 1
+    return acc
+  }, { onTime: 0, minorLate: 0, severeLate: 0 })
+}
+
+function formatPercent(value, total) {
+  if (!total) return '—'
+  return `${Math.round((value / total) * 100)}%`
+}
+
+function getDirectionBalance(nb, sb) {
+  const delta = Math.abs(nb.length - sb.length)
+  if (delta <= 1) return { label: 'Balanced', tone: 'healthy' }
+  if (nb.length > sb.length) return { label: '▲ Heavier', tone: 'warn' }
+  return { label: '▼ Heavier', tone: 'warn' }
+}
+
+function renderDelayDistribution(delayBuckets, total) {
+  const items = [
+    ['On time', delayBuckets.onTime, 'healthy'],
+    ['2-5 min late', delayBuckets.minorLate, 'warn'],
+    ['5+ min late', delayBuckets.severeLate, 'alert'],
+  ]
+
+  return `
+    <div class="delay-distribution">
+      ${items.map(([label, count, tone]) => `
+        <div class="delay-chip delay-chip-${tone}">
+          <p class="delay-chip-label">${label}</p>
+          <p class="delay-chip-value">${count}</p>
+          <p class="delay-chip-copy">${formatPercent(count, total)}</p>
+        </div>
+      `).join('')}
+    </div>
+  `
+}
+
+function renderFlowLane(label, directionVehicles, layout, lineColor) {
+  if (!directionVehicles.length) {
+    return `
+      <div class="flow-lane">
+        <div class="flow-lane-header">
+          <p class="flow-lane-title">${label}</p>
+          <p class="flow-lane-copy">No live ${getVehicleLabelPlural().toLowerCase()}</p>
+        </div>
+      </div>
+    `
+  }
+
+  const sortedVehicles = [...directionVehicles].sort((a, b) => a.minutePosition - b.minutePosition)
+  const positions = sortedVehicles.map((vehicle) => {
+    const ratio = layout.totalMinutes > 0 ? vehicle.minutePosition / layout.totalMinutes : 0
+    return Math.max(0, Math.min(100, ratio * 100))
+  })
+
+  return `
+    <div class="flow-lane">
+      <div class="flow-lane-header">
+        <p class="flow-lane-title">${label}</p>
+        <p class="flow-lane-copy">${sortedVehicles.length} live ${sortedVehicles.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()}</p>
+      </div>
+      <div class="flow-track" style="--line-color:${lineColor};">
+        ${positions.map((position, index) => `
+          <span
+            class="flow-vehicle"
+            style="left:${position}%; --line-color:${lineColor};"
+            title="${sortedVehicles[index].label} · ${formatVehicleSegment(sortedVehicles[index])}"
+          ></span>
+        `).join('')}
+      </div>
+    </div>
+  `
+}
+
+function buildLineExceptions(line, nb, sb, lineAlerts) {
+  const exceptions = []
+  const { stats: nbStats } = classifyHeadwayHealth(computeLineHeadways(nb, []).nbGaps, nb.length)
+  const { stats: sbStats } = classifyHeadwayHealth(computeLineHeadways([], sb).sbGaps, sb.length)
+  const severeLateVehicles = [...nb, ...sb].filter((vehicle) => Number(vehicle.scheduleDeviation ?? 0) > 300)
+  const imbalance = Math.abs(nb.length - sb.length)
+
+  if (nbStats.max != null && nbStats.max >= 12) {
+    exceptions.push({ tone: 'alert', copy: `Direction ▲ has a ${nbStats.max} min service hole right now.` })
+  }
+  if (sbStats.max != null && sbStats.max >= 12) {
+    exceptions.push({ tone: 'alert', copy: `Direction ▼ has a ${sbStats.max} min service hole right now.` })
+  }
+  if (imbalance >= 2) {
+    exceptions.push({
+      tone: 'warn',
+      copy: nb.length > sb.length
+        ? `Vehicle distribution is tilted toward ▲ by ${imbalance}.`
+        : `Vehicle distribution is tilted toward ▼ by ${imbalance}.`,
+    })
+  }
+  if (severeLateVehicles.length) {
+    exceptions.push({
+      tone: 'warn',
+      copy: `${severeLateVehicles.length} ${severeLateVehicles.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()} are running 5+ min late.`,
+    })
+  }
+  if (lineAlerts.length) {
+    exceptions.push({
+      tone: 'info',
+      copy: `${lineAlerts.length} active alert${lineAlerts.length === 1 ? '' : 's'} affecting ${line.name}.`,
+    })
+  }
+
+  if (!exceptions.length) {
+    exceptions.push({ tone: 'healthy', copy: 'Spacing and punctuality look stable right now.' })
+  }
+
+  return exceptions.slice(0, 4)
+}
+
+function buildInsightsTicker(items) {
+  const entries = items.flatMap((item) =>
+    item.exceptions.map((exception) => ({
+      tone: exception.tone,
+      copy: `${item.line.name}: ${exception.copy}`,
+      lineColor: item.line.color,
+    })),
+  )
+
+  if (!entries.length) {
+    return `
+      <section class="insights-ticker insights-ticker-empty" aria-label="Current insights summary">
+        <div class="insights-ticker-viewport">
+          <span class="insights-ticker-item insights-ticker-item-healthy">No active issues right now.</span>
+        </div>
+      </section>
+    `
+  }
+
+  const activeIndex = state.insightsTickerIndex % entries.length
+  const entry = entries[activeIndex]
+  return `
+    <section class="insights-ticker" aria-label="Current insights summary">
+      <div class="insights-ticker-viewport">
+        <span class="insights-ticker-item insights-ticker-item-${entry.tone} insights-ticker-item-animated">
+          <span class="insights-ticker-dot" style="--line-color:${entry.lineColor};"></span>
+          <span>${entry.copy}</span>
+        </span>
+      </div>
+    </section>
+  `
+}
+
+function renderLineInsights(line, layout, nb, sb, lineAlerts) {
   const total = nb.length + sb.length
   if (!total) return ''
 
   const { nbGaps, sbGaps } = computeLineHeadways(nb, sb)
   const allVehicles = [...nb, ...sb]
-  const avgDelaySec = allVehicles.reduce((s, v) => s + v.scheduleDeviation, 0) / total
-  const avgDelayMin = Math.round(Math.abs(avgDelaySec) / 60)
-  const delayText = avgDelaySec < 30 ? 'On time' : `+${avgDelayMin} min late`
-  const allGaps = [...nbGaps, ...sbGaps]
-  const minGap = allGaps.length ? Math.min(...allGaps) : null
-
-  const vehicleLabel = getVehicleLabel()
-  const vehicleLabelPlural = getVehicleLabelPlural()
-  const headwayChartHtml = allGaps.length
-    ? `
-      <div class="headway-chart">
-        <div class="headway-chart-header">
-          <p class="headway-chart-title">Live ${vehicleLabel} Gaps</p>
-          <p class="headway-chart-copy">Minutes between consecutive ${vehicleLabelPlural.toLowerCase()} by direction</p>
-        </div>
-        <div class="headway-chart-grid">
-          ${nbGaps.map((gap, i) => `
-            <div class="headway-bucket ${gap === minGap ? 'is-current' : ''}">
-              <p class="headway-bucket-label">NB gap ${i + 1}</p>
-              <p class="headway-bucket-value">${gap} min</p>
-            </div>
-          `).join('')}
-          ${sbGaps.map((gap, i) => `
-            <div class="headway-bucket ${gap === minGap ? 'is-current' : ''}">
-              <p class="headway-bucket-label">SB gap ${i + 1}</p>
-              <p class="headway-bucket-value">${gap} min</p>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    `
-    : ''
+  const delayBuckets = getDelayBuckets(allVehicles)
+  const worstGap = [...nbGaps, ...sbGaps].length ? Math.max(...nbGaps, ...sbGaps) : null
+  const balance = getDirectionBalance(nb, sb)
+  const exceptions = buildLineExceptions(line, nb, sb, lineAlerts)
+  const impactedStopCount = new Set(lineAlerts.flatMap((alert) => alert.stopIds ?? [])).size
 
   return `
     <div class="line-insights">
       <div class="metric-strip">
         <div class="metric-chip">
-          <p class="metric-chip-label">Active</p>
+          <p class="metric-chip-label">In Service</p>
           <p class="metric-chip-value">${total}</p>
         </div>
         <div class="metric-chip">
-          <p class="metric-chip-label">Dir A (▲)</p>
-          <p class="metric-chip-value">${nb.length}</p>
+          <p class="metric-chip-label">On-Time Rate</p>
+          <p class="metric-chip-value">${formatPercent(delayBuckets.onTime, total)}</p>
         </div>
         <div class="metric-chip">
-          <p class="metric-chip-label">Dir B (▼)</p>
-          <p class="metric-chip-value">${sb.length}</p>
+          <p class="metric-chip-label">Worst Gap</p>
+          <p class="metric-chip-value">${worstGap != null ? `${worstGap} min` : '—'}</p>
         </div>
-        <div class="metric-chip">
-          <p class="metric-chip-label">Avg Delay</p>
-          <p class="metric-chip-value">${delayText}</p>
+        <div class="metric-chip metric-chip-${balance.tone}">
+          <p class="metric-chip-label">Balance</p>
+          <p class="metric-chip-value">${balance.label}</p>
         </div>
       </div>
       <div class="headway-health-grid">
-        ${renderHeadwayHealthCard('NB Headway', nbGaps, nb.length)}
-        ${renderHeadwayHealthCard('SB Headway', sbGaps, sb.length)}
+        ${renderHeadwayHealthCard('Direction ▲', nbGaps, nb.length)}
+        ${renderHeadwayHealthCard('Direction ▼', sbGaps, sb.length)}
       </div>
-      ${headwayChartHtml}
+      ${renderDelayDistribution(delayBuckets, total)}
+      <div class="flow-grid">
+        ${renderFlowLane('Direction ▲ Flow', nb, layout, line.color)}
+        ${renderFlowLane('Direction ▼ Flow', sb, layout, line.color)}
+      </div>
+      <div class="insight-exceptions">
+        <div class="insight-exceptions-header">
+          <p class="headway-chart-title">Now</p>
+          <p class="headway-chart-copy">${lineAlerts.length ? `${lineAlerts.length} active alert${lineAlerts.length === 1 ? '' : 's'}${impactedStopCount ? ` · ${impactedStopCount} impacted stops` : ''}` : 'No active alerts on this line'}</p>
+        </div>
+        ${exceptions.map((item) => `
+          <div class="insight-exception insight-exception-${item.tone}">
+            <p>${item.copy}</p>
+          </div>
+        `).join('')}
+      </div>
     </div>
   `
 }
@@ -1569,15 +1730,30 @@ function formatClockTime(timestamp) {
 function renderInsightsBoard() {
   const visibleLines = state.compactLayout ? state.lines.filter((line) => line.id === state.activeLineId) : state.lines
   const vehicleLabel = getVehicleLabel()
+  const insightsItems = visibleLines.map((line) => {
+    const layout = state.layouts.get(line.id)
+    const vehicles = state.vehiclesByLine.get(line.id) ?? []
+    const nb = vehicles.filter((v) => v.directionSymbol === '▲')
+    const sb = vehicles.filter((v) => v.directionSymbol === '▼')
+    const lineAlerts = getAlertsForLine(line.id)
+    return {
+      line,
+      layout,
+      vehicles,
+      nb,
+      sb,
+      lineAlerts,
+      exceptions: buildLineExceptions(line, nb, sb, lineAlerts),
+    }
+  })
 
-  return visibleLines
-    .map((line) => {
-      const vehicles = state.vehiclesByLine.get(line.id) ?? []
-      const nb = vehicles.filter((v) => v.directionSymbol === '▲')
-      const sb = vehicles.filter((v) => v.directionSymbol === '▼')
-      const insightsHtml = renderLineInsights(line, nb, sb)
+  return `
+    ${buildInsightsTicker(insightsItems)}
+    ${insightsItems
+      .map(({ line, layout, vehicles, nb, sb, lineAlerts }) => {
+        const insightsHtml = renderLineInsights(line, layout, nb, sb, lineAlerts)
 
-      return `
+        return `
         <article class="panel-card panel-card-wide">
           <header class="panel-header">
             <div class="line-title">
@@ -1591,8 +1767,9 @@ function renderInsightsBoard() {
           ${insightsHtml || `<p class="train-readout muted">Waiting for live ${vehicleLabel.toLowerCase()} data…</p>`}
         </article>
       `
-    })
-    .join('')
+      })
+      .join('')}
+  `
 }
 
 function attachSystemSwitcherHandlers() {
@@ -1787,6 +1964,21 @@ function render() {
   }
 }
 
+function stopInsightsTickerRotation() {
+  window.clearInterval(state.insightsTickerTimer)
+  state.insightsTickerTimer = 0
+}
+
+function startInsightsTickerRotation() {
+  stopInsightsTickerRotation()
+  state.insightsTickerTimer = window.setInterval(() => {
+    state.insightsTickerIndex += 1
+    if (state.activeTab === 'insights') {
+      render()
+    }
+  }, 5000)
+}
+
 function refreshLiveMeta() {
   statusPillElement.textContent = state.error ? 'HOLD' : 'SYNC'
   statusPillElement.classList.toggle('status-pill-error', Boolean(state.error))
@@ -1832,6 +2024,7 @@ function applySystem(systemId) {
   state.alerts = []
   state.error = ''
   state.fetchedAt = ''
+  state.insightsTickerIndex = 0
 }
 
 async function switchSystem(systemId, { updateUrl = true, preserveDialog = false } = {}) {
@@ -1939,6 +2132,7 @@ async function init() {
   boardResizeObserver.observe(boardElement)
 
   startLiveRefreshLoop()
+  startInsightsTickerRotation()
   window.setInterval(() => {
     refreshLiveMeta()
     refreshArrivalCountdowns()
