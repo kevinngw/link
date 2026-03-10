@@ -301,6 +301,25 @@ function formatDelay(deviationSeconds, isPredicted) {
   return { text: 'Unknown', colorClass: 'status-muted' }
 }
 
+function formatServiceStatus(serviceStatus) {
+  switch (serviceStatus) {
+    case 'ARR':
+      return 'ARRIVING'
+    case 'DELAY':
+      return 'DELAYED'
+    case 'OK':
+      return 'EN ROUTE'
+    default:
+      return ''
+  }
+}
+
+function formatVehicleStatus(vehicle) {
+  const statusText = formatServiceStatus(vehicle.serviceStatus)
+  const delayText = vehicle.delayInfo.text
+  return `${statusText} (${delayText})`
+}
+
 function parseVehicle(rawVehicle, line, layout) {
   const tripId = rawVehicle.tripStatus?.activeTripId ?? ''
   if (!LINE_MATCHERS[line.id].test(tripId)) return null
@@ -737,7 +756,7 @@ function renderLine(line) {
               .sort((left, right) => left.minutePosition - right.minutePosition)
               .map(
                 (vehicle) =>
-                  `<p class="train-readout"><span class="train-id">${vehicle.label}</span>${formatVehicleSegment(vehicle)} <span class="train-delay ${vehicle.delayInfo.colorClass}">${vehicle.delayInfo.text}</span></p>`,
+                  `<p class="train-readout"><span class="train-id">${vehicle.label}</span>${formatVehicleSegment(vehicle)} <span class="train-delay ${vehicle.delayInfo.colorClass}">${formatVehicleStatus(vehicle)}</span></p>`,
               )
               .join('')
           : '<p class="train-readout muted">No trains</p>'
@@ -803,7 +822,7 @@ function renderTrainList() {
                           <div>
                             <p class="train-list-title">${vehicle.lineName} Train ${vehicle.label}</p>
                             <p class="train-list-subtitle">${formatVehicleSegment(vehicle)}</p>
-                            <p class="train-list-status ${vehicle.delayInfo.colorClass}">${vehicle.delayInfo.text}</p>
+                            <p class="train-list-status ${vehicle.delayInfo.colorClass}">${formatVehicleStatus(vehicle)}</p>
                           </div>
                         </div>
                       </article>
