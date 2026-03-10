@@ -12,6 +12,19 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,
+        globIgnores: ['**/link-data.json'],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => /\/link-data\.json(?:\?.*)?$/.test(url.pathname + url.search),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'link-data',
+              expiration: {
+                maxEntries: 1,
+              },
+            },
+          },
+        ],
       },
       manifest: {
         id: base,

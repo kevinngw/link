@@ -278,8 +278,16 @@ function getVehicleLabel() {
   return getActiveSystemMeta().vehicleLabel ?? 'Vehicle'
 }
 
+function pluralizeVehicleLabel(label) {
+  if (/bus$/i.test(label)) {
+    return `${label}es`
+  }
+
+  return `${label}s`
+}
+
 function getVehicleLabelPlural() {
-  return getActiveSystemMeta().vehicleLabelPlural ?? 'Vehicles'
+  return getActiveSystemMeta().vehicleLabelPlural ?? pluralizeVehicleLabel(getVehicleLabel())
 }
 
 function normalizeName(name) {
@@ -1748,7 +1756,7 @@ function render() {
   refreshLiveMeta()
 
   tabButtons.forEach((button) => button.classList.toggle('is-active', button.dataset.tab === state.activeTab))
-  document.querySelector('#tab-trains').textContent = systemMeta.vehicleLabelPlural || `${systemMeta.vehicleLabel}s`
+  document.querySelector('#tab-trains').textContent = getVehicleLabelPlural()
   attachSystemSwitcherHandlers()
 
   if (state.activeTab === 'map') {
@@ -1844,7 +1852,7 @@ async function switchSystem(systemId, { updateUrl = true, preserveDialog = false
 }
 
 async function loadStaticData() {
-  const response = await fetch(DATA_URL)
+  const response = await fetch(DATA_URL, { cache: 'no-store' })
   const payload = await response.json()
   const systems = payload.systems ?? []
   state.systemsById = new Map(systems.map((system) => [system.id, system]))
