@@ -2,8 +2,6 @@ import './style.css'
 import { registerSW } from 'virtual:pwa-register'
 
 const DATA_URL = './link-data.json'
-const VEHICLE_URL = 'https://api.pugetsound.onebusaway.org/api/where/vehicles-for-agency/40.json?key=TEST'
-const ALERTS_URL = 'https://s3.amazonaws.com/st-service-alerts-prod/alerts_pb.json'
 const OBA_BASE_URL = 'https://api.pugetsound.onebusaway.org/api/where'
 const OBA_KEY = 'TEST'
 const ARRIVALS_CACHE_TTL_MS = 20_000
@@ -14,19 +12,38 @@ const DIALOG_REFRESH_INTERVAL_MS = 30_000
 const DIALOG_DISPLAY_SCROLL_INTERVAL_MS = 4_000
 const DIALOG_DISPLAY_DIRECTION_ROTATE_MS = 15_000
 const THEME_STORAGE_KEY = 'link-pulse-theme'
-const LINE_MATCHERS = {
-  '100479': /100479/,
-  '2LINE': /2LINE/,
+const DEFAULT_SYSTEM_ID = 'link'
+const SYSTEM_META = {
+  link: {
+    id: 'link',
+    agencyId: '40',
+    label: 'Link',
+    kicker: 'SEATTLE LIGHT RAIL',
+    title: 'LINK PULSE',
+    vehicleLabel: 'Train',
+  },
+  rapidride: {
+    id: 'rapidride',
+    agencyId: '1',
+    label: 'RapidRide',
+    kicker: 'KING COUNTY METRO',
+    title: 'RAPIDRIDE PULSE',
+    vehicleLabel: 'Bus',
+  },
 }
 
 const state = {
   fetchedAt: '',
   error: '',
+  activeSystemId: DEFAULT_SYSTEM_ID,
   activeTab: 'map',
-  activeLineId: '100479',
+  activeLineId: '',
+  timesLoading: false,
   compactLayout: false,
   theme: 'dark',
   currentDialogStationId: '',
+  systemsById: new Map(),
+  layoutsBySystem: new Map(),
   lines: [],
   layouts: new Map(),
   vehiclesByLine: new Map(),
@@ -57,8 +74,8 @@ document.querySelector('#app').innerHTML = `
   <main class="screen">
     <header class="screen-header">
       <div>
-        <p class="screen-kicker">SEATTLE LIGHT RAIL</p>
-        <h1>LINK PULSE</h1>
+        <p id="screen-kicker" class="screen-kicker">SEATTLE LIGHT RAIL</p>
+        <h1 id="screen-title">LINK PULSE</h1>
       </div>
       <div class="screen-meta">
         <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">Light</button>
@@ -67,11 +84,14 @@ document.querySelector('#app').innerHTML = `
         <p id="updated-at" class="updated-at">Waiting for snapshot</p>
       </div>
     </header>
-    <section class="tab-bar" aria-label="Board views">
-      <button class="tab-button is-active" data-tab="map" type="button">Map</button>
-      <button class="tab-button" data-tab="trains" type="button">Trains</button>
-      <button class="tab-button" data-tab="times" type="button">Times</button>
-    </section>
+    <div class="switcher-stack">
+      <section id="system-bar" class="tab-bar system-bar" aria-label="Transit systems"></section>
+      <section class="tab-bar" aria-label="Board views">
+        <button class="tab-button is-active" data-tab="map" type="button">Map</button>
+        <button class="tab-button" data-tab="trains" type="button">Trains</button>
+        <button class="tab-button" data-tab="times" type="button">Times</button>
+      </section>
+    </div>
     <section id="board" class="board"></section>
   </main>
   <dialog id="station-dialog" class="station-dialog">
@@ -96,6 +116,7 @@ document.querySelector('#app').innerHTML = `
           </div>
         </div>
       </header>
+      <div id="station-alerts-container"></div>
       <div class="dialog-body">
         <div class="arrivals-section" data-direction-section="nb">
           <h4 class="arrivals-title">Northbound (▲)</h4>
@@ -132,7 +153,7 @@ document.querySelector('#app').innerHTML = `
       <header class="dialog-header">
         <div>
           <h3 id="alert-dialog-title">Service Alert</h3>
-          <p id="alert-dialog-subtitle" class="updated-at">Link rail advisory</p>
+          <p id="alert-dialog-subtitle" class="updated-at">Transit advisory</p>
         </div>
         <div class="dialog-actions">
           <button id="alert-dialog-close" class="dialog-close" type="button" aria-label="Close alert dialog">&times;</button>
@@ -148,6 +169,9 @@ document.querySelector('#app').innerHTML = `
 `
 
 const boardElement = document.querySelector('#board')
+const screenKickerElement = document.querySelector('#screen-kicker')
+const screenTitleElement = document.querySelector('#screen-title')
+const systemBarElement = document.querySelector('#system-bar')
 const tabButtons = [...document.querySelectorAll('.tab-button')]
 const themeToggleButton = document.querySelector('#theme-toggle')
 const statusPillElement = document.querySelector('#status-pill')
@@ -159,6 +183,7 @@ const dialogStatusPillElement = document.querySelector('#dialog-status-pill')
 const dialogUpdatedAtElement = document.querySelector('#dialog-updated-at')
 const dialogDisplay = document.querySelector('#dialog-display')
 const dialogDirectionTabs = [...document.querySelectorAll('[data-dialog-direction]')]
+const stationAlertsContainer = document.querySelector('#station-alerts-container')
 const arrivalsNbPinned = document.querySelector('#arrivals-nb-pinned')
 const arrivalsNb = document.querySelector('#arrivals-nb')
 const arrivalsSbPinned = document.querySelector('#arrivals-sb-pinned')
@@ -213,7 +238,10 @@ tabButtons.forEach((button) => {
     render()
 
     if (state.activeTab === 'times') {
+      state.timesLoading = true
+      render()
       await prefetchVisibleLineArrivals()
+      state.timesLoading = false
       if (state.activeTab === 'times') render()
     }
   })
@@ -222,6 +250,22 @@ themeToggleButton.addEventListener('click', () => {
   setTheme(state.theme === 'dark' ? 'light' : 'dark')
   render()
 })
+
+function getActiveSystemMeta() {
+  return SYSTEM_META[state.activeSystemId] ?? SYSTEM_META[DEFAULT_SYSTEM_ID]
+}
+
+function getActiveAgencyId() {
+  return state.systemsById.get(state.activeSystemId)?.agencyId ?? SYSTEM_META[DEFAULT_SYSTEM_ID].agencyId
+}
+
+function getVehicleUrl() {
+  return `${OBA_BASE_URL}/vehicles-for-agency/${getActiveAgencyId()}.json?key=${OBA_KEY}`
+}
+
+function getVehicleLabel() {
+  return getActiveSystemMeta().vehicleLabel ?? 'Vehicle'
+}
 
 function normalizeName(name) {
   return name
@@ -303,10 +347,6 @@ function formatArrivalTime(offsetSeconds) {
   return `${seconds}s`
 }
 
-function getTranslationText(field) {
-  return field?.translation?.find((entry) => entry.text)?.text ?? ''
-}
-
 function getTodayDateKey() {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Los_Angeles',
@@ -335,28 +375,6 @@ function getTodayServiceSpan(line) {
   return `Today ${formatServiceClock(span.start)} - ${formatServiceClock(span.end)}`
 }
 
-function parseAlertEntity(entity) {
-  const alert = entity.alert ?? {}
-  const informedEntities = alert.informed_entity ?? []
-  const lineIds = [...new Set(informedEntities.map((item) => item.route_id).filter((routeId) => routeId === '100479' || routeId === '2LINE'))]
-  if (!lineIds.length) return null
-
-  return {
-    id: entity.id,
-    effect: alert.effect ?? 'UNKNOWN_EFFECT',
-    severity: alert.severity_level ?? 'INFO',
-    title: getTranslationText(alert.header_text),
-    description: getTranslationText(alert.description_text),
-    url: getTranslationText(alert.url),
-    lineIds,
-    stopIds: [...new Set(informedEntities.map((item) => item.stop_id).filter(Boolean))],
-  }
-}
-
-function getAlertsForLine(lineId) {
-  return state.alerts.filter((alert) => alert.lineIds.includes(lineId))
-}
-
 function formatAlertEffect(effect) {
   return String(effect || 'SERVICE ALERT')
     .replaceAll('_', ' ')
@@ -369,6 +387,32 @@ function formatAlertSeverity(severity) {
     .replaceAll('_', ' ')
     .toLowerCase()
     .replace(/\b\w/g, (match) => match.toUpperCase())
+}
+
+function getAlertsForLine(lineId) {
+  return state.alerts.filter((alert) => alert.lineIds.includes(lineId))
+}
+
+function getAlertsForStation(station, line) {
+  const lineAlerts = getAlertsForLine(line.id)
+  if (!lineAlerts.length) return []
+  const stopIds = new Set(getStationStopIds(station, line))
+  stopIds.add(station.id)
+  return lineAlerts.filter((alert) => alert.stopIds.length > 0 && alert.stopIds.some((id) => stopIds.has(id)))
+}
+
+function getStationDialogAlerts(station) {
+  const seen = new Set()
+  const alerts = []
+  for (const { station: matchedStation, line } of getDialogStations(station)) {
+    for (const alert of getAlertsForStation(matchedStation, line)) {
+      if (!seen.has(alert.id)) {
+        seen.add(alert.id)
+        alerts.push(alert)
+      }
+    }
+  }
+  return alerts
 }
 
 function renderInlineAlerts(lineAlerts, lineId) {
@@ -438,12 +482,12 @@ function buildLayout(line) {
     }
 
     stationIndexByStopId.set(stop.id, index)
+    stationIndexByStopId.set(`${line.agencyId}_${stop.id}`, index)
     for (const alias of line.stationAliases?.[stop.id] ?? []) {
       stationIndexByStopId.set(alias, index)
-      stationIndexByStopId.set(`40_${alias}`, index)
+      stationIndexByStopId.set(`${line.agencyId}_${alias}`, index)
     }
 
-    stationIndexByStopId.set(`40_${stop.id}`, index)
     return station
   })
 
@@ -464,21 +508,12 @@ function buildLayout(line) {
   }
 }
 
-function inferDirectionSymbol(closestIndex, nextIndex, tripId) {
+function inferDirectionSymbol(closestIndex, nextIndex) {
   if (closestIndex != null && nextIndex != null && closestIndex !== nextIndex) {
     return nextIndex < closestIndex ? '▲' : '▼'
   }
 
-  if (/Lynnwood City Center|Downtown Redmond/.test(tripId)) return '▲'
-  if (/Federal Way Downtown|South Bellevue/.test(tripId)) return '▼'
   return '•'
-}
-
-function extractTripKey(routeId, tripId) {
-  const marker = `_${routeId}_`
-  const markerIndex = tripId.lastIndexOf(marker)
-  if (markerIndex === -1) return ''
-  return tripId.slice(markerIndex + marker.length).replace(/\.\d+$/, '')
 }
 
 function classifyVehicleStatus(rawVehicle) {
@@ -492,7 +527,7 @@ function classifyVehicleStatus(rawVehicle) {
 
   if (isApproaching) return 'ARR'
   if (scheduleDeviation >= 120) return 'DELAY'
-  return 'ON TIME'
+  return 'OK'
 }
 
 function formatDelay(deviationSeconds, isPredicted) {
@@ -542,9 +577,10 @@ function formatVehicleStatus(vehicle) {
   return `${statusText} (${delayText})`
 }
 
-function parseVehicle(rawVehicle, line, layout) {
-  const tripId = rawVehicle.tripStatus?.activeTripId ?? ''
-  if (!LINE_MATCHERS[line.id].test(tripId)) return null
+function parseVehicle(rawVehicle, line, layout, tripsById) {
+  const tripId = rawVehicle.tripStatus?.activeTripId ?? rawVehicle.tripId ?? ''
+  const trip = tripsById.get(tripId)
+  if (!trip || trip.routeId !== line.routeKey) return null
 
   const closestStop = rawVehicle.tripStatus?.closestStop
   const nextStop = rawVehicle.tripStatus?.nextStop
@@ -566,14 +602,13 @@ function parseVehicle(rawVehicle, line, layout) {
   const nextStation = layout.stations[toIndex]
   const closestOffset = rawVehicle.tripStatus?.closestStopTimeOffset ?? 0
   const nextOffset = rawVehicle.tripStatus?.nextStopTimeOffset ?? 0
-  const tripKey = extractTripKey(line.id, tripId)
-  const lookedUpDirection = line.directionLookup?.[tripKey]
+
   const directionSymbol =
-    lookedUpDirection === '1'
+    trip.directionId === '1'
       ? '▲'
-      : lookedUpDirection === '0'
+      : trip.directionId === '0'
         ? '▼'
-        : inferDirectionSymbol(closestIndex, nextIndex, tripId)
+        : inferDirectionSymbol(closestIndex, nextIndex)
 
   let progress = 0
   if (fromIndex !== toIndex && closestOffset < 0 && nextOffset > 0) {
@@ -600,7 +635,7 @@ function parseVehicle(rawVehicle, line, layout) {
 
   return {
     id: rawVehicle.vehicleId,
-    label: rawVehicle.vehicleId.replace(/^40_/, ''),
+    label: rawVehicle.vehicleId.replace(/^\d+_/, ''),
     directionSymbol,
     fromLabel: currentStation.label,
     minutePosition,
@@ -645,6 +680,23 @@ function getAllVehicles() {
   )
 }
 
+function renderSystemSwitcher() {
+  return Object.values(SYSTEM_META)
+    .filter((system) => state.systemsById.has(system.id))
+    .map(
+      (system) => `
+        <button
+          class="tab-button ${system.id === state.activeSystemId ? 'is-active' : ''}"
+          data-system-switch="${system.id}"
+          type="button"
+        >
+          ${system.label}
+        </button>
+      `,
+    )
+    .join('')
+}
+
 function renderLineSwitcher() {
   if (!state.compactLayout || state.lines.length < 2) return ''
 
@@ -665,6 +717,111 @@ function renderLineSwitcher() {
     .join('')
 
   return `<section class="line-switcher">${buttons}</section>`
+}
+
+function computeLineHeadways(nb, sb) {
+  const sortedNb = [...nb].sort((a, b) => a.minutePosition - b.minutePosition)
+  const sortedSb = [...sb].sort((a, b) => a.minutePosition - b.minutePosition)
+  const gaps = (sorted) => sorted.slice(1).map((v, i) => Math.round(v.minutePosition - sorted[i].minutePosition))
+  return { nbGaps: gaps(sortedNb), sbGaps: gaps(sortedSb) }
+}
+
+function classifyHeadwayHealth(gaps, count) {
+  if (count < 2 || !gaps.length) return { health: 'quiet', avg: null }
+  const avg = gaps.reduce((s, v) => s + v, 0) / gaps.length
+  const max = Math.max(...gaps)
+  let health
+  if (max > avg * 2.5 && max > 10) health = 'alert'
+  else if (avg < 14) health = 'balanced'
+  else if (avg < 22) health = 'warn'
+  else health = 'quiet'
+  return { health, avg: Math.round(avg) }
+}
+
+function renderHeadwayHealthCard(label, gaps, count) {
+  const { health, avg } = classifyHeadwayHealth(gaps, count)
+  const valueText = avg != null ? `~${avg} min` : '—'
+  const copyText =
+    health === 'balanced' ? 'Consistent spacing'
+    : health === 'warn' ? 'Some irregularity'
+    : health === 'alert' ? 'Bunching detected'
+    : count < 2 ? `Too few ${getVehicleLabel().toLowerCase()}s`
+    : 'Low frequency'
+
+  return `
+    <div class="headway-health-card headway-health-card-${health}">
+      <p class="headway-health-label">${label}</p>
+      <p class="headway-health-value">${valueText}</p>
+      <p class="headway-health-copy">${copyText}</p>
+    </div>
+  `
+}
+
+function renderLineInsights(line, nb, sb) {
+  const total = nb.length + sb.length
+  if (!total) return ''
+
+  const { nbGaps, sbGaps } = computeLineHeadways(nb, sb)
+  const allVehicles = [...nb, ...sb]
+  const avgDelaySec = allVehicles.reduce((s, v) => s + v.scheduleDeviation, 0) / total
+  const avgDelayMin = Math.round(Math.abs(avgDelaySec) / 60)
+  const delayText = avgDelaySec < 30 ? 'On time' : `+${avgDelayMin} min late`
+  const allGaps = [...nbGaps, ...sbGaps]
+  const minGap = allGaps.length ? Math.min(...allGaps) : null
+
+  const vehicleLabel = getVehicleLabel()
+  const headwayChartHtml = allGaps.length
+    ? `
+      <div class="headway-chart">
+        <div class="headway-chart-header">
+          <p class="headway-chart-title">Live ${vehicleLabel} Gaps</p>
+          <p class="headway-chart-copy">Minutes between consecutive ${vehicleLabel.toLowerCase()}s by direction</p>
+        </div>
+        <div class="headway-chart-grid">
+          ${nbGaps.map((gap, i) => `
+            <div class="headway-bucket ${gap === minGap ? 'is-current' : ''}">
+              <p class="headway-bucket-label">NB gap ${i + 1}</p>
+              <p class="headway-bucket-value">${gap} min</p>
+            </div>
+          `).join('')}
+          ${sbGaps.map((gap, i) => `
+            <div class="headway-bucket ${gap === minGap ? 'is-current' : ''}">
+              <p class="headway-bucket-label">SB gap ${i + 1}</p>
+              <p class="headway-bucket-value">${gap} min</p>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `
+    : ''
+
+  return `
+    <div class="line-insights">
+      <div class="metric-strip">
+        <div class="metric-chip">
+          <p class="metric-chip-label">Active</p>
+          <p class="metric-chip-value">${total}</p>
+        </div>
+        <div class="metric-chip">
+          <p class="metric-chip-label">Dir A (▲)</p>
+          <p class="metric-chip-value">${nb.length}</p>
+        </div>
+        <div class="metric-chip">
+          <p class="metric-chip-label">Dir B (▼)</p>
+          <p class="metric-chip-value">${sb.length}</p>
+        </div>
+        <div class="metric-chip">
+          <p class="metric-chip-label">Avg Delay</p>
+          <p class="metric-chip-value">${delayText}</p>
+        </div>
+      </div>
+      <div class="headway-health-grid">
+        ${renderHeadwayHealthCard('NB Headway', nbGaps, nb.length)}
+        ${renderHeadwayHealthCard('SB Headway', sbGaps, sb.length)}
+      </div>
+      ${headwayChartHtml}
+    </div>
+  `
 }
 
 function renderArrivalLists(arrivals, loading = false) {
@@ -693,7 +850,7 @@ function renderArrivalLists(arrivals, loading = false) {
         <span class="arrival-meta">
           <span class="arrival-line-token" style="--line-color:${arrival.lineColor};">${arrival.lineToken}</span>
           <span class="arrival-copy">
-            <span class="arrival-vehicle">${arrival.lineName} Train ${arrival.vehicleId}</span>
+            <span class="arrival-vehicle">${arrival.lineName} ${getVehicleLabel()} ${arrival.vehicleId}</span>
             <span class="arrival-destination">To ${arrival.destination}</span>
           </span>
         </span>
@@ -717,7 +874,7 @@ function renderArrivalLists(arrivals, loading = false) {
   const renderBucket = (bucket, pinnedElement, listElement) => {
     if (!bucket.length) {
       pinnedElement.innerHTML = ''
-      listElement.innerHTML = '<div class="arrival-item muted">No upcoming trains</div>'
+      listElement.innerHTML = `<div class="arrival-item muted">No upcoming ${getVehicleLabel().toLowerCase()}s</div>`
       return
     }
 
@@ -728,7 +885,7 @@ function renderArrivalLists(arrivals, loading = false) {
     listElement.innerHTML = scrollingItems.length
       ? scrollingItems.map(renderArrival).join('')
       : state.dialogDisplayMode
-        ? '<div class="arrival-item muted">No additional trains</div>'
+        ? `<div class="arrival-item muted">No additional ${getVehicleLabel().toLowerCase()}s</div>`
         : ''
   }
 
@@ -744,12 +901,12 @@ function getStationStopIds(station, line) {
 
   const candidates = new Set()
   for (const alias of aliases) {
-    const normalized = alias.startsWith('40_') ? alias : `40_${alias}`
+    const normalized = alias.startsWith(`${line.agencyId}_`) ? alias : `${line.agencyId}_${alias}`
     candidates.add(normalized)
   }
 
   const baseId = station.id.replace(/-T\d+$/, '')
-  candidates.add(baseId.startsWith('40_') ? baseId : `40_${baseId}`)
+  candidates.add(baseId.startsWith(`${line.agencyId}_`) ? baseId : `${line.agencyId}_${baseId}`)
 
   return [...candidates]
 }
@@ -781,7 +938,7 @@ function findStationByParam(stationParam) {
     for (const station of line.stops) {
       const candidates = new Set([
         station.id,
-        `40_${station.id}`,
+        `${line.agencyId}_${station.id}`,
         station.name,
         normalizeName(station.name),
         slugifyStation(station.name),
@@ -790,7 +947,7 @@ function findStationByParam(stationParam) {
 
       for (const alias of line.stationAliases?.[station.id] ?? []) {
         candidates.add(alias)
-        candidates.add(`40_${alias}`)
+        candidates.add(`${line.agencyId}_${alias}`)
         candidates.add(slugifyStation(alias))
       }
 
@@ -814,6 +971,23 @@ function clearStationParam() {
   if (!url.searchParams.has('station')) return
   url.searchParams.delete('station')
   window.history.pushState({}, '', url)
+}
+
+function setSystemParam(systemId) {
+  const url = new URL(window.location.href)
+  if (systemId === DEFAULT_SYSTEM_ID) {
+    url.searchParams.delete('system')
+  } else {
+    url.searchParams.set('system', systemId)
+  }
+  window.history.pushState({}, '', url)
+}
+
+function getSystemIdFromUrl() {
+  const url = new URL(window.location.href)
+  const requested = url.searchParams.get('system')
+  if (requested && state.systemsById.has(requested)) return requested
+  return DEFAULT_SYSTEM_ID
 }
 
 function setDialogDisplayMode(isDisplayMode) {
@@ -954,6 +1128,11 @@ function closeStationDialog() {
 }
 
 async function syncDialogFromUrl() {
+  const requestedSystemId = getSystemIdFromUrl()
+  if (requestedSystemId !== state.activeSystemId) {
+    await switchSystem(requestedSystemId, { updateUrl: false, preserveDialog: false })
+  }
+
   const stationParam = new URL(window.location.href).searchParams.get('station')
   const station = findStationByParam(stationParam)
 
@@ -979,8 +1158,7 @@ async function syncDialogFromUrl() {
 }
 
 function classifyArrivalDirection(arrival, line) {
-  const tripKey = extractTripKey(line.id, arrival.tripId ?? '')
-  const lookedUpDirection = line.directionLookup?.[tripKey]
+  const lookedUpDirection = line.directionLookup?.[arrival.tripId ?? '']
   if (lookedUpDirection === '1') return 'nb'
   if (lookedUpDirection === '0') return 'sb'
 
@@ -991,7 +1169,7 @@ function classifyArrivalDirection(arrival, line) {
 }
 
 function getLineRouteId(line) {
-  return `40_${line.id}`
+  return line.routeKey ?? `${line.agencyId}_${line.id}`
 }
 
 function formatArrivalDestination(arrival) {
@@ -1054,7 +1232,7 @@ function buildArrivalsForLine(arrivalFeed, line) {
     seen.add(dedupeKey)
 
     arrivals[bucket].push({
-      vehicleId: (arrival.vehicleId || '').replace(/^40_/, '') || '--',
+      vehicleId: (arrival.vehicleId || '').replace(/^\d+_/, '') || '--',
       arrivalTime,
       destination: formatArrivalDestination(arrival),
       scheduleDeviation: arrival.scheduleDeviation ?? 0,
@@ -1075,7 +1253,7 @@ function buildArrivalsForLine(arrivalFeed, line) {
 }
 
 async function getArrivalsForStation(station, line, prefetchedFeed = null) {
-  const cacheKey = `${line.id}:${station.id}`
+  const cacheKey = `${state.activeSystemId}:${line.id}:${station.id}`
   const cached = state.arrivalsCache.get(cacheKey)
   if (cached && Date.now() - cached.fetchedAt < ARRIVALS_CACHE_TTL_MS) {
     return cached.value
@@ -1101,11 +1279,44 @@ function mergeArrivalBuckets(collections) {
   return merged
 }
 
+function renderStationAlertPills(station) {
+  const alerts = getStationDialogAlerts(station)
+  if (!alerts.length) {
+    stationAlertsContainer.innerHTML = ''
+    stationAlertsContainer.hidden = true
+    return
+  }
+  stationAlertsContainer.hidden = false
+  stationAlertsContainer.innerHTML = `
+    <div class="station-alerts">
+      ${alerts
+        .map(
+          (alert, i) => `
+        <button class="station-alert-pill" data-alert-idx="${i}" type="button">
+          <span class="station-alert-pill-meta">${formatAlertSeverity(alert.severity)} · ${formatAlertEffect(alert.effect)}</span>
+          <span class="station-alert-pill-copy">${alert.title || 'Service alert'}</span>
+        </button>
+      `,
+        )
+        .join('')}
+    </div>
+  `
+  stationAlertsContainer.querySelectorAll('.station-alert-pill').forEach((button) => {
+    const alert = alerts[Number(button.dataset.alertIdx)]
+    if (!alert) return
+    button.addEventListener('click', () => {
+      const line = state.lines.find((l) => alert.lineIds.includes(l.id))
+      if (line) renderAlertListDialog(line)
+    })
+  })
+}
+
 async function showStationDialog(station, updateUrl = true) {
   dialogTitle.textContent = station.name
   state.currentDialogStationId = station.id
   state.currentDialogStation = station
 
+  renderStationAlertPills(station)
   renderArrivalLists({ nb: [], sb: [] }, true)
   if (updateUrl) {
     setStationParam(station)
@@ -1128,6 +1339,7 @@ async function refreshStationDialog(station) {
       dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line, arrivalFeed)),
     )
     if (state.activeDialogRequest !== requestId || !dialog.open) return
+    renderStationAlertPills(station)
     renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
   } catch (error) {
     if (state.activeDialogRequest !== requestId || !dialog.open) return
@@ -1147,9 +1359,12 @@ function renderLine(line) {
     .map((station, index) => {
       const prevStation = layout.stations[index - 1]
       const minute = index > 0 ? prevStation.segmentMinutes : ''
+      const stationAlerts = getAlertsForStation(station, line)
+      const hasAlert = stationAlerts.length > 0
+      const alertDotOffset = station.isTerminal ? 15 : 10
 
       return `
-        <g transform="translate(0, ${station.y})" class="station-group" data-stop-id="${station.id}" style="cursor: pointer;">
+        <g transform="translate(0, ${station.y})" class="station-group${hasAlert ? ' has-alert' : ''}" data-stop-id="${station.id}" style="cursor: pointer;">
           ${
             index > 0
               ? `<text x="0" y="-14" class="segment-time">${minute}</text>
@@ -1162,6 +1377,7 @@ function renderLine(line) {
               ? `<text x="${layout.trackX}" y="4" text-anchor="middle" class="terminal-mark">${line.name[0]}</text>`
               : ''
           }
+          ${hasAlert ? `<circle cx="${layout.trackX + alertDotOffset}" cy="-8" r="4" class="station-alert-dot"></circle>` : ''}
           <text x="${layout.labelX}" y="5" class="station-label">${station.label}</text>
           <rect x="0" y="-24" width="300" height="48" fill="transparent" class="station-hitbox"></rect>
         </g>
@@ -1192,11 +1408,12 @@ function renderLine(line) {
                   `<p class="train-readout"><span class="train-id">${vehicle.label}</span>${formatVehicleSegment(vehicle)} <span class="train-delay ${vehicle.delayInfo.colorClass}">${formatVehicleStatus(vehicle)}</span></p>`,
               )
               .join('')
-          : '<p class="train-readout muted">No trains</p>'
+          : `<p class="train-readout muted">No ${getVehicleLabel().toLowerCase()}s</p>`
       }
     </div>
   `
 
+  const vehicleLabel = getVehicleLabel()
   return `
     <article class="line-card" data-line-id="${line.id}">
       <header class="line-card-header">
@@ -1207,7 +1424,7 @@ function renderLine(line) {
               <h2>${line.name}</h2>
               ${renderInlineAlerts(lineAlerts, line.id)}
             </div>
-            <p>${vehicles.length} live trains</p>
+            <p>${vehicles.length} live ${vehicleLabel.toLowerCase()}s</p>
             <p>${getTodayServiceSpan(line)}</p>
           </div>
         </div>
@@ -1221,6 +1438,7 @@ function renderLine(line) {
         ${renderDirectionColumn('NB', northboundVehicles)}
         ${renderDirectionColumn('SB', southboundVehicles)}
       </div>
+      ${renderLineInsights(line, northboundVehicles, southboundVehicles)}
     </article>
   `
 }
@@ -1228,12 +1446,15 @@ function renderLine(line) {
 function renderTrainList() {
   const vehicles = getAllVehicles().sort((left, right) => left.minutePosition - right.minutePosition)
 
+  const vehicleLabel = getVehicleLabel()
+  const vehicleLabelLower = vehicleLabel.toLowerCase()
+
   if (!vehicles.length) {
     return `
       <section class="line-card">
         <header class="panel-header">
-          <h2>Active Trains</h2>
-          <p>No live trains</p>
+          <h2>Active ${vehicleLabel}s</h2>
+          <p>No live ${vehicleLabelLower}s</p>
         </header>
       </section>
     `
@@ -1258,7 +1479,7 @@ function renderTrainList() {
                         <div class="train-list-main">
                           <span class="line-token train-list-token" style="--line-color:${vehicle.lineColor};">${vehicle.lineToken}</span>
                           <div>
-                            <p class="train-list-title">${vehicle.lineName} Train ${vehicle.label}</p>
+                            <p class="train-list-title">${vehicle.lineName} ${vehicleLabel} ${vehicle.label}</p>
                             <p class="train-list-subtitle">${formatVehicleSegment(vehicle)}</p>
                             <p class="train-list-status ${vehicle.delayInfo.colorClass}">${formatVehicleStatus(vehicle)}</p>
                           </div>
@@ -1267,7 +1488,7 @@ function renderTrainList() {
                     `,
                   )
                   .join('')
-              : '<p class="train-readout muted">No trains</p>'
+              : `<p class="train-readout muted">No ${vehicleLabelLower}s</p>`
           }
         </div>
       `
@@ -1282,7 +1503,7 @@ function renderTrainList() {
                   <h2>${line.name}</h2>
                   ${renderInlineAlerts(lineAlerts, line.id)}
                 </div>
-                <p>${lineVehicles.length} trains in service</p>
+                <p>${lineVehicles.length} ${vehicleLabelLower}s in service</p>
               </div>
             </div>
           </header>
@@ -1305,12 +1526,22 @@ function formatClockTime(timestamp) {
   })
 }
 
+function refreshTimesCountdowns() {
+  const timeItems = document.querySelectorAll('.times-item[data-arrival-time]')
+  timeItems.forEach((item) => {
+    const arrivalTime = Number(item.dataset.arrivalTime)
+    const relativeElement = item.querySelector('.times-item-relative')
+    if (!relativeElement || !arrivalTime) return
+    relativeElement.textContent = formatArrivalTime(Math.floor((arrivalTime - Date.now()) / 1000))
+  })
+}
+
 function getUpcomingArrivalsForLine(line) {
   const now = Date.now()
   const arrivals = { nb: [], sb: [] }
 
   for (const station of line.stops) {
-    const cached = state.arrivalsCache.get(`${line.id}:${station.id}`)?.value
+    const cached = state.arrivalsCache.get(`${state.activeSystemId}:${line.id}:${station.id}`)?.value
     if (!cached) continue
 
     for (const direction of ['nb', 'sb']) {
@@ -1339,7 +1570,9 @@ function renderTimesBoard() {
     <div class="times-direction-column">
       <p class="direction-column-title">${label}</p>
       ${
-        arrivals.length
+        state.timesLoading
+          ? '<p class="train-readout muted">Loading live arrivals...</p>'
+          : arrivals.length
           ? arrivals
               .map((arrival) => {
                 const diffSec = Math.floor((arrival.arrivalTime - Date.now()) / 1000)
@@ -1355,11 +1588,11 @@ function renderTimesBoard() {
                   : 'At platform'
 
                 return `
-                  <article class="times-item">
+                  <article class="times-item" data-arrival-time="${arrival.arrivalTime}">
                     <div class="times-item-main">
                       <div>
                         <p class="times-item-title">${arrival.stationName}</p>
-                        <p class="times-item-subtitle">${arrival.lineName} Train ${arrival.vehicleId} • ${stopCount} • ${distanceLabel}</p>
+                        <p class="times-item-subtitle">${arrival.lineName} ${getVehicleLabel()} ${arrival.vehicleId} • ${stopCount} • ${distanceLabel}</p>
                       </div>
                       <div class="times-item-right">
                         <p class="times-item-relative">${relativeTime}</p>
@@ -1411,6 +1644,15 @@ async function prefetchVisibleLineArrivals() {
   )
 }
 
+function attachSystemSwitcherHandlers() {
+  const buttons = document.querySelectorAll('[data-system-switch]')
+  buttons.forEach((button) => {
+    button.addEventListener('click', async () => {
+      await switchSystem(button.dataset.systemSwitch, { updateUrl: true, preserveDialog: false })
+    })
+  })
+}
+
 function attachLineSwitcherHandlers() {
   const buttons = document.querySelectorAll('[data-line-switch]')
   buttons.forEach((button) => {
@@ -1419,7 +1661,10 @@ function attachLineSwitcherHandlers() {
       render()
 
       if (state.activeTab === 'times') {
+        state.timesLoading = true
+        render()
         await prefetchVisibleLineArrivals()
+        state.timesLoading = false
         if (state.activeTab === 'times') render()
       }
     })
@@ -1433,17 +1678,6 @@ function closeTrainDialog() {
 
 function closeAlertDialog() {
   if (alertDialog.open) alertDialog.close()
-}
-
-function renderAlertDialog(alert) {
-  alertDialogTitle.textContent = alert.title || 'Service Alert'
-  alertDialogSubtitle.textContent = `${formatAlertEffect(alert.effect)} • ${formatAlertSeverity(alert.severity)}`
-  alertDialogLines.textContent = 'Link light rail'
-  alertDialogBody.textContent = alert.description || 'No additional alert details available.'
-  alertDialogLink.hidden = true
-  alertDialogLink.removeAttribute('href')
-
-  if (!alertDialog.open) alertDialog.showModal()
 }
 
 function renderAlertListDialog(line) {
@@ -1495,8 +1729,8 @@ function renderTrainDialog(vehicle) {
   const nextName = isBetweenStops ? vehicle.toLabel : vehicle.upcomingLabel
   const segmentProgress = isBetweenStops ? vehicle.progress : 0.5
 
-  trainDialogTitle.textContent = `${vehicle.lineName} Train ${vehicle.label}`
-  trainDialogSubtitle.textContent = vehicle.directionSymbol === '▲' ? 'Northbound movement' : 'Southbound movement'
+  trainDialogTitle.textContent = `${vehicle.lineName} ${getVehicleLabel()} ${vehicle.label}`
+  trainDialogSubtitle.textContent = vehicle.directionSymbol === '▲' ? 'Direction A movement' : 'Direction B movement'
   trainDialogStatus.className = `train-detail-status train-list-status-${getStatusTone(vehicle.serviceStatus)}`
   trainDialogStatus.textContent = vehicle.serviceStatus
   trainDialogLine.innerHTML = `
@@ -1551,16 +1785,16 @@ function attachTrainClickHandlers() {
 }
 
 function attachStationClickHandlers() {
-  state.lines.forEach(line => {
+  state.lines.forEach((line) => {
     const layout = state.layouts.get(line.id)
     const card = document.querySelector(`.line-card[data-line-id="${line.id}"]`)
     if (!card) return
-    
+
     const stationGroups = card.querySelectorAll('.station-group')
-    stationGroups.forEach(group => {
+    stationGroups.forEach((group) => {
       group.addEventListener('click', () => {
         const stopId = group.dataset.stopId
-    const station = layout.stations.find(s => s.id === stopId)
+        const station = layout.stations.find((candidate) => candidate.id === stopId)
         if (station) {
           showStationDialog(station)
         }
@@ -1570,17 +1804,16 @@ function attachStationClickHandlers() {
 }
 
 function render() {
+  const systemMeta = getActiveSystemMeta()
   themeToggleButton.textContent = state.theme === 'dark' ? 'Light' : 'Dark'
-  statusPillElement.textContent = state.error ? 'HOLD' : 'SYNC'
-  statusPillElement.classList.toggle('status-pill-error', Boolean(state.error))
-  currentTimeElement.textContent = `Now ${formatCurrentTime()}`
-  updatedAtElement.textContent = state.error
-    ? 'Using last successful snapshot'
-    : formatRelativeTime(state.fetchedAt)
-  dialogStatusPillElement.textContent = statusPillElement.textContent
-  dialogStatusPillElement.classList.toggle('status-pill-error', Boolean(state.error))
-  dialogUpdatedAtElement.textContent = updatedAtElement.textContent
+  screenKickerElement.textContent = systemMeta.kicker
+  screenTitleElement.textContent = systemMeta.title
+  systemBarElement.hidden = state.systemsById.size < 2
+  systemBarElement.innerHTML = renderSystemSwitcher()
+  refreshLiveMeta()
+
   tabButtons.forEach((button) => button.classList.toggle('is-active', button.dataset.tab === state.activeTab))
+  attachSystemSwitcherHandlers()
 
   if (state.activeTab === 'map') {
     boardElement.className = 'board'
@@ -1607,45 +1840,113 @@ function render() {
     boardElement.className = 'board'
     boardElement.innerHTML = `${renderLineSwitcher()}${renderTimesBoard()}`
     attachLineSwitcherHandlers()
+  }
+}
+
+function refreshLiveMeta() {
+  statusPillElement.textContent = state.error ? 'HOLD' : 'SYNC'
+  statusPillElement.classList.toggle('status-pill-error', Boolean(state.error))
+  currentTimeElement.textContent = `Now ${formatCurrentTime()}`
+  updatedAtElement.textContent = state.error
+    ? 'Using last successful snapshot'
+    : formatRelativeTime(state.fetchedAt)
+  dialogStatusPillElement.textContent = statusPillElement.textContent
+  dialogStatusPillElement.classList.toggle('status-pill-error', Boolean(state.error))
+  dialogUpdatedAtElement.textContent = updatedAtElement.textContent
+}
+
+function applySystem(systemId) {
+  const resolvedSystemId = state.systemsById.has(systemId) ? systemId : DEFAULT_SYSTEM_ID
+  const system = state.systemsById.get(resolvedSystemId)
+  state.activeSystemId = resolvedSystemId
+  state.lines = system?.lines ?? []
+  state.layouts = state.layoutsBySystem.get(resolvedSystemId) ?? new Map()
+  if (!state.lines.some((line) => line.id === state.activeLineId)) {
+    state.activeLineId = state.lines[0]?.id ?? ''
+  }
+  state.vehiclesByLine = new Map()
+  state.rawVehicles = []
+  state.arrivalsCache.clear()
+  state.alerts = []
+  state.error = ''
+  state.fetchedAt = ''
+}
+
+async function switchSystem(systemId, { updateUrl = true, preserveDialog = false } = {}) {
+  if (!state.systemsById.has(systemId) || state.activeSystemId === systemId) {
+    if (updateUrl) setSystemParam(state.activeSystemId)
     return
+  }
+
+  applySystem(systemId)
+  if (!preserveDialog) {
+    closeStationDialog()
+  }
+  closeTrainDialog()
+  closeAlertDialog()
+  render()
+  if (updateUrl) setSystemParam(systemId)
+  await refreshVehicles()
+
+  if (state.activeTab === 'times') {
+    state.timesLoading = true
+    render()
+    await prefetchVisibleLineArrivals()
+    state.timesLoading = false
+    render()
   }
 }
 
 async function loadStaticData() {
   const response = await fetch(DATA_URL)
   const payload = await response.json()
-  state.lines = payload.lines
-  state.layouts = new Map(payload.lines.map((line) => [line.id, buildLayout(line)]))
+  const systems = payload.systems ?? []
+  state.systemsById = new Map(systems.map((system) => [system.id, system]))
+  state.layoutsBySystem = new Map(
+    systems.map((system) => [system.id, new Map(system.lines.map((line) => [line.id, buildLayout(line)]))]),
+  )
+  applySystem(getSystemIdFromUrl())
+}
+
+function parseSituation(situation) {
+  const affectedRouteIds = [...new Set((situation.allAffects ?? []).map((item) => item.routeId).filter(Boolean))]
+  const lineIds = state.lines
+    .filter((line) => affectedRouteIds.includes(getLineRouteId(line)))
+    .map((line) => line.id)
+
+  if (!lineIds.length) return null
+
+  return {
+    id: situation.id,
+    effect: situation.reason ?? 'SERVICE ALERT',
+    severity: situation.severity ?? 'INFO',
+    title: situation.summary?.value ?? 'Service alert',
+    description: situation.description?.value ?? '',
+    url: situation.url?.value ?? '',
+    lineIds,
+    stopIds: [...new Set((situation.allAffects ?? []).map((item) => item.stopId).filter(Boolean))],
+  }
 }
 
 async function refreshVehicles() {
   try {
-    const payload = await fetchJsonWithRetry(VEHICLE_URL, 'Realtime')
+    const payload = await fetchJsonWithRetry(getVehicleUrl(), 'Realtime')
     state.error = ''
     state.fetchedAt = new Date().toISOString()
-    state.rawVehicles = payload.data.list
+    state.rawVehicles = payload.data.list ?? []
+    state.alerts = (payload.data.references?.situations ?? []).map(parseSituation).filter(Boolean)
+
+    const tripsById = new Map((payload.data.references?.trips ?? []).map((trip) => [trip.id, trip]))
 
     for (const line of state.lines) {
       const layout = state.layouts.get(line.id)
-      const vehicles = payload.data.list
-        .map((vehicle) => parseVehicle(vehicle, line, layout))
+      const vehicles = state.rawVehicles
+        .map((vehicle) => parseVehicle(vehicle, line, layout, tripsById))
         .filter(Boolean)
       state.vehiclesByLine.set(line.id, vehicles)
     }
   } catch (error) {
     state.error = 'Realtime offline'
-    console.error(error)
-  }
-
-  render()
-}
-
-async function refreshAlerts() {
-  try {
-    const payload = await fetchJsonWithRetry(ALERTS_URL, 'Alerts')
-    const entities = payload.entity ?? []
-    state.alerts = entities.map(parseAlertEntity).filter(Boolean)
-  } catch (error) {
     console.error(error)
   }
 
@@ -1658,8 +1959,8 @@ async function init() {
   await loadStaticData()
   render()
   await refreshVehicles()
-  await refreshAlerts()
   await syncDialogFromUrl()
+
   window.addEventListener('popstate', () => {
     syncDialogFromUrl().catch(console.error)
   })
@@ -1684,9 +1985,9 @@ async function init() {
   boardResizeObserver.observe(boardElement)
 
   window.setInterval(refreshVehicles, 15000)
-  window.setInterval(refreshAlerts, 60000)
   window.setInterval(() => {
-    render()
+    refreshLiveMeta()
+    refreshTimesCountdowns()
     refreshArrivalCountdowns()
   }, 1000)
 }
@@ -1694,5 +1995,4 @@ async function init() {
 init().catch((error) => {
   statusPillElement.textContent = 'FAIL'
   updatedAtElement.textContent = error.message
-  console.error(error)
 })
