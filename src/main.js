@@ -1441,7 +1441,7 @@ function renderLine(line) {
           }
           ${hasAlert ? `<circle cx="${layout.trackX + alertDotOffset}" cy="-8" r="4" class="station-alert-dot"></circle>` : ''}
           <text x="${layout.labelX}" y="5" class="station-label">${station.label}</text>
-          <rect x="0" y="-24" width="300" height="48" fill="transparent" class="station-hitbox"></rect>
+          <rect x="0" y="-24" width="400" height="48" fill="transparent" class="station-hitbox"></rect>
         </g>
       `
     })
@@ -1474,7 +1474,7 @@ function renderLine(line) {
           </div>
         </div>
       </header>
-      <svg viewBox="0 0 360 ${layout.height}" class="line-diagram" role="img" aria-label="${line.name} live LED board">
+      <svg viewBox="0 0 460 ${layout.height}" class="line-diagram" role="img" aria-label="${line.name} live LED board">
         <line x1="${layout.trackX}" x2="${layout.trackX}" y1="${layout.stations[0].y}" y2="${layout.stations.at(-1).y}" class="spine" style="--line-color:${line.color};"></line>
         ${rows}
         ${trainDots}
