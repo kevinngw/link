@@ -474,6 +474,10 @@ h1 {
   gap: 14px;
 }
 
+.line-readout-grid > * {
+  min-width: 0;
+}
+
 .line-insights {
   display: grid;
   gap: 12px;
@@ -658,6 +662,7 @@ h1 {
 .train-direction-column {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .train-list-item {
@@ -700,6 +705,7 @@ h1 {
 .train-list-title {
   color: var(--text-primary);
   font-size: 0.88rem;
+  overflow-wrap: anywhere;
 }
 
 .train-list-subtitle {
@@ -717,6 +723,7 @@ h1 {
   font-size: 0.72rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 
 .train-list-status-ok {
