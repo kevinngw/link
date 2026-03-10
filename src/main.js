@@ -616,10 +616,108 @@ function formatServiceStatus(serviceStatus) {
   }
 }
 
-function formatVehicleStatus(vehicle) {
-  const statusText = formatServiceStatus(vehicle.serviceStatus)
+function getRealtimeOffset(offsetSeconds) {
+  if (!state.fetchedAt) return offsetSeconds
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - new Date(state.fetchedAt).getTime()) / 1000))
+  return offsetSeconds - elapsedSeconds
+}
+
+function getVehicleStatusClass(vehicle, nextOffset) {
+  if (nextOffset <= 90) return 'status-arriving'
+  return vehicle.delayInfo.colorClass
+}
+
+function formatVehicleArrivalMessage(vehicle) {
+  const liveNextOffset = getRealtimeOffset(vehicle.nextOffset ?? 0)
+  const liveClosestOffset = getRealtimeOffset(vehicle.closestOffset ?? 0)
   const delayText = vehicle.delayInfo.text
-  return `${statusText} (${delayText})`
+  const stopLabel = vehicle.upcomingLabel || vehicle.toLabel || vehicle.currentStopLabel
+
+  if (liveNextOffset <= 15) {
+    return `${vehicle.label} arriving now at ${stopLabel} • ${delayText}`
+  }
+
+  if (liveNextOffset <= 90) {
+    return `${vehicle.label} arriving at ${stopLabel} in ${formatArrivalTime(liveNextOffset)} • ${delayText}`
+  }
+
+  if (liveClosestOffset < 0 && liveNextOffset > 0) {
+    return `${vehicle.label} next stop ${stopLabel} in ${formatArrivalTime(liveNextOffset)} • ${delayText}`
+  }
+
+  return `${vehicle.label} en route to ${stopLabel} • ${delayText}`
+}
+
+function formatVehicleStatus(vehicle) {
+  const liveNextOffset = getRealtimeOffset(vehicle.nextOffset ?? 0)
+  const liveClosestOffset = getRealtimeOffset(vehicle.closestOffset ?? 0)
+  const delayText = vehicle.delayInfo.text
+
+  if (liveNextOffset <= 15) {
+    return `Arriving now • ${delayText}`
+  }
+
+  if (liveNextOffset <= 90) {
+    return `Arriving in ${formatArrivalTime(liveNextOffset)} • ${delayText}`
+  }
+
+  if (liveClosestOffset < 0 && liveNextOffset > 0) {
+    return `Next stop in ${formatArrivalTime(liveNextOffset)} • ${delayText}`
+  }
+
+  const statusText = formatServiceStatus(vehicle.serviceStatus)
+  return `${statusText} • ${delayText}`
+}
+
+function renderLineStatusMarquee(lineColor, vehicles) {
+  if (!vehicles.length) return ''
+
+  const visibleVehicles = [...vehicles]
+    .sort((left, right) => getRealtimeOffset(left.nextOffset ?? 0) - getRealtimeOffset(right.nextOffset ?? 0))
+    .slice(0, 8)
+
+  const entries = [...visibleVehicles, ...visibleVehicles]
+
+  return `
+    <div class="line-marquee" style="--line-color:${lineColor};">
+      <div class="line-marquee-track">
+        ${entries.map((vehicle) => `
+          <span
+            class="line-marquee-item ${getVehicleStatusClass(vehicle, getRealtimeOffset(vehicle.nextOffset ?? 0))}"
+            data-vehicle-marquee="${vehicle.id}"
+          >
+            <span class="line-marquee-token">${vehicle.lineToken}</span>
+            <span class="line-marquee-copy">${formatVehicleArrivalMessage(vehicle)}</span>
+          </span>
+        `).join('')}
+      </div>
+    </div>
+  `
+}
+
+function refreshVehicleStatusMessages() {
+  const statusElements = document.querySelectorAll('[data-vehicle-status]')
+  statusElements.forEach((element) => {
+    const vehicleId = element.dataset.vehicleStatus
+    const vehicle = getAllVehicles().find((candidate) => candidate.id === vehicleId)
+    if (!vehicle) return
+    const liveNextOffset = getRealtimeOffset(vehicle.nextOffset ?? 0)
+    element.textContent = formatVehicleStatus(vehicle)
+    element.className = `train-list-status ${getVehicleStatusClass(vehicle, liveNextOffset)}`
+  })
+
+  const marqueeElements = document.querySelectorAll('[data-vehicle-marquee]')
+  marqueeElements.forEach((element) => {
+    const vehicleId = element.dataset.vehicleMarquee
+    const vehicle = getAllVehicles().find((candidate) => candidate.id === vehicleId)
+    if (!vehicle) return
+    const liveNextOffset = getRealtimeOffset(vehicle.nextOffset ?? 0)
+    element.className = `line-marquee-item ${getVehicleStatusClass(vehicle, liveNextOffset)}`
+    const copyElement = element.querySelector('.line-marquee-copy')
+    if (copyElement) {
+      copyElement.textContent = formatVehicleArrivalMessage(vehicle)
+    }
+  })
 }
 
 function parseVehicle(rawVehicle, line, layout, tripsById) {
@@ -1635,6 +1733,7 @@ function renderLine(line) {
           </div>
         </div>
       </header>
+      ${renderLineStatusMarquee(line.color, vehicles.map((vehicle) => ({ ...vehicle, lineToken: line.name[0] })))}
       <svg viewBox="0 0 460 ${layout.height}" class="line-diagram" role="img" aria-label="${line.name} live LED board">
         <line x1="${layout.trackX}" x2="${layout.trackX}" y1="${layout.stations[0].y}" y2="${layout.stations.at(-1).y}" class="spine" style="--line-color:${line.color};"></line>
         ${rows}
@@ -1682,7 +1781,7 @@ function renderTrainList() {
                           <div>
                             <p class="train-list-title">${vehicle.lineName} ${vehicleLabel} ${vehicle.label}</p>
                             <p class="train-list-subtitle">${formatVehicleSegment(vehicle)}</p>
-                            <p class="train-list-status ${vehicle.delayInfo.colorClass}">${formatVehicleStatus(vehicle)}</p>
+                            <p class="train-list-status ${getVehicleStatusClass(vehicle, getRealtimeOffset(vehicle.nextOffset ?? 0))}" data-vehicle-status="${vehicle.id}">${formatVehicleStatus(vehicle)}</p>
                           </div>
                         </div>
                       </article>
@@ -1708,6 +1807,7 @@ function renderTrainList() {
               </div>
             </div>
           </header>
+          ${renderLineStatusMarquee(line.color, lineVehicles)}
           <div class="line-readout line-readout-grid train-columns">
             ${renderTrainColumn('NB', northboundVehicles)}
             ${renderTrainColumn('SB', southboundVehicles)}
@@ -2136,6 +2236,7 @@ async function init() {
   window.setInterval(() => {
     refreshLiveMeta()
     refreshArrivalCountdowns()
+    refreshVehicleStatusMessages()
   }, 1000)
 }
 

@@ -73,9 +73,9 @@ body {
 }
 
 .screen {
-  width: min(1180px, calc(100vw - 32px));
+  width: min(1360px, calc(100vw - 32px));
   margin: 0 auto;
-  padding: 18px 0 28px;
+  padding: 22px 0 32px;
 }
 
 .screen-header {
@@ -202,7 +202,7 @@ h1 {
 .board {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  gap: 22px;
 }
 
 .line-switcher {
@@ -242,7 +242,8 @@ h1 {
 }
 
 .line-card {
-  padding: 16px 14px 14px;
+  min-width: 0;
+  padding: 20px 18px 18px;
   border: 1px solid var(--border-color);
   border-radius: 20px;
   background:
@@ -254,7 +255,8 @@ h1 {
 }
 
 .panel-card {
-  padding: 16px 14px 14px;
+  min-width: 0;
+  padding: 20px 18px 18px;
   border: 1px solid var(--border-color);
   border-radius: 20px;
   background:
@@ -266,7 +268,7 @@ h1 {
 }
 
 .panel-card-wide {
-  max-width: 820px;
+  max-width: 920px;
 }
 
 .insights-ticker {
@@ -380,12 +382,12 @@ h1 {
 
 .line-title h2 {
   color: var(--text-primary);
-  font-size: 1.1rem;
+  font-size: 1.26rem;
 }
 
 .line-title p {
   color: var(--text-secondary);
-  font-size: 0.86rem;
+  font-size: 0.94rem;
 }
 
 .line-alert-badge {
@@ -541,6 +543,60 @@ h1 {
 
 .line-readout-grid > * {
   min-width: 0;
+}
+
+.line-marquee {
+  position: relative;
+  overflow: hidden;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.line-marquee::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, var(--surface-card) 0, transparent 6%, transparent 94%, var(--surface-card) 100%);
+}
+
+.line-marquee-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: max-content;
+  padding-right: 12px;
+  animation: lineMarqueeScroll 30s linear infinite;
+}
+
+.line-marquee-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  white-space: nowrap;
+  font-size: 0.78rem;
+}
+
+.line-marquee-token {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--line-color);
+  color: #051018;
+  font-size: 0.72rem;
+  font-weight: 900;
+  flex: 0 0 auto;
+}
+
+.line-marquee-copy {
+  color: currentColor;
 }
 
 .line-insights {
@@ -820,6 +876,16 @@ h1 {
   }
 }
 
+@keyframes lineMarqueeScroll {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
 .direction-column {
   display: grid;
   gap: 6px;
@@ -828,7 +894,7 @@ h1 {
 .direction-column-title {
   margin: 0;
   color: var(--accent-strong);
-  font-size: 0.78rem;
+  font-size: 0.86rem;
   letter-spacing: 0.08em;
 }
 
@@ -852,6 +918,7 @@ h1 {
 .train-line-card {
   display: grid;
   align-content: start;
+  min-width: 0;
 }
 
 .train-columns {
@@ -868,7 +935,8 @@ h1 {
 
 .train-list-item {
   display: block;
-  padding: 12px 14px;
+  min-width: 0;
+  padding: 14px 16px;
   border: 1px solid var(--border-color);
   border-radius: 14px;
   background: var(--surface-soft);
@@ -885,6 +953,7 @@ h1 {
   align-items: center;
   gap: 12px;
   min-width: 0;
+  width: 100%;
 }
 
 .train-list-main > div {
@@ -893,8 +962,8 @@ h1 {
 }
 
 .train-list-token {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   flex: 0 0 auto;
 }
 
@@ -905,23 +974,26 @@ h1 {
 
 .train-list-title {
   color: var(--text-primary);
-  font-size: 0.88rem;
+  font-size: 0.98rem;
   overflow-wrap: anywhere;
 }
 
 .train-list-subtitle {
   color: var(--text-secondary);
-  font-size: 0.78rem;
-  margin-top: 2px;
+  font-size: 0.86rem;
+  margin-top: 4px;
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .train-list-status {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   color: var(--accent-strong);
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   overflow-wrap: anywhere;
@@ -946,6 +1018,10 @@ h1 {
 
 .status-ontime {
   color: #4ade80;
+}
+
+.status-arriving {
+  color: #60a5fa;
 }
 
 .status-late-minor {
