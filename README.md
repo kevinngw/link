@@ -9,6 +9,7 @@ Realtime PWA for Seattle Link light rail, tracking live train positions on the `
 - **Live train positions** — refreshes every 15 seconds via Puget Sound OneBusAway API
 - **LED-style line diagram** — black-background neon display with animated train indicators
 - **Three views** — `Map`, `Trains`, and `Times` tabs
+- **Times board** — line-wide northbound/southbound upcoming arrivals with countdown + clock time
 - **Station arrivals dialog** — click any station to see the next 4 trains in each direction
 - **Shared-station merge** — stations served by both lines show unified arrival lists
 - **Service status badges** — `OK`, `DELAY` (≥ 2 min late), `ARR` (approaching)

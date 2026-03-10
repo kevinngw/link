@@ -548,6 +548,62 @@ h1 {
   color: var(--text-muted);
 }
 
+.times-direction-column {
+  display: grid;
+  gap: 10px;
+}
+
+.times-item {
+  display: block;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--surface-soft);
+}
+
+.times-item-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.times-item-title,
+.times-item-subtitle,
+.times-item-relative,
+.times-item-clock {
+  margin: 0;
+}
+
+.times-item-title {
+  color: var(--text-primary);
+  font-size: 0.88rem;
+}
+
+.times-item-subtitle {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+
+.times-item-right {
+  text-align: right;
+  flex: 0 0 auto;
+}
+
+.times-item-relative {
+  color: var(--text-primary);
+  font-size: 0.84rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.times-item-clock {
+  margin-top: 3px;
+  color: var(--accent-strong);
+  font-size: 0.74rem;
+}
+
 /* Station Dialog Styles */
 .station-dialog {
   padding: 0;
@@ -711,7 +767,7 @@ h1 {
 
   .tab-bar {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     width: 100%;
   }
 
@@ -719,6 +775,14 @@ h1 {
     min-width: 0;
   }
   
+  .times-item-main {
+    flex-direction: column;
+  }
+
+  .times-item-right {
+    text-align: left;
+  }
+
   .station-dialog {
     max-width: 100%;
     width: 95vw;
