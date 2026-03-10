@@ -13,13 +13,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -30,58 +28,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Set deployment paths
-        id: deploy
+      - name: Set base path
+        id: base
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
             echo "VITE_BASE=/link/" >> "$GITHUB_OUTPUT"
-            echo "TARGET_DIR=." >> "$GITHUB_OUTPUT"
+            echo "DEST_DIR=." >> "$GITHUB_OUTPUT"
           else
             echo "VITE_BASE=/link/${{ github.ref_name }}/" >> "$GITHUB_OUTPUT"
-            echo "TARGET_DIR=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "DEST_DIR=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build
         run: npm run build
         env:
-          VITE_BASE: ${{ steps.deploy.outputs.VITE_BASE }}
+          VITE_BASE: ${{ steps.base.outputs.VITE_BASE }}
 
-      - name: Publish to gh-pages
-        env:
-          TARGET_DIR: ${{ steps.deploy.outputs.TARGET_DIR }}
-        run: |
-          rm -rf /tmp/gh-pages
-          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
-            git clone --branch gh-pages "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" /tmp/gh-pages
-          else
-            git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" /tmp/gh-pages
-            cd /tmp/gh-pages
-            git switch --orphan gh-pages
-            git rm -rf . >/dev/null 2>&1 || true
-            cd "$GITHUB_WORKSPACE"
-          fi
-
-          cd /tmp/gh-pages
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          if [ "$TARGET_DIR" = "." ]; then
-            find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name 'dev' -exec rm -rf {} +
-            cp -R "$GITHUB_WORKSPACE"/dist/. .
-          else
-            rm -rf "$TARGET_DIR"
-            mkdir -p "$TARGET_DIR"
-            cp -R "$GITHUB_WORKSPACE"/dist/. "$TARGET_DIR"/
-          fi
-
-          touch .nojekyll
-
-          git add -A
-
-          if git diff --cached --quiet --exit-code; then
-            echo "No changes to publish"
-            exit 0
-          fi
-
-          git commit -m "Deploy ${GITHUB_REF_NAME}"
-          git push origin gh-pages
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          destination_dir: ${{ steps.base.outputs.DEST_DIR }}
+          keep_files: true
