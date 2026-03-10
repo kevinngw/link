@@ -3,12 +3,18 @@ import { registerSW } from 'virtual:pwa-register'
 
 const DATA_URL = './link-data.json'
 const OBA_BASE_URL = 'https://api.pugetsound.onebusaway.org/api/where'
-const OBA_KEY = 'TEST'
-const ARRIVALS_CACHE_TTL_MS = 20_000
+const OBA_KEY = (import.meta.env.VITE_OBA_KEY || 'TEST').trim() || 'TEST'
+const IS_PUBLIC_TEST_KEY = OBA_KEY === 'TEST'
+const ARRIVALS_CACHE_TTL_MS = IS_PUBLIC_TEST_KEY ? 60_000 : 20_000
 const OBA_MAX_RETRIES = 3
 const OBA_RETRY_BASE_DELAY_MS = 800
+const OBA_COOLDOWN_BASE_MS = IS_PUBLIC_TEST_KEY ? 20_000 : 5_000
+const OBA_COOLDOWN_MAX_MS = IS_PUBLIC_TEST_KEY ? 120_000 : 30_000
+const OBA_INTER_REQUEST_DELAY_MS = IS_PUBLIC_TEST_KEY ? 1_200 : 0
+const OBA_ARRIVALS_CONCURRENCY = IS_PUBLIC_TEST_KEY ? 1 : 3
 const COMPACT_LAYOUT_BREAKPOINT = 1100
-const DIALOG_REFRESH_INTERVAL_MS = 30_000
+const VEHICLE_REFRESH_INTERVAL_MS = IS_PUBLIC_TEST_KEY ? 45_000 : 15_000
+const DIALOG_REFRESH_INTERVAL_MS = IS_PUBLIC_TEST_KEY ? 90_000 : 30_000
 const DIALOG_DISPLAY_SCROLL_INTERVAL_MS = 4_000
 const DIALOG_DISPLAY_DIRECTION_ROTATE_MS = 15_000
 const THEME_STORAGE_KEY = 'link-pulse-theme'
@@ -21,6 +27,7 @@ const SYSTEM_META = {
     kicker: 'SEATTLE LIGHT RAIL',
     title: 'LINK PULSE',
     vehicleLabel: 'Train',
+    vehicleLabelPlural: 'Trains',
   },
   rapidride: {
     id: 'rapidride',
@@ -29,6 +36,16 @@ const SYSTEM_META = {
     kicker: 'KING COUNTY METRO',
     title: 'RAPIDRIDE PULSE',
     vehicleLabel: 'Bus',
+    vehicleLabelPlural: 'Buses',
+  },
+  swift: {
+    id: 'swift',
+    agencyId: '29',
+    label: 'Swift',
+    kicker: 'COMMUNITY TRANSIT',
+    title: 'SWIFT PULSE',
+    vehicleLabel: 'Bus',
+    vehicleLabelPlural: 'Buses',
   },
 }
 
@@ -52,6 +69,7 @@ const state = {
   isSyncingFromUrl: false,
   currentDialogStation: null,
   dialogRefreshTimer: 0,
+  liveRefreshTimer: 0,
   dialogDisplayMode: false,
   dialogDisplayDirection: 'both',
   dialogDisplayAutoPhase: 'nb',
@@ -60,6 +78,8 @@ const state = {
   dialogDisplayIndexes: { nb: 0, sb: 0 },
   currentTrainId: '',
   alerts: [],
+  obaCooldownUntil: 0,
+  obaRateLimitStreak: 0,
 }
 
 const updateSW = registerSW({
@@ -258,6 +278,10 @@ function getVehicleLabel() {
   return getActiveSystemMeta().vehicleLabel ?? 'Vehicle'
 }
 
+function getVehicleLabelPlural() {
+  return getActiveSystemMeta().vehicleLabelPlural ?? 'Vehicles'
+}
+
 function normalizeName(name) {
   return name
     .replace('Station', '')
@@ -421,12 +445,27 @@ function sleep(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
+function getGlobalCooldownMs() {
+  const exponent = Math.max(0, state.obaRateLimitStreak - 1)
+  const baseDelayMs = Math.min(OBA_COOLDOWN_MAX_MS, OBA_COOLDOWN_BASE_MS * 2 ** exponent)
+  const jitterMs = Math.round(baseDelayMs * (0.15 + Math.random() * 0.2))
+  return Math.min(OBA_COOLDOWN_MAX_MS, baseDelayMs + jitterMs)
+}
+
+async function waitForObaCooldown() {
+  const remainingMs = state.obaCooldownUntil - Date.now()
+  if (remainingMs > 0) {
+    await sleep(remainingMs)
+  }
+}
+
 function isRateLimitedPayload(payload) {
   return payload?.code === 429 || /rate limit/i.test(payload?.text ?? '')
 }
 
 async function fetchJsonWithRetry(url, label) {
   for (let attempt = 0; attempt <= OBA_MAX_RETRIES; attempt += 1) {
+    await waitForObaCooldown()
     const response = await fetch(url, { cache: 'no-store' })
     let payload = null
 
@@ -438,6 +477,8 @@ async function fetchJsonWithRetry(url, label) {
 
     const isRateLimitedResponse = response.status === 429 || isRateLimitedPayload(payload)
     if (response.ok && !isRateLimitedResponse) {
+      state.obaRateLimitStreak = 0
+      state.obaCooldownUntil = 0
       return payload
     }
 
@@ -446,8 +487,11 @@ async function fetchJsonWithRetry(url, label) {
       throw new Error(`${label} request failed with ${response.status}`)
     }
 
-    const delayMs = OBA_RETRY_BASE_DELAY_MS * 2 ** attempt
-    await sleep(delayMs)
+    state.obaRateLimitStreak += 1
+    const retryDelayMs = OBA_RETRY_BASE_DELAY_MS * 2 ** attempt
+    const cooldownMs = Math.max(retryDelayMs, getGlobalCooldownMs())
+    state.obaCooldownUntil = Date.now() + cooldownMs
+    await sleep(cooldownMs)
   }
 
   throw new Error(`${label} request failed`)
@@ -736,7 +780,7 @@ function renderHeadwayHealthCard(label, gaps, count) {
     health === 'balanced' ? 'Consistent spacing'
     : health === 'warn' ? 'Some irregularity'
     : health === 'alert' ? 'Bunching detected'
-    : count < 2 ? `Too few ${getVehicleLabel().toLowerCase()}s`
+    : count < 2 ? `Too few ${getVehicleLabelPlural().toLowerCase()}`
     : 'Low frequency'
 
   return `
@@ -761,12 +805,13 @@ function renderLineInsights(line, nb, sb) {
   const minGap = allGaps.length ? Math.min(...allGaps) : null
 
   const vehicleLabel = getVehicleLabel()
+  const vehicleLabelPlural = getVehicleLabelPlural()
   const headwayChartHtml = allGaps.length
     ? `
       <div class="headway-chart">
         <div class="headway-chart-header">
           <p class="headway-chart-title">Live ${vehicleLabel} Gaps</p>
-          <p class="headway-chart-copy">Minutes between consecutive ${vehicleLabel.toLowerCase()}s by direction</p>
+          <p class="headway-chart-copy">Minutes between consecutive ${vehicleLabelPlural.toLowerCase()} by direction</p>
         </div>
         <div class="headway-chart-grid">
           ${nbGaps.map((gap, i) => `
@@ -865,7 +910,7 @@ function renderArrivalLists(arrivals, loading = false) {
   const renderBucket = (bucket, pinnedElement, listElement) => {
     if (!bucket.length) {
       pinnedElement.innerHTML = ''
-      listElement.innerHTML = `<div class="arrival-item muted">No upcoming ${getVehicleLabel().toLowerCase()}s</div>`
+      listElement.innerHTML = `<div class="arrival-item muted">No upcoming ${getVehicleLabelPlural().toLowerCase()}</div>`
       return
     }
 
@@ -876,7 +921,7 @@ function renderArrivalLists(arrivals, loading = false) {
     listElement.innerHTML = scrollingItems.length
       ? scrollingItems.map(renderArrival).join('')
       : state.dialogDisplayMode
-        ? `<div class="arrival-item muted">No additional ${getVehicleLabel().toLowerCase()}s</div>`
+        ? `<div class="arrival-item muted">No additional ${getVehicleLabelPlural().toLowerCase()}</div>`
         : ''
   }
 
@@ -1029,7 +1074,7 @@ function renderDialogDirectionView() {
 
 function stopDialogAutoRefresh() {
   if (state.dialogRefreshTimer) {
-    window.clearInterval(state.dialogRefreshTimer)
+    window.clearTimeout(state.dialogRefreshTimer)
     state.dialogRefreshTimer = 0
   }
 }
@@ -1098,10 +1143,15 @@ function startDialogAutoRefresh() {
   stopDialogAutoRefresh()
   if (!state.currentDialogStation) return
 
-  state.dialogRefreshTimer = window.setInterval(() => {
-    if (!dialog.open || !state.currentDialogStation) return
-    refreshStationDialog(state.currentDialogStation).catch(console.error)
-  }, DIALOG_REFRESH_INTERVAL_MS)
+  const scheduleNextRefresh = () => {
+    state.dialogRefreshTimer = window.setTimeout(async () => {
+      if (!dialog.open || !state.currentDialogStation) return
+      await refreshStationDialog(state.currentDialogStation).catch(console.error)
+      scheduleNextRefresh()
+    }, DIALOG_REFRESH_INTERVAL_MS)
+  }
+
+  scheduleNextRefresh()
 }
 
 function closeStationDialog() {
@@ -1154,6 +1204,11 @@ function classifyArrivalDirection(arrival, line) {
   if (lookedUpDirection === '0') return 'sb'
 
   const headsign = arrival.tripHeadsign ?? ''
+  const headsignLower = headsign.toLowerCase()
+
+  if (line.nbTerminusPrefix && headsignLower.startsWith(line.nbTerminusPrefix)) return 'nb'
+  if (line.sbTerminusPrefix && headsignLower.startsWith(line.sbTerminusPrefix)) return 'sb'
+
   if (/Lynnwood|Downtown Redmond/i.test(headsign)) return 'nb'
   if (/Federal Way|South Bellevue/i.test(headsign)) return 'sb'
   return ''
@@ -1194,8 +1249,18 @@ async function fetchArrivalsForStop(stopId) {
 
 async function fetchArrivalsForStopIds(stopIds) {
   const dedupedStopIds = [...new Set(stopIds)]
-  const results = await Promise.allSettled(dedupedStopIds.map((stopId) => fetchArrivalsForStop(stopId)))
+  const results = []
   const arrivals = []
+
+  for (let index = 0; index < dedupedStopIds.length; index += OBA_ARRIVALS_CONCURRENCY) {
+    const batch = dedupedStopIds.slice(index, index + OBA_ARRIVALS_CONCURRENCY)
+    const batchResults = await Promise.allSettled(batch.map((stopId) => fetchArrivalsForStop(stopId)))
+    results.push(...batchResults)
+
+    if (OBA_INTER_REQUEST_DELAY_MS > 0 && index + OBA_ARRIVALS_CONCURRENCY < dedupedStopIds.length) {
+      await sleep(OBA_INTER_REQUEST_DELAY_MS)
+    }
+  }
 
   for (const result of results) {
     if (result.status !== 'fulfilled') continue
@@ -1396,7 +1461,7 @@ function renderLine(line) {
               <h2>${line.name}</h2>
               ${renderInlineAlerts(lineAlerts, line.id)}
             </div>
-            <p>${vehicles.length} live ${vehicleLabel.toLowerCase()}s</p>
+            <p>${vehicles.length} live ${vehicles.length === 1 ? vehicleLabel.toLowerCase() : getVehicleLabelPlural().toLowerCase()}</p>
             <p>${getTodayServiceSpan(line)}</p>
           </div>
         </div>
@@ -1412,17 +1477,17 @@ function renderLine(line) {
 
 function renderTrainList() {
   const vehicles = getAllVehicles().sort((left, right) => left.minutePosition - right.minutePosition)
-
   const vehicleLabel = getVehicleLabel()
-  const vehicleLabelLower = vehicleLabel.toLowerCase()
+  const vehicleLabelPlural = getVehicleLabelPlural()
+  const vehicleLabelPluralLower = vehicleLabelPlural.toLowerCase()
 
   if (!vehicles.length) {
     return `
-      <section class="line-card">
-        <header class="panel-header">
-          <h2>Active ${vehicleLabel}s</h2>
-          <p>No live ${vehicleLabelLower}s</p>
-        </header>
+      <section class="board" style="grid-template-columns: 1fr;">
+        <article class="panel-card">
+          <h2>Active ${vehicleLabelPlural}</h2>
+          <p>No live ${vehicleLabelPluralLower}</p>
+        </article>
       </section>
     `
   }
@@ -1455,7 +1520,7 @@ function renderTrainList() {
                     `,
                   )
                   .join('')
-              : `<p class="train-readout muted">No ${vehicleLabelLower}s</p>`
+              : `<p class="train-readout muted">No ${getVehicleLabelPlural().toLowerCase()}</p>`
           }
         </div>
       `
@@ -1470,7 +1535,7 @@ function renderTrainList() {
                   <h2>${line.name}</h2>
                   ${renderInlineAlerts(lineAlerts, line.id)}
                 </div>
-                <p>${lineVehicles.length} ${vehicleLabelLower}s in service</p>
+                <p>${lineVehicles.length} ${lineVehicles.length === 1 ? vehicleLabel.toLowerCase() : getVehicleLabelPlural().toLowerCase()} in service</p>
               </div>
             </div>
           </header>
@@ -1511,7 +1576,7 @@ function renderInsightsBoard() {
               <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
               <div>
                 <h2>${line.name}</h2>
-                <p>${vehicles.length} live ${vehicleLabel.toLowerCase()}s · ${getTodayServiceSpan(line)}</p>
+                <p>${vehicles.length} live ${vehicles.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()} · ${getTodayServiceSpan(line)}</p>
               </div>
             </div>
           </header>
@@ -1683,7 +1748,7 @@ function render() {
   refreshLiveMeta()
 
   tabButtons.forEach((button) => button.classList.toggle('is-active', button.dataset.tab === state.activeTab))
-  document.querySelector('#tab-trains').textContent = `${systemMeta.vehicleLabel}s`
+  document.querySelector('#tab-trains').textContent = systemMeta.vehicleLabelPlural || `${systemMeta.vehicleLabel}s`
   attachSystemSwitcherHandlers()
 
   if (state.activeTab === 'map') {
@@ -1724,6 +1789,24 @@ function refreshLiveMeta() {
   dialogStatusPillElement.textContent = statusPillElement.textContent
   dialogStatusPillElement.classList.toggle('status-pill-error', Boolean(state.error))
   dialogUpdatedAtElement.textContent = updatedAtElement.textContent
+}
+
+function stopLiveRefreshLoop() {
+  window.clearTimeout(state.liveRefreshTimer)
+  state.liveRefreshTimer = 0
+}
+
+function startLiveRefreshLoop() {
+  stopLiveRefreshLoop()
+
+  const scheduleNextRefresh = () => {
+    state.liveRefreshTimer = window.setTimeout(async () => {
+      await refreshVehicles()
+      scheduleNextRefresh()
+    }, VEHICLE_REFRESH_INTERVAL_MS)
+  }
+
+  scheduleNextRefresh()
 }
 
 function applySystem(systemId) {
@@ -1847,7 +1930,7 @@ async function init() {
   })
   boardResizeObserver.observe(boardElement)
 
-  window.setInterval(refreshVehicles, 15000)
+  startLiveRefreshLoop()
   window.setInterval(() => {
     refreshLiveMeta()
     refreshArrivalCountdowns()

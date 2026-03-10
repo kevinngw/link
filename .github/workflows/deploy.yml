@@ -2,16 +2,14 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: ['main']
+    branches: ['main', 'dev']
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -27,29 +25,30 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
       - name: Install dependencies
         run: npm ci
+
+      - name: Set base path
+        id: base
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "VITE_BASE=/link/" >> "$GITHUB_OUTPUT"
+            echo "DEST_DIR=." >> "$GITHUB_OUTPUT"
+          else
+            echo "VITE_BASE=/link/${{ github.ref_name }}/" >> "$GITHUB_OUTPUT"
+            echo "DEST_DIR=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build
         run: npm run build
         env:
-          VITE_BASE: /link/
+          VITE_BASE: ${{ steps.base.outputs.VITE_BASE }}
+          VITE_OBA_KEY: ${{ secrets.VITE_OBA_KEY || 'TEST' }}
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
       - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          destination_dir: ${{ steps.base.outputs.DEST_DIR }}
+          keep_files: true
