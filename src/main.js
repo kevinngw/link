@@ -1172,10 +1172,8 @@ function classifyArrivalDirection(arrival, line) {
   const headsign = arrival.tripHeadsign ?? ''
   const headsignLower = headsign.toLowerCase()
 
-  if (line.nbTerminus && headsignLower.startsWith(line.nbTerminus.split('/')[0].toLowerCase()))
-    return 'nb'
-  if (line.sbTerminus && headsignLower.startsWith(line.sbTerminus.split('/')[0].toLowerCase()))
-    return 'sb'
+  if (line.nbTerminusPrefix && headsignLower.startsWith(line.nbTerminusPrefix)) return 'nb'
+  if (line.sbTerminusPrefix && headsignLower.startsWith(line.sbTerminusPrefix)) return 'sb'
 
   if (/Lynnwood|Downtown Redmond/i.test(headsign)) return 'nb'
   if (/Federal Way|South Bellevue/i.test(headsign)) return 'sb'

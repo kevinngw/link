@@ -6,9 +6,6 @@ import { parse } from 'csv-parse/sync'
 
 const OUTPUT_FILE = path.resolve('public/link-data.json')
 
-const OBA_BASE = 'https://api.pugetsound.onebusaway.org/api/where'
-const OBA_KEY = 'TEST'
-
 const SYSTEM_CONFIG = {
   link: {
     id: 'link',
@@ -53,8 +50,8 @@ const SYSTEM_CONFIG = {
   swift: {
     id: 'swift',
     name: 'Swift',
+    gtfsUrl: 'https://www.soundtransit.org/GTFS-CT/current.zip',
     agencyId: '29',
-    useOBA: true,
     lines: {
       '701': { slug: 'swift-blue', name: 'Swift Blue', color: '#006CFF', stopCodeStart: 200 },
       '702': { slug: 'swift-green', name: 'Swift Green', color: '#00AA00', stopCodeStart: 300 },
@@ -89,7 +86,7 @@ function decodePolyline(encoded) {
     } while (b >= 0x20)
     lng += result & 1 ? ~(result >> 1) : result >> 1
 
-    points.push({ lat: lat / 1e5, lon: lng / 1e5, sequence: points.length + 1 })
+    points.push({ lat: lat / 1e5, lon: lng / 1e5 })
   }
 
   return points
@@ -137,8 +134,8 @@ async function buildSystemFromOBA(systemConfig) {
     const representativeGroup = dir0Group ?? dir1Group
     const representativeStopIds = representativeGroup?.stopIds ?? entry.stopIds
 
-    const nbTerminus = dir1Group?.name?.name ?? ''
-    const sbTerminus = dir0Group?.name?.name ?? ''
+    const nbTerminusPrefix = (dir1Group?.name?.name ?? '').split('/')[0].toLowerCase()
+    const sbTerminusPrefix = (dir0Group?.name?.name ?? '').split('/')[0].toLowerCase()
 
     const stops = representativeStopIds
       .map((stopId, index) => {
@@ -176,9 +173,9 @@ async function buildSystemFromOBA(systemConfig) {
       slug: config.slug,
       color: config.color,
       directionLookup: {},
-      nbTerminus,
-      sbTerminus,
-      headsign: nbTerminus || config.name,
+      nbTerminusPrefix,
+      sbTerminusPrefix,
+      headsign: (dir1Group?.name?.name) || config.name,
       serviceSpansByDate: {},
       stationAliases: Object.fromEntries(stops.map((stop) => [stop.id, [stop.id]])),
       stops,
@@ -501,10 +498,15 @@ async function buildSystem(systemConfig) {
 }
 
 async function main() {
-  const systems = []
-  for (const config of Object.values(SYSTEM_CONFIG)) {
-    systems.push(await (config.useOBA ? buildSystemFromOBA(config) : buildSystem(config)))
+  const allConfigs = Object.values(SYSTEM_CONFIG)
+  const gtfsSystems = await Promise.all(
+    allConfigs.filter((c) => !c.useOBA).map((c) => buildSystem(c)),
+  )
+  const obaSystems = []
+  for (const config of allConfigs.filter((c) => c.useOBA)) {
+    obaSystems.push(await buildSystemFromOBA(config))
   }
+  const systems = [...gtfsSystems, ...obaSystems]
 
   await fs.mkdir(path.dirname(OUTPUT_FILE), { recursive: true })
   await fs.writeFile(
