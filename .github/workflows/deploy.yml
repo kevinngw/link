@@ -43,6 +43,7 @@ jobs:
         run: npm run build
         env:
           VITE_BASE: ${{ steps.base.outputs.VITE_BASE }}
+          VITE_OBA_KEY: ${{ secrets.VITE_OBA_KEY || 'TEST' }}
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4

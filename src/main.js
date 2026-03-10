@@ -3,12 +3,18 @@ import { registerSW } from 'virtual:pwa-register'
 
 const DATA_URL = './link-data.json'
 const OBA_BASE_URL = 'https://api.pugetsound.onebusaway.org/api/where'
-const OBA_KEY = 'TEST'
-const ARRIVALS_CACHE_TTL_MS = 20_000
+const OBA_KEY = (import.meta.env.VITE_OBA_KEY || 'TEST').trim() || 'TEST'
+const IS_PUBLIC_TEST_KEY = OBA_KEY === 'TEST'
+const ARRIVALS_CACHE_TTL_MS = IS_PUBLIC_TEST_KEY ? 60_000 : 20_000
 const OBA_MAX_RETRIES = 3
 const OBA_RETRY_BASE_DELAY_MS = 800
+const OBA_COOLDOWN_BASE_MS = IS_PUBLIC_TEST_KEY ? 20_000 : 5_000
+const OBA_COOLDOWN_MAX_MS = IS_PUBLIC_TEST_KEY ? 120_000 : 30_000
+const OBA_INTER_REQUEST_DELAY_MS = IS_PUBLIC_TEST_KEY ? 1_200 : 0
+const OBA_ARRIVALS_CONCURRENCY = IS_PUBLIC_TEST_KEY ? 1 : 3
 const COMPACT_LAYOUT_BREAKPOINT = 1100
-const DIALOG_REFRESH_INTERVAL_MS = 30_000
+const VEHICLE_REFRESH_INTERVAL_MS = IS_PUBLIC_TEST_KEY ? 45_000 : 15_000
+const DIALOG_REFRESH_INTERVAL_MS = IS_PUBLIC_TEST_KEY ? 90_000 : 30_000
 const DIALOG_DISPLAY_SCROLL_INTERVAL_MS = 4_000
 const DIALOG_DISPLAY_DIRECTION_ROTATE_MS = 15_000
 const THEME_STORAGE_KEY = 'link-pulse-theme'
@@ -63,6 +69,7 @@ const state = {
   isSyncingFromUrl: false,
   currentDialogStation: null,
   dialogRefreshTimer: 0,
+  liveRefreshTimer: 0,
   dialogDisplayMode: false,
   dialogDisplayDirection: 'both',
   dialogDisplayAutoPhase: 'nb',
@@ -71,6 +78,8 @@ const state = {
   dialogDisplayIndexes: { nb: 0, sb: 0 },
   currentTrainId: '',
   alerts: [],
+  obaCooldownUntil: 0,
+  obaRateLimitStreak: 0,
 }
 
 const updateSW = registerSW({
@@ -436,12 +445,27 @@ function sleep(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
+function getGlobalCooldownMs() {
+  const exponent = Math.max(0, state.obaRateLimitStreak - 1)
+  const baseDelayMs = Math.min(OBA_COOLDOWN_MAX_MS, OBA_COOLDOWN_BASE_MS * 2 ** exponent)
+  const jitterMs = Math.round(baseDelayMs * (0.15 + Math.random() * 0.2))
+  return Math.min(OBA_COOLDOWN_MAX_MS, baseDelayMs + jitterMs)
+}
+
+async function waitForObaCooldown() {
+  const remainingMs = state.obaCooldownUntil - Date.now()
+  if (remainingMs > 0) {
+    await sleep(remainingMs)
+  }
+}
+
 function isRateLimitedPayload(payload) {
   return payload?.code === 429 || /rate limit/i.test(payload?.text ?? '')
 }
 
 async function fetchJsonWithRetry(url, label) {
   for (let attempt = 0; attempt <= OBA_MAX_RETRIES; attempt += 1) {
+    await waitForObaCooldown()
     const response = await fetch(url, { cache: 'no-store' })
     let payload = null
 
@@ -453,6 +477,8 @@ async function fetchJsonWithRetry(url, label) {
 
     const isRateLimitedResponse = response.status === 429 || isRateLimitedPayload(payload)
     if (response.ok && !isRateLimitedResponse) {
+      state.obaRateLimitStreak = 0
+      state.obaCooldownUntil = 0
       return payload
     }
 
@@ -461,8 +487,11 @@ async function fetchJsonWithRetry(url, label) {
       throw new Error(`${label} request failed with ${response.status}`)
     }
 
-    const delayMs = OBA_RETRY_BASE_DELAY_MS * 2 ** attempt
-    await sleep(delayMs)
+    state.obaRateLimitStreak += 1
+    const retryDelayMs = OBA_RETRY_BASE_DELAY_MS * 2 ** attempt
+    const cooldownMs = Math.max(retryDelayMs, getGlobalCooldownMs())
+    state.obaCooldownUntil = Date.now() + cooldownMs
+    await sleep(cooldownMs)
   }
 
   throw new Error(`${label} request failed`)
@@ -1045,7 +1074,7 @@ function renderDialogDirectionView() {
 
 function stopDialogAutoRefresh() {
   if (state.dialogRefreshTimer) {
-    window.clearInterval(state.dialogRefreshTimer)
+    window.clearTimeout(state.dialogRefreshTimer)
     state.dialogRefreshTimer = 0
   }
 }
@@ -1114,10 +1143,15 @@ function startDialogAutoRefresh() {
   stopDialogAutoRefresh()
   if (!state.currentDialogStation) return
 
-  state.dialogRefreshTimer = window.setInterval(() => {
-    if (!dialog.open || !state.currentDialogStation) return
-    refreshStationDialog(state.currentDialogStation).catch(console.error)
-  }, DIALOG_REFRESH_INTERVAL_MS)
+  const scheduleNextRefresh = () => {
+    state.dialogRefreshTimer = window.setTimeout(async () => {
+      if (!dialog.open || !state.currentDialogStation) return
+      await refreshStationDialog(state.currentDialogStation).catch(console.error)
+      scheduleNextRefresh()
+    }, DIALOG_REFRESH_INTERVAL_MS)
+  }
+
+  scheduleNextRefresh()
 }
 
 function closeStationDialog() {
@@ -1215,8 +1249,18 @@ async function fetchArrivalsForStop(stopId) {
 
 async function fetchArrivalsForStopIds(stopIds) {
   const dedupedStopIds = [...new Set(stopIds)]
-  const results = await Promise.allSettled(dedupedStopIds.map((stopId) => fetchArrivalsForStop(stopId)))
+  const results = []
   const arrivals = []
+
+  for (let index = 0; index < dedupedStopIds.length; index += OBA_ARRIVALS_CONCURRENCY) {
+    const batch = dedupedStopIds.slice(index, index + OBA_ARRIVALS_CONCURRENCY)
+    const batchResults = await Promise.allSettled(batch.map((stopId) => fetchArrivalsForStop(stopId)))
+    results.push(...batchResults)
+
+    if (OBA_INTER_REQUEST_DELAY_MS > 0 && index + OBA_ARRIVALS_CONCURRENCY < dedupedStopIds.length) {
+      await sleep(OBA_INTER_REQUEST_DELAY_MS)
+    }
+  }
 
   for (const result of results) {
     if (result.status !== 'fulfilled') continue
@@ -1747,6 +1791,24 @@ function refreshLiveMeta() {
   dialogUpdatedAtElement.textContent = updatedAtElement.textContent
 }
 
+function stopLiveRefreshLoop() {
+  window.clearTimeout(state.liveRefreshTimer)
+  state.liveRefreshTimer = 0
+}
+
+function startLiveRefreshLoop() {
+  stopLiveRefreshLoop()
+
+  const scheduleNextRefresh = () => {
+    state.liveRefreshTimer = window.setTimeout(async () => {
+      await refreshVehicles()
+      scheduleNextRefresh()
+    }, VEHICLE_REFRESH_INTERVAL_MS)
+  }
+
+  scheduleNextRefresh()
+}
+
 function applySystem(systemId) {
   const resolvedSystemId = state.systemsById.has(systemId) ? systemId : DEFAULT_SYSTEM_ID
   const system = state.systemsById.get(resolvedSystemId)
@@ -1868,7 +1930,7 @@ async function init() {
   })
   boardResizeObserver.observe(boardElement)
 
-  window.setInterval(refreshVehicles, 15000)
+  startLiveRefreshLoop()
   window.setInterval(() => {
     refreshLiveMeta()
     refreshArrivalCountdowns()

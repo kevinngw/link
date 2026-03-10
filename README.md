@@ -29,13 +29,17 @@ Realtime PWA for Seattle Link light rail, tracking live train positions on the `
 | Stop arrivals | `arrivals-and-departures-for-stop/{stopId}.json` |
 | Static rail network | Sound Transit GTFS rail feed, processed by [`scripts/build-link-data.mjs`](./scripts/build-link-data.mjs) |
 
-> **Note:** The app uses the public `TEST` API key by default. When that key is in use, vehicle polling, station auto-refresh, and arrival caching all slow down automatically, and OBA requests honor a shared cooldown with jittered exponential backoff after rate limiting. For production use, replace `TEST` with your own [OBA API key](https://developer.onebusaway.org/).
+> **Note:** The app uses `VITE_OBA_KEY` when provided, and falls back to the public `TEST` API key otherwise. When `TEST` is in use, vehicle polling, station auto-refresh, and arrival caching all slow down automatically, and OBA requests honor a shared cooldown with jittered exponential backoff after rate limiting. For production use, set your own [OBA API key](https://developer.onebusaway.org/).
 
 ## 🚀 Development
 
 **Requirements:** Node.js 18+, npm 9+
 
 ```bash
+# Optional: use your own OneBusAway key instead of TEST
+cp .env.example .env.local
+# edit .env.local and set VITE_OBA_KEY=your_key
+
 # Install dependencies and start dev server
 npm install
 npm run dev
@@ -45,11 +49,16 @@ The `predev` script automatically fetches the latest Sound Transit GTFS data and
 
 ```bash
 # Production build
+VITE_OBA_KEY=your_key npm run build
+
+# or use values from .env.local / deployment env vars
 npm run build
 
 # Preview production build locally
 npm run preview
 ```
+
+For GitHub Pages deploys, add `VITE_OBA_KEY` under GitHub repository `Settings -> Secrets and variables -> Actions -> New repository secret`. The workflow falls back to `TEST` if the secret is not set.
 
 ## 📁 Project Layout
 

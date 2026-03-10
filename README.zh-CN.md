@@ -28,13 +28,17 @@
 | 站点到站信息 | `arrivals-and-departures-for-stop/{stopId}.json` |
 | 静态线路数据 | Sound Transit GTFS rail feed，经 [`scripts/build-link-data.mjs`](./scripts/build-link-data.mjs) 处理生成 |
 
-> **说明：** 默认使用公开测试 key `TEST`。使用该 key 时，车辆轮询、站点弹窗自动刷新和到站缓存都会自动放慢；一旦遇到限流，所有 OBA 请求会共享冷却窗口，并使用带抖动的指数退避重试。生产部署建议替换为正式 [OBA API key](https://developer.onebusaway.org/)。
+> **说明：** 如果设置了 `VITE_OBA_KEY` 就优先使用该值，否则默认回退到公开测试 key `TEST`。使用 `TEST` 时，车辆轮询、站点弹窗自动刷新和到站缓存都会自动放慢；一旦遇到限流，所有 OBA 请求会共享冷却窗口，并使用带抖动的指数退避重试。生产部署建议配置正式 [OBA API key](https://developer.onebusaway.org/)。
 
 ## 🚀 本地开发
 
 **环境要求：** Node.js 18+，npm 9+
 
 ```bash
+# 可选：使用你自己的 OneBusAway key，而不是 TEST
+cp .env.example .env.local
+# 编辑 .env.local，设置 VITE_OBA_KEY=your_key
+
 # 安装依赖并启动开发服务器
 npm install
 npm run dev
@@ -44,11 +48,16 @@ npm run dev
 
 ```bash
 # 生产构建
+VITE_OBA_KEY=your_key npm run build
+
+# 或者使用 .env.local / 部署平台环境变量
 npm run build
 
 # 本地预览生产构建
 npm run preview
 ```
+
+如果通过 GitHub Pages 部署，请在仓库 `Settings -> Secrets and variables -> Actions` 中新增 `VITE_OBA_KEY` 这个 repository secret。若未配置，workflow 会自动回退到 `TEST`。
 
 ## 📁 项目结构
 
