@@ -2,24 +2,24 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: ['main']
+    branches: ['main', 'dev']
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -27,29 +27,62 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
       - name: Install dependencies
         run: npm ci
+
+      - name: Set deployment paths
+        id: deploy
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "VITE_BASE=/link/" >> "$GITHUB_OUTPUT"
+            echo "TARGET_DIR=." >> "$GITHUB_OUTPUT"
+          else
+            echo "VITE_BASE=/link/${{ github.ref_name }}/" >> "$GITHUB_OUTPUT"
+            echo "TARGET_DIR=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build
         run: npm run build
         env:
-          VITE_BASE: /link/
+          VITE_BASE: ${{ steps.deploy.outputs.VITE_BASE }}
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./dist
+      - name: Publish to gh-pages
+        env:
+          TARGET_DIR: ${{ steps.deploy.outputs.TARGET_DIR }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          rm -rf /tmp/gh-pages
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git clone --branch gh-pages "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" /tmp/gh-pages
+          else
+            git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" /tmp/gh-pages
+            cd /tmp/gh-pages
+            git switch --orphan gh-pages
+            git rm -rf . >/dev/null 2>&1 || true
+            cd "$GITHUB_WORKSPACE"
+          fi
+
+          cd /tmp/gh-pages
+
+          if [ "$TARGET_DIR" = "." ]; then
+            find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name 'dev' -exec rm -rf {} +
+            cp -R "$GITHUB_WORKSPACE"/dist/. .
+          else
+            rm -rf "$TARGET_DIR"
+            mkdir -p "$TARGET_DIR"
+            cp -R "$GITHUB_WORKSPACE"/dist/. "$TARGET_DIR"/
+          fi
+
+          touch .nojekyll
+
+          git add -A
+
+          if git diff --cached --quiet --exit-code; then
+            echo "No changes to publish"
+            exit 0
+          fi
+
+          git commit -m "Deploy ${GITHUB_REF_NAME}"
+          git push origin gh-pages
