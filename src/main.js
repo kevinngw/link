@@ -439,13 +439,25 @@ function renderArrivalLists(arrivals, loading = false) {
     const arrivalMs = arrival.arrivalTime
     const diffSec = Math.floor((arrivalMs - now) / 1000)
     const timeStr = formatArrivalTime(diffSec)
+    
+    let precisionInfo = ''
+    if (arrival.distanceFromStop > 0) {
+      const distanceStr = arrival.distanceFromStop >= 1000 
+        ? `${(arrival.distanceFromStop / 1000).toFixed(1)}km` 
+        : `${Math.round(arrival.distanceFromStop)}m`
+      const stopsStr = arrival.numberOfStopsAway === 1 
+        ? '1 stop away' 
+        : `${arrival.numberOfStopsAway} stops away`
+      precisionInfo = ` • ${distanceStr} • ${stopsStr}`
+    }
+    
     return `
       <div class="arrival-item">
         <span class="arrival-meta">
           <span class="arrival-line-token" style="--line-color:${arrival.lineColor};">${arrival.lineToken}</span>
           <span class="arrival-vehicle">${arrival.lineName} Train ${arrival.vehicleId}</span>
         </span>
-        <span class="arrival-time">${timeStr}</span>
+        <span class="arrival-time">${timeStr}<span class="arrival-precision">${precisionInfo}</span></span>
       </div>
     `
   }
@@ -639,6 +651,8 @@ function buildArrivalsForLine(arrivalFeed, line) {
       lineColor: line.color,
       lineName: line.name,
       lineToken: line.name[0],
+      distanceFromStop: arrival.distanceFromStop ?? 0,
+      numberOfStopsAway: arrival.numberOfStopsAway ?? 0,
     })
   }
 

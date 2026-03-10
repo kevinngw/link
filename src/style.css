@@ -672,6 +672,13 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
+.arrival-precision {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: 6px;
+}
+
 @keyframes wave {
   0% {
     opacity: 0.9;
