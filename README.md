@@ -45,7 +45,7 @@ npm install
 npm run dev
 ```
 
-The `predev` script automatically fetches the latest Sound Transit GTFS data and regenerates `public/link-data.json`.
+The `predev` script automatically fetches the latest Sound Transit GTFS data and regenerates `public/pulse-data.json`.
 
 ```bash
 # Production build
@@ -65,7 +65,7 @@ For GitHub Pages deploys, add `VITE_OBA_KEY` under GitHub repository `Settings -
 ```
 public/
   icon.svg              PWA icon
-  link-data.json        Generated static rail network data
+  pulse-data.json       Generated static rail network data
 scripts/
   build-link-data.mjs   GTFS processor — fetches and transforms Sound Transit data
 src/

@@ -1,7 +1,7 @@
 import './style.css'
 import { registerSW } from 'virtual:pwa-register'
 
-const DATA_URL = './link-data.json'
+const DATA_URL = './pulse-data.json'
 const OBA_BASE_URL = 'https://api.pugetsound.onebusaway.org/api/where'
 const OBA_KEY = (import.meta.env.VITE_OBA_KEY || 'TEST').trim() || 'TEST'
 const IS_PUBLIC_TEST_KEY = OBA_KEY === 'TEST'

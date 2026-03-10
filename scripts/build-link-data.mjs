@@ -4,7 +4,7 @@ import path from 'node:path'
 import AdmZip from 'adm-zip'
 import { parse } from 'csv-parse/sync'
 
-const OUTPUT_FILE = path.resolve('public/link-data.json')
+const OUTPUT_FILE = path.resolve('public/pulse-data.json')
 
 const SYSTEM_CONFIG = {
   link: {

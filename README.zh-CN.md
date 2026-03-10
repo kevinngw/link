@@ -44,7 +44,7 @@ npm install
 npm run dev
 ```
 
-`predev` 脚本会自动拉取最新的 Sound Transit GTFS 数据并重新生成 `public/link-data.json`。
+`predev` 脚本会自动拉取最新的 Sound Transit GTFS 数据并重新生成 `public/pulse-data.json`。
 
 ```bash
 # 生产构建
@@ -64,7 +64,7 @@ npm run preview
 ```
 public/
   icon.svg              PWA 图标
-  link-data.json        生成的静态线路数据
+  pulse-data.json       生成的静态线路数据
 scripts/
   build-link-data.mjs   GTFS 处理脚本 — 拉取并转换 Sound Transit 数据
 src/

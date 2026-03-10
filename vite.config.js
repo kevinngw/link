@@ -12,13 +12,13 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,
-        globIgnores: ['**/link-data.json'],
+        globIgnores: ['**/pulse-data.json'],
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => /\/link-data\.json(?:\?.*)?$/.test(url.pathname + url.search),
+            urlPattern: ({ url }) => /\/pulse-data\.json(?:\?.*)?$/.test(url.pathname + url.search),
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'link-data',
+              cacheName: 'pulse-data',
               expiration: {
                 maxEntries: 1,
               },
