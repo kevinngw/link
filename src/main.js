@@ -1852,7 +1852,7 @@ async function switchSystem(systemId, { updateUrl = true, preserveDialog = false
 }
 
 async function loadStaticData() {
-  const response = await fetch(DATA_URL)
+  const response = await fetch(DATA_URL, { cache: 'no-store' })
   const payload = await response.json()
   const systems = payload.systems ?? []
   state.systemsById = new Map(systems.map((system) => [system.id, system]))
