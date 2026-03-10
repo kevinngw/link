@@ -201,7 +201,7 @@
           ${l.isTerminal?`<text x="${e.trackX}" y="4" text-anchor="middle" class="terminal-mark">${t.name[0]}</text>`:""}
           ${u?`<circle cx="${e.trackX+f}" cy="-8" r="4" class="station-alert-dot"></circle>`:""}
           <text x="${e.labelX}" y="5" class="station-label">${l.label}</text>
-          <rect x="0" y="-24" width="300" height="48" fill="transparent" class="station-hitbox"></rect>
+          <rect x="0" y="-24" width="400" height="48" fill="transparent" class="station-hitbox"></rect>
         </g>
       `}).join(""),s=a.map((l,d)=>`
         <g transform="translate(${e.trackX}, ${l.y+(d%3-1)*1.5})" class="train">
@@ -223,7 +223,7 @@
           </div>
         </div>
       </header>
-      <svg viewBox="0 0 360 ${e.height}" class="line-diagram" role="img" aria-label="${t.name} live LED board">
+      <svg viewBox="0 0 460 ${e.height}" class="line-diagram" role="img" aria-label="${t.name} live LED board">
         <line x1="${e.trackX}" x2="${e.trackX}" y1="${e.stations[0].y}" y2="${e.stations.at(-1).y}" class="spine" style="--line-color:${t.color};"></line>
         ${o}
         ${s}
