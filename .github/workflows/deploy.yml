@@ -16,7 +16,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout source
         uses: actions/checkout@v4
 
       - name: Set up Node
@@ -33,10 +33,8 @@ jobs:
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
             echo "VITE_BASE=/link/" >> "$GITHUB_OUTPUT"
-            echo "DEST_DIR=." >> "$GITHUB_OUTPUT"
           else
             echo "VITE_BASE=/link/${{ github.ref_name }}/" >> "$GITHUB_OUTPUT"
-            echo "DEST_DIR=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build
@@ -45,10 +43,49 @@ jobs:
           VITE_BASE: ${{ steps.base.outputs.VITE_BASE }}
           VITE_OBA_KEY: ${{ secrets.VITE_OBA_KEY || 'TEST' }}
 
-      - name: Deploy to GitHub Pages
+      - name: Checkout gh-pages branch for staging
+        if: github.ref_name == 'main'
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: .gh-pages
+        continue-on-error: true
+
+      - name: Prepare publish directory
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .pages-publish
+
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            mkdir -p .pages-publish
+            cp -R dist/. .pages-publish/
+
+            if [ -d .gh-pages/dev ]; then
+              mkdir -p .pages-publish/dev
+              cp -R .gh-pages/dev/. .pages-publish/dev/
+            fi
+          else
+            mkdir -p .pages-publish/${{ github.ref_name }}
+            cp -R dist/. .pages-publish/${{ github.ref_name }}/
+          fi
+
+          echo "publish_dir=.pages-publish" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy main to GitHub Pages root
+        if: github.ref_name == 'main'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ${{ steps.publish.outputs.publish_dir }}
+          keep_files: false
+
+      - name: Deploy branch preview to GitHub Pages subdirectory
+        if: github.ref_name != 'main'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
-          destination_dir: ${{ steps.base.outputs.DEST_DIR }}
+          destination_dir: ${{ github.ref_name }}
           keep_files: true
