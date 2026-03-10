@@ -681,6 +681,11 @@ h1 {
   min-width: 0;
 }
 
+.train-list-main > div {
+  min-width: 0;
+  flex: 1;
+}
+
 .train-list-token {
   width: 26px;
   height: 26px;
@@ -701,6 +706,9 @@ h1 {
   color: var(--text-secondary);
   font-size: 0.78rem;
   margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .train-list-status {
