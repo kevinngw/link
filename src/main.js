@@ -21,6 +21,7 @@ const SYSTEM_META = {
     kicker: 'SEATTLE LIGHT RAIL',
     title: 'LINK PULSE',
     vehicleLabel: 'Train',
+    vehicleLabelPlural: 'Trains',
   },
   rapidride: {
     id: 'rapidride',
@@ -29,6 +30,16 @@ const SYSTEM_META = {
     kicker: 'KING COUNTY METRO',
     title: 'RAPIDRIDE PULSE',
     vehicleLabel: 'Bus',
+    vehicleLabelPlural: 'Buses',
+  },
+  swift: {
+    id: 'swift',
+    agencyId: '29',
+    label: 'Swift',
+    kicker: 'COMMUNITY TRANSIT',
+    title: 'SWIFT PULSE',
+    vehicleLabel: 'Bus',
+    vehicleLabelPlural: 'Buses',
   },
 }
 
@@ -256,6 +267,10 @@ function getVehicleUrl() {
 
 function getVehicleLabel() {
   return getActiveSystemMeta().vehicleLabel ?? 'Vehicle'
+}
+
+function getVehicleLabelPlural() {
+  return getActiveSystemMeta().vehicleLabelPlural ?? 'Vehicles'
 }
 
 function normalizeName(name) {
@@ -736,7 +751,7 @@ function renderHeadwayHealthCard(label, gaps, count) {
     health === 'balanced' ? 'Consistent spacing'
     : health === 'warn' ? 'Some irregularity'
     : health === 'alert' ? 'Bunching detected'
-    : count < 2 ? `Too few ${getVehicleLabel().toLowerCase()}s`
+    : count < 2 ? `Too few ${getVehicleLabelPlural().toLowerCase()}`
     : 'Low frequency'
 
   return `
@@ -761,12 +776,13 @@ function renderLineInsights(line, nb, sb) {
   const minGap = allGaps.length ? Math.min(...allGaps) : null
 
   const vehicleLabel = getVehicleLabel()
+  const vehicleLabelPlural = getVehicleLabelPlural()
   const headwayChartHtml = allGaps.length
     ? `
       <div class="headway-chart">
         <div class="headway-chart-header">
           <p class="headway-chart-title">Live ${vehicleLabel} Gaps</p>
-          <p class="headway-chart-copy">Minutes between consecutive ${vehicleLabel.toLowerCase()}s by direction</p>
+          <p class="headway-chart-copy">Minutes between consecutive ${vehicleLabelPlural.toLowerCase()} by direction</p>
         </div>
         <div class="headway-chart-grid">
           ${nbGaps.map((gap, i) => `
@@ -865,7 +881,7 @@ function renderArrivalLists(arrivals, loading = false) {
   const renderBucket = (bucket, pinnedElement, listElement) => {
     if (!bucket.length) {
       pinnedElement.innerHTML = ''
-      listElement.innerHTML = `<div class="arrival-item muted">No upcoming ${getVehicleLabel().toLowerCase()}s</div>`
+      listElement.innerHTML = `<div class="arrival-item muted">No upcoming ${getVehicleLabelPlural().toLowerCase()}</div>`
       return
     }
 
@@ -876,7 +892,7 @@ function renderArrivalLists(arrivals, loading = false) {
     listElement.innerHTML = scrollingItems.length
       ? scrollingItems.map(renderArrival).join('')
       : state.dialogDisplayMode
-        ? `<div class="arrival-item muted">No additional ${getVehicleLabel().toLowerCase()}s</div>`
+        ? `<div class="arrival-item muted">No additional ${getVehicleLabelPlural().toLowerCase()}</div>`
         : ''
   }
 
@@ -1154,6 +1170,13 @@ function classifyArrivalDirection(arrival, line) {
   if (lookedUpDirection === '0') return 'sb'
 
   const headsign = arrival.tripHeadsign ?? ''
+  const headsignLower = headsign.toLowerCase()
+
+  if (line.nbTerminus && headsignLower.startsWith(line.nbTerminus.split('/')[0].toLowerCase()))
+    return 'nb'
+  if (line.sbTerminus && headsignLower.startsWith(line.sbTerminus.split('/')[0].toLowerCase()))
+    return 'sb'
+
   if (/Lynnwood|Downtown Redmond/i.test(headsign)) return 'nb'
   if (/Federal Way|South Bellevue/i.test(headsign)) return 'sb'
   return ''
@@ -1396,7 +1419,7 @@ function renderLine(line) {
               <h2>${line.name}</h2>
               ${renderInlineAlerts(lineAlerts, line.id)}
             </div>
-            <p>${vehicles.length} live ${vehicleLabel.toLowerCase()}s</p>
+            <p>${vehicles.length} live ${vehicles.length === 1 ? vehicleLabel.toLowerCase() : getVehicleLabelPlural().toLowerCase()}</p>
             <p>${getTodayServiceSpan(line)}</p>
           </div>
         </div>
@@ -1412,17 +1435,17 @@ function renderLine(line) {
 
 function renderTrainList() {
   const vehicles = getAllVehicles().sort((left, right) => left.minutePosition - right.minutePosition)
-
   const vehicleLabel = getVehicleLabel()
-  const vehicleLabelLower = vehicleLabel.toLowerCase()
+  const vehicleLabelPlural = getVehicleLabelPlural()
+  const vehicleLabelPluralLower = vehicleLabelPlural.toLowerCase()
 
   if (!vehicles.length) {
     return `
-      <section class="line-card">
-        <header class="panel-header">
-          <h2>Active ${vehicleLabel}s</h2>
-          <p>No live ${vehicleLabelLower}s</p>
-        </header>
+      <section class="board" style="grid-template-columns: 1fr;">
+        <article class="panel-card">
+          <h2>Active ${vehicleLabelPlural}</h2>
+          <p>No live ${vehicleLabelPluralLower}</p>
+        </article>
       </section>
     `
   }
@@ -1455,7 +1478,7 @@ function renderTrainList() {
                     `,
                   )
                   .join('')
-              : `<p class="train-readout muted">No ${vehicleLabelLower}s</p>`
+              : `<p class="train-readout muted">No ${getVehicleLabelPlural().toLowerCase()}</p>`
           }
         </div>
       `
@@ -1470,7 +1493,7 @@ function renderTrainList() {
                   <h2>${line.name}</h2>
                   ${renderInlineAlerts(lineAlerts, line.id)}
                 </div>
-                <p>${lineVehicles.length} ${vehicleLabelLower}s in service</p>
+                <p>${lineVehicles.length} ${lineVehicles.length === 1 ? vehicleLabel.toLowerCase() : getVehicleLabelPlural().toLowerCase()} in service</p>
               </div>
             </div>
           </header>
@@ -1511,7 +1534,7 @@ function renderInsightsBoard() {
               <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
               <div>
                 <h2>${line.name}</h2>
-                <p>${vehicles.length} live ${vehicleLabel.toLowerCase()}s · ${getTodayServiceSpan(line)}</p>
+                <p>${vehicles.length} live ${vehicles.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()} · ${getTodayServiceSpan(line)}</p>
               </div>
             </div>
           </header>
@@ -1683,7 +1706,7 @@ function render() {
   refreshLiveMeta()
 
   tabButtons.forEach((button) => button.classList.toggle('is-active', button.dataset.tab === state.activeTab))
-  document.querySelector('#tab-trains').textContent = `${systemMeta.vehicleLabel}s`
+  document.querySelector('#tab-trains').textContent = systemMeta.vehicleLabelPlural || `${systemMeta.vehicleLabel}s`
   attachSystemSwitcherHandlers()
 
   if (state.activeTab === 'map') {

@@ -6,6 +6,9 @@ import { parse } from 'csv-parse/sync'
 
 const OUTPUT_FILE = path.resolve('public/link-data.json')
 
+const OBA_BASE = 'https://api.pugetsound.onebusaway.org/api/where'
+const OBA_KEY = 'TEST'
+
 const SYSTEM_CONFIG = {
   link: {
     id: 'link',
@@ -47,6 +50,149 @@ const SYSTEM_CONFIG = {
       }
     },
   },
+  swift: {
+    id: 'swift',
+    name: 'Swift',
+    agencyId: '29',
+    useOBA: true,
+    lines: {
+      '701': { slug: 'swift-blue', name: 'Swift Blue', color: '#006CFF', stopCodeStart: 200 },
+      '702': { slug: 'swift-green', name: 'Swift Green', color: '#00AA00', stopCodeStart: 300 },
+      '703': { slug: 'swift-orange', name: 'Swift Orange', color: '#F24C21', stopCodeStart: 400 },
+    },
+  },
+}
+
+function decodePolyline(encoded) {
+  const points = []
+  let index = 0
+  let lat = 0
+  let lng = 0
+
+  while (index < encoded.length) {
+    let b
+    let shift = 0
+    let result = 0
+    do {
+      b = encoded.charCodeAt(index++) - 63
+      result |= (b & 0x1f) << shift
+      shift += 5
+    } while (b >= 0x20)
+    lat += result & 1 ? ~(result >> 1) : result >> 1
+
+    shift = 0
+    result = 0
+    do {
+      b = encoded.charCodeAt(index++) - 63
+      result |= (b & 0x1f) << shift
+      shift += 5
+    } while (b >= 0x20)
+    lng += result & 1 ? ~(result >> 1) : result >> 1
+
+    points.push({ lat: lat / 1e5, lon: lng / 1e5, sequence: points.length + 1 })
+  }
+
+  return points
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(a))
+}
+
+async function buildSystemFromOBA(systemConfig) {
+  const { agencyId, lines: lineConfigs } = systemConfig
+  const lines = []
+
+  for (const [routeShortId, config] of Object.entries(lineConfigs)) {
+    const routeId = `${agencyId}_${routeShortId}`
+
+    let response
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 2000 * attempt))
+      response = await fetch(
+        `${OBA_BASE}/stops-for-route/${routeId}.json?key=${OBA_KEY}&includePolylines=true`,
+      )
+      if (response.status !== 429) break
+    }
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch stops for route ${routeId}: ${response.status}`)
+    }
+
+    const data = await response.json()
+    const entry = data.data.entry
+    const refs = data.data.references
+
+    const stopsById = new Map(refs.stops.map((stop) => [stop.id, stop]))
+
+    const grouping = entry.stopGroupings[0]
+    const dir1Group = grouping?.stopGroups?.find((group) => group.id === '1')
+    const dir0Group = grouping?.stopGroups?.find((group) => group.id === '0')
+    const representativeGroup = dir0Group ?? dir1Group
+    const representativeStopIds = representativeGroup?.stopIds ?? entry.stopIds
+
+    const nbTerminus = dir1Group?.name?.name ?? ''
+    const sbTerminus = dir0Group?.name?.name ?? ''
+
+    const stops = representativeStopIds
+      .map((stopId, index) => {
+        const stop = stopsById.get(stopId)
+        if (!stop) return null
+
+        const prevId = index > 0 ? representativeStopIds[index - 1] : null
+        const prev = prevId ? stopsById.get(prevId) : null
+        const segmentMinutes = prev
+          ? Math.max(1, Math.round((haversineKm(prev.lat, prev.lon, stop.lat, stop.lon) / 56) * 60))
+          : 0
+
+        return {
+          id: stop.id,
+          name: stop.name,
+          lat: stop.lat,
+          lon: stop.lon,
+          sequence: index + 1,
+          stopCode: config.stopCodeStart + index,
+          segmentMinutes,
+        }
+      })
+      .filter(Boolean)
+
+    const allPoints = []
+    for (const pl of entry.polylines ?? []) {
+      if (pl.points) allPoints.push(...decodePolyline(pl.points))
+    }
+
+    lines.push({
+      agencyId,
+      id: routeShortId,
+      routeKey: routeId,
+      name: config.name,
+      slug: config.slug,
+      color: config.color,
+      directionLookup: {},
+      nbTerminus,
+      sbTerminus,
+      headsign: nbTerminus || config.name,
+      serviceSpansByDate: {},
+      stationAliases: Object.fromEntries(stops.map((stop) => [stop.id, [stop.id]])),
+      stops,
+      shapePoints: simplifyPoints(allPoints),
+    })
+  }
+
+  return {
+    id: systemConfig.id,
+    name: systemConfig.name,
+    agencyId,
+    source: `${OBA_BASE}/routes-for-agency/${agencyId}`,
+    lines,
+  }
 }
 
 async function loadZipBuffer(url) {
@@ -355,7 +501,10 @@ async function buildSystem(systemConfig) {
 }
 
 async function main() {
-  const systems = await Promise.all(Object.values(SYSTEM_CONFIG).map((config) => buildSystem(config)))
+  const systems = []
+  for (const config of Object.values(SYSTEM_CONFIG)) {
+    systems.push(await (config.useOBA ? buildSystemFromOBA(config) : buildSystem(config)))
+  }
 
   await fs.mkdir(path.dirname(OUTPUT_FILE), { recursive: true })
   await fs.writeFile(
