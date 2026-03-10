@@ -70,6 +70,7 @@ document.querySelector('#app').innerHTML = `
     <section class="tab-bar" aria-label="Board views">
       <button class="tab-button is-active" data-tab="map" type="button">Map</button>
       <button class="tab-button" data-tab="trains" type="button">Trains</button>
+      <button class="tab-button" data-tab="times" type="button">Times</button>
     </section>
     <section id="board" class="board"></section>
   </main>
@@ -207,9 +208,14 @@ dialog.addEventListener('close', () => {
   }
 })
 tabButtons.forEach((button) => {
-  button.addEventListener('click', () => {
+  button.addEventListener('click', async () => {
     state.activeTab = button.dataset.tab
     render()
+
+    if (state.activeTab === 'times') {
+      await prefetchVisibleLineArrivals()
+      if (state.activeTab === 'times') render()
+    }
   })
 })
 themeToggleButton.addEventListener('click', () => {
@@ -489,6 +495,53 @@ function classifyVehicleStatus(rawVehicle) {
   return 'ON TIME'
 }
 
+function formatDelay(deviationSeconds, isPredicted) {
+  if (!isPredicted) {
+    return { text: 'Scheduled', colorClass: 'status-muted' }
+  }
+
+  if (deviationSeconds >= -30 && deviationSeconds <= 60) {
+    return { text: 'On Time', colorClass: 'status-ontime' }
+  }
+
+  if (deviationSeconds > 60) {
+    const minutes = Math.round(deviationSeconds / 60)
+    let colorClass = 'status-late-minor'
+    if (deviationSeconds > 600) {
+      colorClass = 'status-late-severe'
+    } else if (deviationSeconds > 300) {
+      colorClass = 'status-late-moderate'
+    }
+    return { text: `+${minutes} min late`, colorClass }
+  }
+
+  if (deviationSeconds < -60) {
+    const minutes = Math.round(Math.abs(deviationSeconds) / 60)
+    return { text: `${minutes} min early`, colorClass: 'status-early' }
+  }
+
+  return { text: 'Unknown', colorClass: 'status-muted' }
+}
+
+function formatServiceStatus(serviceStatus) {
+  switch (serviceStatus) {
+    case 'ARR':
+      return 'ARRIVING'
+    case 'DELAY':
+      return 'DELAYED'
+    case 'OK':
+      return 'EN ROUTE'
+    default:
+      return ''
+  }
+}
+
+function formatVehicleStatus(vehicle) {
+  const statusText = formatServiceStatus(vehicle.serviceStatus)
+  const delayText = vehicle.delayInfo.text
+  return `${statusText} (${delayText})`
+}
+
 function parseVehicle(rawVehicle, line, layout) {
   const tripId = rawVehicle.tripStatus?.activeTripId ?? ''
   if (!LINE_MATCHERS[line.id].test(tripId)) return null
@@ -541,6 +594,10 @@ function parseVehicle(rawVehicle, line, layout) {
   const previousStop = layout.stations[previousStopIndex] ?? currentStop
   const upcomingStop = layout.stations[upcomingStopIndex] ?? nextStation
 
+  const scheduleDeviation = rawVehicle.tripStatus?.scheduleDeviation ?? 0
+  const isPredicted = rawVehicle.tripStatus?.predicted ?? false
+  const delayInfo = formatDelay(scheduleDeviation, isPredicted)
+
   return {
     id: rawVehicle.vehicleId,
     label: rawVehicle.vehicleId.replace(/^40_/, ''),
@@ -561,6 +618,9 @@ function parseVehicle(rawVehicle, line, layout) {
     nextStop,
     closestOffset,
     nextOffset,
+    scheduleDeviation,
+    isPredicted,
+    delayInfo,
     rawVehicle,
   }
 }
@@ -616,6 +676,18 @@ function renderArrivalLists(arrivals, loading = false) {
     const timeStr = formatArrivalTime(diffSec)
     const serviceStatus = getArrivalServiceStatus(arrival.arrivalTime, arrival.scheduleDeviation ?? 0)
     const serviceTone = getStatusTone(serviceStatus)
+
+    let precisionInfo = ''
+    if (arrival.distanceFromStop > 0) {
+      const distanceStr = arrival.distanceFromStop >= 1000
+        ? `${(arrival.distanceFromStop / 1000).toFixed(1)}km`
+        : `${Math.round(arrival.distanceFromStop)}m`
+      const stopsStr = arrival.numberOfStopsAway === 1
+        ? '1 stop away'
+        : `${arrival.numberOfStopsAway} stops away`
+      precisionInfo = ` • ${distanceStr} • ${stopsStr}`
+    }
+
     return `
       <div class="arrival-item" data-arrival-time="${arrival.arrivalTime}" data-schedule-deviation="${arrival.scheduleDeviation ?? 0}">
         <span class="arrival-meta">
@@ -627,7 +699,7 @@ function renderArrivalLists(arrivals, loading = false) {
         </span>
         <span class="arrival-side">
           <span class="arrival-status arrival-status-${serviceTone}">${serviceStatus}</span>
-          <span class="arrival-time">${timeStr}</span>
+          <span class="arrival-time"><span class="arrival-countdown">${timeStr}</span><span class="arrival-precision">${precisionInfo}</span></span>
         </span>
       </div>
     `
@@ -844,7 +916,7 @@ function refreshArrivalCountdowns() {
   arrivalItems.forEach((item) => {
     const arrivalTime = Number(item.dataset.arrivalTime)
     const scheduleDeviation = Number(item.dataset.scheduleDeviation || 0)
-    const timeElement = item.querySelector('.arrival-time')
+    const timeElement = item.querySelector('.arrival-countdown')
     const statusElement = item.querySelector('.arrival-status')
     if (!timeElement || !statusElement) return
 
@@ -990,6 +1062,8 @@ function buildArrivalsForLine(arrivalFeed, line) {
       lineColor: line.color,
       lineName: line.name,
       lineToken: line.name[0],
+      distanceFromStop: arrival.distanceFromStop ?? 0,
+      numberOfStopsAway: arrival.numberOfStopsAway ?? 0,
     })
   }
 
@@ -1115,7 +1189,7 @@ function renderLine(line) {
               .sort((left, right) => left.minutePosition - right.minutePosition)
               .map(
                 (vehicle) =>
-                  `<p class="train-readout"><span class="train-id">${vehicle.label}</span>${formatVehicleSegment(vehicle)}</p>`,
+                  `<p class="train-readout"><span class="train-id">${vehicle.label}</span>${formatVehicleSegment(vehicle)} <span class="train-delay ${vehicle.delayInfo.colorClass}">${formatVehicleStatus(vehicle)}</span></p>`,
               )
               .join('')
           : '<p class="train-readout muted">No trains</p>'
@@ -1186,7 +1260,7 @@ function renderTrainList() {
                           <div>
                             <p class="train-list-title">${vehicle.lineName} Train ${vehicle.label}</p>
                             <p class="train-list-subtitle">${formatVehicleSegment(vehicle)}</p>
-                            <p class="train-list-status train-list-status-${vehicle.serviceStatus.toLowerCase()}">${vehicle.serviceStatus}</p>
+                            <p class="train-list-status ${vehicle.delayInfo.colorClass}">${formatVehicleStatus(vehicle)}</p>
                           </div>
                         </div>
                       </article>
@@ -1224,12 +1298,130 @@ function renderTrainList() {
   return groupedRows
 }
 
+function formatClockTime(timestamp) {
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+function getUpcomingArrivalsForLine(line) {
+  const now = Date.now()
+  const arrivals = { nb: [], sb: [] }
+
+  for (const station of line.stops) {
+    const cached = state.arrivalsCache.get(`${line.id}:${station.id}`)?.value
+    if (!cached) continue
+
+    for (const direction of ['nb', 'sb']) {
+      for (const arrival of cached[direction] ?? []) {
+        if (!arrival.arrivalTime || arrival.arrivalTime <= now) continue
+        arrivals[direction].push({
+          ...arrival,
+          stationName: normalizeName(station.name),
+        })
+      }
+    }
+  }
+
+  for (const direction of ['nb', 'sb']) {
+    arrivals[direction].sort((left, right) => left.arrivalTime - right.arrivalTime)
+    arrivals[direction] = arrivals[direction].slice(0, 8)
+  }
+
+  return arrivals
+}
+
+function renderTimesBoard() {
+  const visibleLines = state.compactLayout ? state.lines.filter((line) => line.id === state.activeLineId) : state.lines
+
+  const renderDirectionColumn = (label, arrivals) => `
+    <div class="times-direction-column">
+      <p class="direction-column-title">${label}</p>
+      ${
+        arrivals.length
+          ? arrivals
+              .map((arrival) => {
+                const diffSec = Math.floor((arrival.arrivalTime - Date.now()) / 1000)
+                const relativeTime = formatArrivalTime(diffSec)
+                const clockTime = formatClockTime(arrival.arrivalTime)
+                const stopCount = arrival.numberOfStopsAway > 0
+                  ? (arrival.numberOfStopsAway === 1 ? '1 stop away' : `${arrival.numberOfStopsAway} stops away`)
+                  : 'Boarding now'
+                const distanceLabel = arrival.distanceFromStop > 0
+                  ? arrival.distanceFromStop >= 1000
+                    ? `${(arrival.distanceFromStop / 1000).toFixed(1)} km away`
+                    : `${Math.round(arrival.distanceFromStop)} m away`
+                  : 'At platform'
+
+                return `
+                  <article class="times-item">
+                    <div class="times-item-main">
+                      <div>
+                        <p class="times-item-title">${arrival.stationName}</p>
+                        <p class="times-item-subtitle">${arrival.lineName} Train ${arrival.vehicleId} • ${stopCount} • ${distanceLabel}</p>
+                      </div>
+                      <div class="times-item-right">
+                        <p class="times-item-relative">${relativeTime}</p>
+                        <p class="times-item-clock">${clockTime}</p>
+                      </div>
+                    </div>
+                  </article>
+                `
+              })
+              .join('')
+          : '<p class="train-readout muted">Open a station first to warm the live arrivals cache.</p>'
+      }
+    </div>
+  `
+
+  return visibleLines
+    .map((line) => {
+      const arrivals = getUpcomingArrivalsForLine(line)
+      const totalArrivals = arrivals.nb.length + arrivals.sb.length
+
+      return `
+        <article class="line-card train-line-card">
+          <header class="line-card-header train-list-section-header">
+            <div class="line-title">
+              <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
+              <div>
+                <h2>${line.name}</h2>
+                <p>${totalArrivals} upcoming live arrivals in cache</p>
+              </div>
+            </div>
+          </header>
+          <div class="line-readout line-readout-grid train-columns">
+            ${renderDirectionColumn('NB', arrivals.nb)}
+            ${renderDirectionColumn('SB', arrivals.sb)}
+          </div>
+        </article>
+      `
+    })
+    .join('')
+}
+
+async function prefetchVisibleLineArrivals() {
+  const visibleLines = state.compactLayout ? state.lines.filter((line) => line.id === state.activeLineId) : state.lines
+
+  await Promise.allSettled(
+    visibleLines.flatMap((line) =>
+      line.stops.map((station) => getArrivalsForStation(station, line)),
+    ),
+  )
+}
+
 function attachLineSwitcherHandlers() {
   const buttons = document.querySelectorAll('[data-line-switch]')
   buttons.forEach((button) => {
-    button.addEventListener('click', () => {
+    button.addEventListener('click', async () => {
       state.activeLineId = button.dataset.lineSwitch
       render()
+
+      if (state.activeTab === 'times') {
+        await prefetchVisibleLineArrivals()
+        if (state.activeTab === 'times') render()
+      }
     })
   })
 }
@@ -1408,6 +1600,13 @@ function render() {
     attachAlertClickHandlers()
     attachTrainClickHandlers()
     queueMicrotask(syncCompactLayoutFromBoard)
+    return
+  }
+
+  if (state.activeTab === 'times') {
+    boardElement.className = 'board'
+    boardElement.innerHTML = `${renderLineSwitcher()}${renderTimesBoard()}`
+    attachLineSwitcherHandlers()
     return
   }
 }
