@@ -507,6 +507,36 @@ h1 {
   color: #ffd166;
 }
 
+/* Real-time Punctuality Pulse status colors */
+.status-muted {
+  color: var(--text-muted);
+}
+
+.status-ontime {
+  color: #4ade80;
+}
+
+.status-late-minor {
+  color: #facc15;
+}
+
+.status-late-moderate {
+  color: #fb923c;
+}
+
+.status-late-severe {
+  color: #f87171;
+}
+
+.status-early {
+  color: #60a5fa;
+}
+
+.train-delay {
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+}
+
 .train-inline-direction {
   display: inline-block;
   width: 16px;

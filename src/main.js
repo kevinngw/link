@@ -273,6 +273,34 @@ function classifyVehicleStatus(rawVehicle) {
   return 'OK'
 }
 
+function formatDelay(deviationSeconds, isPredicted) {
+  if (!isPredicted) {
+    return { text: 'Scheduled', colorClass: 'status-muted' }
+  }
+
+  if (deviationSeconds >= -30 && deviationSeconds <= 60) {
+    return { text: 'On Time', colorClass: 'status-ontime' }
+  }
+
+  if (deviationSeconds > 60) {
+    const minutes = Math.round(deviationSeconds / 60)
+    let colorClass = 'status-late-minor'
+    if (deviationSeconds > 600) {
+      colorClass = 'status-late-severe'
+    } else if (deviationSeconds > 300) {
+      colorClass = 'status-late-moderate'
+    }
+    return { text: `+${minutes} min late`, colorClass }
+  }
+
+  if (deviationSeconds < -60) {
+    const minutes = Math.round(Math.abs(deviationSeconds) / 60)
+    return { text: `${minutes} min early`, colorClass: 'status-early' }
+  }
+
+  return { text: 'Unknown', colorClass: 'status-muted' }
+}
+
 function parseVehicle(rawVehicle, line, layout) {
   const tripId = rawVehicle.tripStatus?.activeTripId ?? ''
   if (!LINE_MATCHERS[line.id].test(tripId)) return null
@@ -315,6 +343,10 @@ function parseVehicle(rawVehicle, line, layout) {
   const segmentMinutes = fromIndex !== toIndex ? currentStation.segmentMinutes : 0
   const minutePosition = currentStation.cumulativeMinutes + segmentMinutes * progress
 
+  const scheduleDeviation = rawVehicle.tripStatus?.scheduleDeviation ?? 0
+  const isPredicted = rawVehicle.tripStatus?.predicted ?? false
+  const delayInfo = formatDelay(scheduleDeviation, isPredicted)
+
   return {
     id: rawVehicle.vehicleId,
     label: rawVehicle.vehicleId.replace(/^40_/, ''),
@@ -332,6 +364,9 @@ function parseVehicle(rawVehicle, line, layout) {
     nextStop,
     closestOffset,
     nextOffset,
+    scheduleDeviation,
+    isPredicted,
+    delayInfo,
     rawVehicle,
   }
 }
@@ -702,7 +737,7 @@ function renderLine(line) {
               .sort((left, right) => left.minutePosition - right.minutePosition)
               .map(
                 (vehicle) =>
-                  `<p class="train-readout"><span class="train-id">${vehicle.label}</span>${formatVehicleSegment(vehicle)}</p>`,
+                  `<p class="train-readout"><span class="train-id">${vehicle.label}</span>${formatVehicleSegment(vehicle)} <span class="train-delay ${vehicle.delayInfo.colorClass}">${vehicle.delayInfo.text}</span></p>`,
               )
               .join('')
           : '<p class="train-readout muted">No trains</p>'
@@ -768,7 +803,7 @@ function renderTrainList() {
                           <div>
                             <p class="train-list-title">${vehicle.lineName} Train ${vehicle.label}</p>
                             <p class="train-list-subtitle">${formatVehicleSegment(vehicle)}</p>
-                            <p class="train-list-status train-list-status-${vehicle.serviceStatus.toLowerCase()}">${vehicle.serviceStatus}</p>
+                            <p class="train-list-status ${vehicle.delayInfo.colorClass}">${vehicle.delayInfo.text}</p>
                           </div>
                         </div>
                       </article>
