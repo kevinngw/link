@@ -1008,32 +1008,55 @@ function isRateLimitedPayload(payload) {
 async function fetchJsonWithRetry(url, label) {
   for (let attempt = 0; attempt <= OBA_MAX_RETRIES; attempt += 1) {
     await waitForObaCooldown()
-    const response = await fetch(url, { cache: 'no-store' })
+
+    let response = null
     let payload = null
+    let networkError = null
 
     try {
-      payload = await response.json()
-    } catch {
-      payload = null
+      response = await fetch(url, { cache: 'no-store' })
+    } catch (error) {
+      networkError = error
     }
 
-    const isRateLimitedResponse = response.status === 429 || isRateLimitedPayload(payload)
-    if (response.ok && !isRateLimitedResponse) {
+    if (response !== null) {
+      try {
+        payload = await response.json()
+      } catch {
+        payload = null
+      }
+    }
+
+    // Success: response is OK and not a disguised rate-limit
+    const isRateLimitedResponse = response?.status === 429 || isRateLimitedPayload(payload)
+    if (response?.ok && !isRateLimitedResponse) {
       state.obaRateLimitStreak = 0
       state.obaCooldownUntil = 0
       return payload
     }
 
-    if (attempt === OBA_MAX_RETRIES || !isRateLimitedResponse) {
+    const isTransientError = networkError != null ||
+      (response != null && (response.status === 429 || (response.status >= 500 && response.status < 600)))
+
+    // Non-retryable error or last attempt: throw immediately
+    if (attempt === OBA_MAX_RETRIES || !isTransientError) {
+      if (networkError) throw networkError
       if (payload?.text) throw new Error(payload.text)
-      throw new Error(`${label} request failed with ${response.status}`)
+      throw new Error(`${label} request failed with ${response?.status ?? 'network error'}`)
     }
 
-    state.obaRateLimitStreak += 1
-    const retryDelayMs = OBA_RETRY_BASE_DELAY_MS * 2 ** attempt
-    const cooldownMs = Math.max(retryDelayMs, getGlobalCooldownMs())
-    state.obaCooldownUntil = Date.now() + cooldownMs
-    await sleep(cooldownMs)
+    // Retryable: rate-limit triggers global cooldown; transient errors use plain backoff
+    if (isRateLimitedResponse) {
+      state.obaRateLimitStreak += 1
+      const retryDelayMs = OBA_RETRY_BASE_DELAY_MS * 2 ** attempt
+      const cooldownMs = Math.max(retryDelayMs, getGlobalCooldownMs())
+      state.obaCooldownUntil = Date.now() + cooldownMs
+      await sleep(cooldownMs)
+    } else {
+      // Network or 5xx: plain exponential backoff without touching global cooldown
+      const retryDelayMs = OBA_RETRY_BASE_DELAY_MS * 2 ** attempt
+      await sleep(retryDelayMs)
+    }
   }
 
   throw new Error(`${label} request failed`)
@@ -3660,14 +3683,38 @@ async function switchSystem(systemId, { updateUrl = true, preserveDialog = false
 }
 
 async function loadStaticData() {
-  const response = await fetch(DATA_URL, { cache: 'no-store' })
-  const payload = await response.json()
-  const systems = payload.systems ?? []
-  state.systemsById = new Map(systems.map((system) => [system.id, system]))
-  state.layoutsBySystem = new Map(
-    systems.map((system) => [system.id, new Map(system.lines.map((line) => [line.id, buildLayout(line)]))]),
-  )
-  applySystem(getSystemIdFromUrl())
+  const STATIC_MAX_RETRIES = 4
+  const STATIC_RETRY_BASE_MS = 1_000
+
+  for (let attempt = 0; attempt <= STATIC_MAX_RETRIES; attempt += 1) {
+    let response = null
+    let payload = null
+
+    try {
+      response = await fetch(DATA_URL, { cache: 'no-store' })
+      payload = await response.json()
+    } catch (error) {
+      if (attempt === STATIC_MAX_RETRIES) throw error
+      await sleep(STATIC_RETRY_BASE_MS * 2 ** attempt)
+      continue
+    }
+
+    if (!response.ok) {
+      if (attempt === STATIC_MAX_RETRIES) {
+        throw new Error(`Static data load failed with ${response.status}`)
+      }
+      await sleep(STATIC_RETRY_BASE_MS * 2 ** attempt)
+      continue
+    }
+
+    const systems = payload.systems ?? []
+    state.systemsById = new Map(systems.map((system) => [system.id, system]))
+    state.layoutsBySystem = new Map(
+      systems.map((system) => [system.id, new Map(system.lines.map((line) => [line.id, buildLayout(line)]))]),
+    )
+    applySystem(getSystemIdFromUrl())
+    return
+  }
 }
 
 function parseSituation(situation) {
