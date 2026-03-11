@@ -3,7 +3,10 @@ import { registerSW } from 'virtual:pwa-register'
 import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DATA_URL, DEFAULT_SYSTEM_ID, DIALOG_DISPLAY_DIRECTION_ANIMATION_MS, DIALOG_DISPLAY_DIRECTION_ROTATE_MS, DIALOG_DISPLAY_SCROLL_INTERVAL_MS, DIALOG_REFRESH_INTERVAL_MS, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, MAX_TRANSFER_RECOMMENDATIONS, OBA_ARRIVALS_CONCURRENCY, OBA_BASE_URL, OBA_COOLDOWN_BASE_MS, OBA_COOLDOWN_MAX_MS, OBA_INTER_REQUEST_DELAY_MS, OBA_KEY, OBA_MAX_RETRIES, OBA_RETRY_BASE_DELAY_MS, SYSTEM_META, THEME_STORAGE_KEY, TRANSFER_BOARDING_BUFFER_MS, TRANSFER_FETCH_DELAY_MS, TRANSFER_MAX_WALK_KM, TRANSFER_WALKING_SPEED_KMPH, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, formatWalkDistance as formatWalkDistanceValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
-import { clamp, getBearingDegrees, haversineKm, normalizeName, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
+import { clamp, getBearingDegrees, haversineKm, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
+import { createObaClient } from './oba'
+import { createArrivalsHelpers, getStatusTone } from './arrivals'
+import { parseVehicle } from './vehicles'
 
 const state = {
   fetchedAt: '',
@@ -284,6 +287,15 @@ function copyValue(key, ...args) {
   const value = copyForLanguage()[key]
   return typeof value === 'function' ? value(...args) : value
 }
+
+const { fetchJsonWithRetry } = createObaClient(state)
+const { buildArrivalsForLine, fetchArrivalsForStopIds, getArrivalsForStation, mergeArrivalBuckets, getArrivalServiceStatus } = createArrivalsHelpers({
+  state,
+  fetchJsonWithRetry,
+  getStationStopIds: (...args) => getStationStopIds(...args),
+  copyValue,
+  getLanguage: () => state.language,
+})
 
 function formatRelativeTime(dateString) {
   return formatRelativeTimeValue(dateString, copyValue)
@@ -621,81 +633,6 @@ function renderInlineAlerts(lineAlerts, lineId) {
   `
 }
 
-function getGlobalCooldownMs() {
-  const exponent = Math.max(0, state.obaRateLimitStreak - 1)
-  const baseDelayMs = Math.min(OBA_COOLDOWN_MAX_MS, OBA_COOLDOWN_BASE_MS * 2 ** exponent)
-  const jitterMs = Math.round(baseDelayMs * (0.15 + Math.random() * 0.2))
-  return Math.min(OBA_COOLDOWN_MAX_MS, baseDelayMs + jitterMs)
-}
-
-async function waitForObaCooldown() {
-  const remainingMs = state.obaCooldownUntil - Date.now()
-  if (remainingMs > 0) {
-    await sleep(remainingMs)
-  }
-}
-
-function isRateLimitedPayload(payload) {
-  return payload?.code === 429 || /rate limit/i.test(payload?.text ?? '')
-}
-
-async function fetchJsonWithRetry(url, label) {
-  for (let attempt = 0; attempt <= OBA_MAX_RETRIES; attempt += 1) {
-    await waitForObaCooldown()
-
-    let response = null
-    let payload = null
-    let networkError = null
-
-    try {
-      response = await fetch(url, { cache: 'no-store' })
-    } catch (error) {
-      networkError = error
-    }
-
-    if (response !== null) {
-      try {
-        payload = await response.json()
-      } catch {
-        payload = null
-      }
-    }
-
-    // Success: response is OK and not a disguised rate-limit
-    const isRateLimitedResponse = response?.status === 429 || isRateLimitedPayload(payload)
-    if (response?.ok && !isRateLimitedResponse) {
-      state.obaRateLimitStreak = 0
-      state.obaCooldownUntil = 0
-      return payload
-    }
-
-    const isTransientError = networkError != null ||
-      (response != null && (response.status === 429 || (response.status >= 500 && response.status < 600)))
-
-    // Non-retryable error or last attempt: throw immediately
-    if (attempt === OBA_MAX_RETRIES || !isTransientError) {
-      if (networkError) throw networkError
-      if (payload?.text) throw new Error(payload.text)
-      throw new Error(`${label} request failed with ${response?.status ?? 'network error'}`)
-    }
-
-    // Retryable: rate-limit triggers global cooldown; transient errors use plain backoff
-    if (isRateLimitedResponse) {
-      state.obaRateLimitStreak += 1
-      const retryDelayMs = OBA_RETRY_BASE_DELAY_MS * 2 ** attempt
-      const cooldownMs = Math.max(retryDelayMs, getGlobalCooldownMs())
-      state.obaCooldownUntil = Date.now() + cooldownMs
-      await sleep(cooldownMs)
-    } else {
-      // Network or 5xx: plain exponential backoff without touching global cooldown
-      const retryDelayMs = OBA_RETRY_BASE_DELAY_MS * 2 ** attempt
-      await sleep(retryDelayMs)
-    }
-  }
-
-  throw new Error(`${label} request failed`)
-}
-
 function buildLayout(line) {
   const orderedStops = [...line.stops].sort((left, right) => right.sequence - left.sequence)
   const stationGap = 48
@@ -740,56 +677,6 @@ function buildLayout(line) {
     stations,
     trackX,
   }
-}
-
-function inferDirectionSymbol(closestIndex, nextIndex) {
-  if (closestIndex != null && nextIndex != null && closestIndex !== nextIndex) {
-    return nextIndex < closestIndex ? '▲' : '▼'
-  }
-
-  return '•'
-}
-
-function classifyVehicleStatus(rawVehicle) {
-  const tripStatus = rawVehicle.tripStatus ?? {}
-  const status = String(tripStatus.status ?? '').toLowerCase()
-  const closestOffset = tripStatus.closestStopTimeOffset ?? 0
-  const nextOffset = tripStatus.nextStopTimeOffset ?? 0
-  const scheduleDeviation = tripStatus.scheduleDeviation ?? 0
-  const isAtPlatform = tripStatus.closestStop && tripStatus.nextStop && tripStatus.closestStop === tripStatus.nextStop
-  const isApproaching = status === 'approaching' || (isAtPlatform && Math.abs(nextOffset) <= 90)
-
-  if (isApproaching) return 'ARR'
-  if (scheduleDeviation >= 120) return 'DELAY'
-  return 'OK'
-}
-
-function formatDelay(deviationSeconds, isPredicted) {
-  if (!isPredicted) {
-    return { text: copyValue('scheduled'), colorClass: 'status-muted' }
-  }
-
-  if (deviationSeconds >= -30 && deviationSeconds <= 60) {
-    return { text: copyValue('onTime'), colorClass: 'status-ontime' }
-  }
-
-  if (deviationSeconds > 60) {
-    const minutes = Math.round(deviationSeconds / 60)
-    let colorClass = 'status-late-minor'
-    if (deviationSeconds > 600) {
-      colorClass = 'status-late-severe'
-    } else if (deviationSeconds > 300) {
-      colorClass = 'status-late-moderate'
-    }
-    return { text: state.language === 'zh-CN' ? `晚点 ${minutes} 分钟` : `+${minutes} min late`, colorClass }
-  }
-
-  if (deviationSeconds < -60) {
-    const minutes = Math.round(Math.abs(deviationSeconds) / 60)
-    return { text: state.language === 'zh-CN' ? `早到 ${minutes} 分钟` : `${minutes} min early`, colorClass: 'status-early' }
-  }
-
-  return { text: copyValue('unknown'), colorClass: 'status-muted' }
 }
 
 function formatServiceStatus(serviceStatus) {
@@ -935,91 +822,6 @@ function refreshVehicleStatusMessages() {
       copyElement.innerHTML = formatVehicleArrivalMessage(vehicle)
     }
   })
-}
-
-function parseVehicle(rawVehicle, line, layout, tripsById) {
-  const tripId = rawVehicle.tripStatus?.activeTripId ?? rawVehicle.tripId ?? ''
-  const trip = tripsById.get(tripId)
-  if (!trip || trip.routeId !== line.routeKey) return null
-
-  const closestStop = rawVehicle.tripStatus?.closestStop
-  const nextStop = rawVehicle.tripStatus?.nextStop
-  const closestIndex = layout.stationIndexByStopId.get(closestStop)
-  const nextIndex = layout.stationIndexByStopId.get(nextStop)
-
-  if (closestIndex == null && nextIndex == null) return null
-
-  let fromIndex = closestIndex ?? nextIndex
-  let toIndex = nextIndex ?? closestIndex
-
-  if (fromIndex > toIndex) {
-    const swap = fromIndex
-    fromIndex = toIndex
-    toIndex = swap
-  }
-
-  const currentStation = layout.stations[fromIndex]
-  const nextStation = layout.stations[toIndex]
-  const closestOffset = rawVehicle.tripStatus?.closestStopTimeOffset ?? 0
-  const nextOffset = rawVehicle.tripStatus?.nextStopTimeOffset ?? 0
-
-  const directionSymbol =
-    trip.directionId === '1'
-      ? '▲'
-      : trip.directionId === '0'
-        ? '▼'
-        : inferDirectionSymbol(closestIndex, nextIndex)
-
-  let progress = 0
-  if (fromIndex !== toIndex && closestOffset < 0 && nextOffset > 0) {
-    progress = clamp(Math.abs(closestOffset) / (Math.abs(closestOffset) + nextOffset), 0, 1)
-  }
-
-  const y = currentStation.y + (nextStation.y - currentStation.y) * progress
-  const segmentMinutes = fromIndex !== toIndex ? currentStation.segmentMinutes : 0
-  const minutePosition = currentStation.cumulativeMinutes + segmentMinutes * progress
-  const currentIndex = closestIndex ?? nextIndex ?? fromIndex
-  const currentStop = layout.stations[currentIndex] ?? currentStation
-  const movingNorth = directionSymbol === '▲'
-  const previousStopIndex = clamp(currentIndex + (movingNorth ? 1 : -1), 0, layout.stations.length - 1)
-  const upcomingStopIndex =
-    closestIndex != null && nextIndex != null && closestIndex !== nextIndex
-      ? nextIndex
-      : clamp(currentIndex + (movingNorth ? -1 : 1), 0, layout.stations.length - 1)
-  const previousStop = layout.stations[previousStopIndex] ?? currentStop
-  const upcomingStop = layout.stations[upcomingStopIndex] ?? nextStation
-
-  const scheduleDeviation = rawVehicle.tripStatus?.scheduleDeviation ?? 0
-  const isPredicted = rawVehicle.tripStatus?.predicted ?? false
-  const delayInfo = formatDelay(scheduleDeviation, isPredicted)
-
-  return {
-    id: rawVehicle.vehicleId,
-    label: rawVehicle.vehicleId.replace(/^\d+_/, ''),
-    directionSymbol,
-    fromLabel: currentStation.label,
-    minutePosition,
-    progress,
-    serviceStatus: classifyVehicleStatus(rawVehicle),
-    toLabel: nextStation.label,
-    y,
-    currentLabel: currentStation.label,
-    nextLabel: nextStation.label,
-    previousLabel: previousStop.label,
-    currentStopLabel: currentStop.label,
-    upcomingLabel: upcomingStop.label,
-    currentIndex,
-    upcomingStopIndex,
-    status: rawVehicle.tripStatus?.status ?? '',
-    closestStop,
-    nextStop,
-    closestOffset,
-    nextOffset,
-    scheduleDeviation,
-    isPredicted,
-    delayInfo,
-    rawVehicle,
-  }
 }
 
 function formatVehicleSegment(vehicle) {
@@ -2090,145 +1892,6 @@ async function syncDialogFromUrl() {
   }
 }
 
-function classifyArrivalDirection(arrival, line) {
-  const lookedUpDirection = line.directionLookup?.[arrival.tripId ?? '']
-  if (lookedUpDirection === '1') return 'nb'
-  if (lookedUpDirection === '0') return 'sb'
-
-  const headsign = arrival.tripHeadsign ?? ''
-  const headsignLower = headsign.toLowerCase()
-
-  if (line.nbTerminusPrefix && headsignLower.startsWith(line.nbTerminusPrefix)) return 'nb'
-  if (line.sbTerminusPrefix && headsignLower.startsWith(line.sbTerminusPrefix)) return 'sb'
-
-  if (/Lynnwood|Downtown Redmond/i.test(headsign)) return 'nb'
-  if (/Federal Way|South Bellevue/i.test(headsign)) return 'sb'
-  return ''
-}
-
-function getLineRouteId(line) {
-  return line.routeKey ?? `${line.agencyId}_${line.id}`
-}
-
-function formatArrivalDestination(arrival) {
-  const headsign = arrival.tripHeadsign?.trim()
-  if (headsign) return normalizeName(headsign.replace(/^to\s+/i, ''))
-  return copyValue('terminalFallback')
-}
-
-function getArrivalServiceStatus(arrivalTime, scheduleDeviation) {
-  const secondsUntilArrival = Math.floor((arrivalTime - Date.now()) / 1000)
-
-  if (secondsUntilArrival <= 90) return 'ARR'
-  if (scheduleDeviation >= 120) return 'DELAY'
-  return state.language === 'zh-CN' ? '准点' : 'ON TIME'
-}
-
-function getStatusTone(status) {
-  if (status === 'DELAY') return 'delay'
-  if (status === 'ARR') return 'arr'
-  return 'ok'
-}
-
-async function fetchArrivalsForStop(stopId) {
-  const url = `${OBA_BASE_URL}/arrivals-and-departures-for-stop/${stopId}.json?key=${OBA_KEY}&minutesAfter=120`
-  const payload = await fetchJsonWithRetry(url, 'Arrivals')
-  if (payload.code !== 200) {
-    throw new Error(payload.text || `Arrivals request failed for ${stopId}`)
-  }
-  return payload.data?.entry?.arrivalsAndDepartures ?? []
-}
-
-async function fetchArrivalsForStopIds(stopIds) {
-  const dedupedStopIds = [...new Set(stopIds)]
-  const results = []
-  const arrivals = []
-
-  for (let index = 0; index < dedupedStopIds.length; index += OBA_ARRIVALS_CONCURRENCY) {
-    const batch = dedupedStopIds.slice(index, index + OBA_ARRIVALS_CONCURRENCY)
-    const batchResults = await Promise.allSettled(batch.map((stopId) => fetchArrivalsForStop(stopId)))
-    results.push(...batchResults)
-
-    if (OBA_INTER_REQUEST_DELAY_MS > 0 && index + OBA_ARRIVALS_CONCURRENCY < dedupedStopIds.length) {
-      await sleep(OBA_INTER_REQUEST_DELAY_MS)
-    }
-  }
-
-  for (const result of results) {
-    if (result.status !== 'fulfilled') continue
-    arrivals.push(...result.value)
-  }
-
-  return arrivals
-}
-
-function buildArrivalsForLine(arrivalFeed, line, allowedStopIds = null) {
-  const now = Date.now()
-  const seen = new Set()
-  const arrivals = { nb: [], sb: [] }
-  const stopIdFilter = allowedStopIds ? new Set(allowedStopIds) : null
-
-  for (const arrival of arrivalFeed) {
-    if (arrival.routeId !== getLineRouteId(line)) continue
-    if (stopIdFilter && !stopIdFilter.has(arrival.stopId)) continue
-    const arrivalTime = arrival.predictedArrivalTime || arrival.scheduledArrivalTime
-    if (!arrivalTime || arrivalTime <= now) continue
-
-    const bucket = classifyArrivalDirection(arrival, line)
-    if (!bucket) continue
-
-    const dedupeKey = `${arrival.tripId}:${arrival.stopId}:${arrivalTime}`
-    if (seen.has(dedupeKey)) continue
-    seen.add(dedupeKey)
-
-    arrivals[bucket].push({
-      vehicleId: (arrival.vehicleId || '').replace(/^\d+_/, '') || '--',
-      arrivalTime,
-      destination: formatArrivalDestination(arrival),
-      scheduleDeviation: arrival.scheduleDeviation ?? 0,
-      tripId: arrival.tripId,
-      lineColor: line.color,
-      lineName: line.name,
-      lineToken: line.name[0],
-      distanceFromStop: arrival.distanceFromStop ?? 0,
-      numberOfStopsAway: arrival.numberOfStopsAway ?? 0,
-    })
-  }
-
-  arrivals.nb.sort((left, right) => left.arrivalTime - right.arrivalTime)
-  arrivals.sb.sort((left, right) => left.arrivalTime - right.arrivalTime)
-  arrivals.nb = arrivals.nb.slice(0, 4)
-  arrivals.sb = arrivals.sb.slice(0, 4)
-  return arrivals
-}
-
-async function getArrivalsForStation(station, line, prefetchedFeed = null) {
-  const cacheKey = `${state.activeSystemId}:${line.id}:${station.id}`
-  const cached = state.arrivalsCache.get(cacheKey)
-  if (cached && Date.now() - cached.fetchedAt < ARRIVALS_CACHE_TTL_MS) {
-    return cached.value
-  }
-
-  const stopIds = getStationStopIds(station, line)
-  const arrivalFeed = prefetchedFeed ?? (await fetchArrivalsForStopIds(stopIds))
-  const arrivals = buildArrivalsForLine(arrivalFeed, line, stopIds)
-  state.arrivalsCache.set(cacheKey, { fetchedAt: Date.now(), value: arrivals })
-  return arrivals
-}
-
-function mergeArrivalBuckets(collections) {
-  const merged = { nb: [], sb: [] }
-
-  for (const arrivals of collections) {
-    merged.nb.push(...arrivals.nb)
-    merged.sb.push(...arrivals.sb)
-  }
-
-  merged.nb.sort((left, right) => left.arrivalTime - right.arrivalTime)
-  merged.sb.sort((left, right) => left.arrivalTime - right.arrivalTime)
-  return merged
-}
-
 function renderStationAlertPills(station) {
   const alerts = getStationDialogAlerts(station)
   if (!alerts.length) {
@@ -3256,7 +2919,7 @@ async function refreshVehicles() {
     for (const line of state.lines) {
       const layout = state.layouts.get(line.id)
       const vehicles = state.rawVehicles
-        .map((vehicle) => parseVehicle(vehicle, line, layout, tripsById))
+        .map((vehicle) => parseVehicle(vehicle, line, layout, tripsById, { language: state.language, copyValue }))
         .filter(Boolean)
       state.vehiclesByLine.set(line.id, vehicles)
       recordVehicleGhosts(line.id, vehicles)
