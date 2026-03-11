@@ -2,6 +2,10 @@
   font-family: "SF Mono", "Roboto Mono", "IBM Plex Mono", monospace;
   color: #e8f6ff;
   background: #05070b;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
   --bg-top-glow: rgba(0, 179, 255, 0.08);
   --bg-start: #05070b;
   --bg-end: #090d13;
@@ -76,12 +80,16 @@ body {
 
 #app {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .screen {
-  width: min(1360px, calc(100vw - 32px));
+  width: min(1360px, calc(100vw - 32px - var(--safe-area-left) - var(--safe-area-right)));
   margin: 0 auto;
-  padding: 22px 0 32px;
+  padding:
+    calc(22px + var(--safe-area-top))
+    0
+    calc(32px + var(--safe-area-bottom));
 }
 
 .screen-header {
@@ -1964,7 +1972,8 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   min-width: 0;
 }
 
@@ -2072,16 +2081,136 @@ h1 {
 }
 
 @media (max-width: 700px) {
+  .dialog-content {
+    padding: 16px;
+  }
+
   .dialog-header {
     grid-template-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+  }
+
+  .dialog-header h3 {
+    font-size: 1.1rem;
+    line-height: 1.25;
+  }
+
+  .dialog-service-summary {
+    margin-top: 6px;
+    font-size: 0.78rem;
   }
 
   .dialog-actions {
     justify-items: stretch;
+    gap: 8px;
   }
 
   .dialog-actions-top {
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: start;
+    justify-content: stretch;
+    gap: 8px;
+  }
+
+  .dialog-direction-tabs {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .dialog-direction-tab {
+    min-width: 0;
+    padding: 8px 10px;
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+  }
+
+  .dialog-actions .status-pill {
+    align-self: stretch;
+    justify-content: center;
+    padding-inline: 10px;
+  }
+
+  .dialog-mode-button {
+    min-width: 60px;
+    height: 40px;
+    padding: 0 10px;
+    font-size: 0.74rem;
+  }
+
+  .dialog-meta {
+    margin-top: 0;
+  }
+
+  .dialog-meta .updated-at {
+    margin-top: 0;
+    font-size: 0.8rem;
+  }
+
+  .dialog-body {
+    gap: 14px;
+  }
+
+  .arrivals-section {
+    padding: 14px;
+  }
+
+  .arrivals-title {
+    margin-bottom: 10px;
+    font-size: 0.86rem;
+  }
+
+  .arrival-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 10px 12px;
+    padding: 12px;
+  }
+
+  .arrival-meta {
+    align-items: start;
+  }
+
+  .arrival-line-token {
+    width: 24px;
+    height: 24px;
+    margin-top: 1px;
+  }
+
+  .arrival-copy {
+    gap: 5px;
+  }
+
+  .arrival-vehicle {
+    white-space: normal;
+    text-wrap: balance;
+  }
+
+  .arrival-destination {
+    white-space: normal;
+  }
+
+  .arrival-side {
+    justify-items: end;
+    align-self: stretch;
+    min-width: 74px;
+  }
+
+  .arrival-status {
+    font-size: 0.64rem;
+  }
+
+  .arrival-time {
+    font-size: 1.02rem;
+  }
+
+  .arrival-precision {
+    max-width: 12ch;
+    font-size: 0.68rem;
+    text-wrap: pretty;
   }
 }
 
@@ -2329,6 +2458,7 @@ h1 {
   font-weight: 600;
   color: var(--accent-strong);
   letter-spacing: 0.05em;
+  line-height: 1.35;
 }
 
 .arrivals-list {
@@ -2345,10 +2475,10 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 12px;
+  padding: 12px;
   background: var(--surface-soft);
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid var(--border-color);
   min-width: 0;
 }
@@ -2364,7 +2494,7 @@ h1 {
 
 .arrival-copy {
   display: grid;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -2382,15 +2512,18 @@ h1 {
 }
 
 .arrival-vehicle {
-  font-size: 0.85rem;
-  color: color-mix(in srgb, var(--text-primary) 80%, transparent);
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: color-mix(in srgb, var(--text-primary) 88%, transparent);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .arrival-destination {
-  font-size: 0.76rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -2398,8 +2531,10 @@ h1 {
 }
 
 .arrival-time {
-  font-size: 0.9rem;
-  font-weight: 600;
+  display: grid;
+  gap: 2px;
+  font-size: 0.96rem;
+  font-weight: 700;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -2408,7 +2543,7 @@ h1 {
 .arrival-side {
   display: grid;
   justify-items: end;
-  gap: 4px;
+  gap: 6px;
   flex: 0 0 auto;
   text-align: right;
 }
@@ -2693,13 +2828,60 @@ h1 {
     grid-template-columns: 1fr;
   }
 
+  .screen {
+    width: min(100vw - 20px - var(--safe-area-left) - var(--safe-area-right), 100%);
+    padding-top: calc(14px + var(--safe-area-top));
+    padding-bottom: calc(22px + var(--safe-area-bottom));
+  }
+
   .screen-header {
-    display: block;
+    display: grid;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .screen-kicker {
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+  }
+
+  h1 {
+    font-size: clamp(1.6rem, 8vw, 2.3rem);
+    line-height: 1.02;
   }
 
   .screen-meta {
-    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, max-content));
+    gap: 8px;
+    margin-top: 0;
     text-align: left;
+    justify-content: start;
+  }
+
+  .theme-toggle,
+  .screen-meta .status-pill,
+  .screen-meta .updated-at {
+    margin: 0;
+  }
+
+  .screen-meta .updated-at {
+    font-size: 0.78rem;
+  }
+
+  .switcher-stack {
+    position: sticky;
+    top: max(8px, var(--safe-area-top));
+    z-index: 20;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 2px 0 0;
+  }
+
+  .tab-bar {
+    margin-bottom: 0;
+    border-radius: 16px;
+    backdrop-filter: blur(14px);
   }
 
   .line-readout-grid {
@@ -2739,7 +2921,69 @@ h1 {
   .tab-button {
     min-width: 0;
   }
-  
+
+  .line-card,
+  .panel-card {
+    padding: 16px 14px 14px;
+    border-radius: 18px;
+  }
+
+  .line-card-header {
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+
+  .line-title {
+    gap: 10px;
+  }
+
+  .line-title h2 {
+    font-size: 1.05rem;
+  }
+
+  .line-title p {
+    font-size: 0.82rem;
+  }
+
+  .service-reminder {
+    display: none;
+  }
+
+  .line-marquee {
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  .line-marquee-track {
+    gap: 8px;
+  }
+
+  .line-marquee-item {
+    padding: 6px 10px;
+    font-size: 0.72rem;
+  }
+
+  .line-marquee-token {
+    width: 18px;
+    height: 18px;
+    font-size: 0.62rem;
+  }
+
+  .line-diagram {
+    display: block;
+    height: clamp(480px, 64dvh, 820px);
+    min-height: 480px;
+    margin-top: 6px;
+  }
+
+  .station-label {
+    font-size: 14px;
+  }
+
+  .segment-time {
+    font-size: 11px;
+  }
+
   .times-item-main {
     flex-direction: column;
   }

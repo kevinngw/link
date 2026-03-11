@@ -582,6 +582,30 @@ function formatLayoutDirectionLabel(directionSymbol, layout, options = {}) {
   return formatDirectionLabel(directionSymbol, getDirectionDestinationLabel(directionSymbol, layout), options)
 }
 
+function summarizeDirectionDestinations(destinations) {
+  const uniqueDestinations = [...new Set(destinations.map((destination) => destination?.trim()).filter(Boolean))]
+  if (!uniqueDestinations.length) return ''
+  const labels = uniqueDestinations.slice(0, 2)
+  if (uniqueDestinations.length > 2) {
+    labels.push(state.language === 'zh-CN' ? '等' : 'etc.')
+  }
+  return labels.join(' / ')
+}
+
+function getDialogDirectionSummary(directionSymbol, arrivalsBucket = [], station = state.currentDialogStation) {
+  const arrivalDestinations = arrivalsBucket.map((arrival) => arrival.destination)
+  const arrivalSummary = summarizeDirectionDestinations(arrivalDestinations)
+  if (arrivalSummary) return arrivalSummary
+
+  if (!station) return ''
+
+  const layoutDestinations = getDialogStations(station)
+    .map(({ line }) => state.layouts.get(line.id))
+    .map((layout) => getDirectionDestinationLabel(directionSymbol, layout))
+
+  return summarizeDirectionDestinations(layoutDestinations)
+}
+
 function normalizeName(name) {
   return name
     .replace('Station', '')
@@ -984,32 +1008,55 @@ function isRateLimitedPayload(payload) {
 async function fetchJsonWithRetry(url, label) {
   for (let attempt = 0; attempt <= OBA_MAX_RETRIES; attempt += 1) {
     await waitForObaCooldown()
-    const response = await fetch(url, { cache: 'no-store' })
+
+    let response = null
     let payload = null
+    let networkError = null
 
     try {
-      payload = await response.json()
-    } catch {
-      payload = null
+      response = await fetch(url, { cache: 'no-store' })
+    } catch (error) {
+      networkError = error
     }
 
-    const isRateLimitedResponse = response.status === 429 || isRateLimitedPayload(payload)
-    if (response.ok && !isRateLimitedResponse) {
+    if (response !== null) {
+      try {
+        payload = await response.json()
+      } catch {
+        payload = null
+      }
+    }
+
+    // Success: response is OK and not a disguised rate-limit
+    const isRateLimitedResponse = response?.status === 429 || isRateLimitedPayload(payload)
+    if (response?.ok && !isRateLimitedResponse) {
       state.obaRateLimitStreak = 0
       state.obaCooldownUntil = 0
       return payload
     }
 
-    if (attempt === OBA_MAX_RETRIES || !isRateLimitedResponse) {
+    const isTransientError = networkError != null ||
+      (response != null && (response.status === 429 || (response.status >= 500 && response.status < 600)))
+
+    // Non-retryable error or last attempt: throw immediately
+    if (attempt === OBA_MAX_RETRIES || !isTransientError) {
+      if (networkError) throw networkError
       if (payload?.text) throw new Error(payload.text)
-      throw new Error(`${label} request failed with ${response.status}`)
+      throw new Error(`${label} request failed with ${response?.status ?? 'network error'}`)
     }
 
-    state.obaRateLimitStreak += 1
-    const retryDelayMs = OBA_RETRY_BASE_DELAY_MS * 2 ** attempt
-    const cooldownMs = Math.max(retryDelayMs, getGlobalCooldownMs())
-    state.obaCooldownUntil = Date.now() + cooldownMs
-    await sleep(cooldownMs)
+    // Retryable: rate-limit triggers global cooldown; transient errors use plain backoff
+    if (isRateLimitedResponse) {
+      state.obaRateLimitStreak += 1
+      const retryDelayMs = OBA_RETRY_BASE_DELAY_MS * 2 ** attempt
+      const cooldownMs = Math.max(retryDelayMs, getGlobalCooldownMs())
+      state.obaCooldownUntil = Date.now() + cooldownMs
+      await sleep(cooldownMs)
+    } else {
+      // Network or 5xx: plain exponential backoff without touching global cooldown
+      const retryDelayMs = OBA_RETRY_BASE_DELAY_MS * 2 ** attempt
+      await sleep(retryDelayMs)
+    }
   }
 
   throw new Error(`${label} request failed`)
@@ -2150,11 +2197,17 @@ function renderArrivalLists(arrivals, loading = false) {
         </span>
         <span class="arrival-side">
           <span class="arrival-status arrival-status-${serviceTone}">${serviceStatus}</span>
-          <span class="arrival-time"><span class="arrival-countdown">${timeStr}</span><span class="arrival-precision">${precisionInfo}</span></span>
+          <span class="arrival-time">
+            <span class="arrival-countdown">${timeStr}</span>
+            <span class="arrival-precision">${precisionInfo}</span>
+          </span>
         </span>
       </div>
     `
   }
+
+  const nbSummary = getDialogDirectionSummary('▲', arrivals.nb)
+  const sbSummary = getDialogDirectionSummary('▼', arrivals.sb)
 
   if (loading) {
     arrivalsNbPinned.innerHTML = ''
@@ -2163,16 +2216,6 @@ function renderArrivalLists(arrivals, loading = false) {
     arrivalsSb.innerHTML = `<div class="arrival-item muted">${copyValue('loadingArrivals')}</div>`
     syncDialogDisplayScroll()
     return
-  }
-
-  const summarizeDestinations = (bucket) => {
-    const uniqueDestinations = [...new Set(bucket.map((arrival) => arrival.destination).filter(Boolean))]
-    if (!uniqueDestinations.length) return ''
-    const labels = uniqueDestinations.slice(0, 2)
-    if (uniqueDestinations.length > 2) {
-      labels.push(state.language === 'zh-CN' ? '等' : 'etc.')
-    }
-    return labels.join(' / ')
   }
 
   const renderBucket = (bucket, pinnedElement, listElement) => {
@@ -2195,8 +2238,8 @@ function renderArrivalLists(arrivals, loading = false) {
 
   renderBucket(arrivals.nb, arrivalsNbPinned, arrivalsNb)
   renderBucket(arrivals.sb, arrivalsSbPinned, arrivalsSb)
-  arrivalsTitleNb.textContent = formatDirectionLabel('▲', summarizeDestinations(arrivals.nb), { includeSymbol: true })
-  arrivalsTitleSb.textContent = formatDirectionLabel('▼', summarizeDestinations(arrivals.sb), { includeSymbol: true })
+  arrivalsTitleNb.textContent = formatDirectionLabel('▲', nbSummary, { includeSymbol: true })
+  arrivalsTitleSb.textContent = formatDirectionLabel('▼', sbSummary, { includeSymbol: true })
 
   syncDialogDisplayScroll()
 }
@@ -3498,8 +3541,8 @@ function render() {
   systemBarElement.setAttribute('aria-label', copyValue('transitSystems'))
   viewBarElement.setAttribute('aria-label', copyValue('boardViews'))
   document.querySelector('#dialog-direction-tabs')?.setAttribute('aria-label', copyValue('boardDirectionView'))
-  arrivalsTitleNb.textContent = formatDirectionLabel('▲', '', { includeSymbol: true })
-  arrivalsTitleSb.textContent = formatDirectionLabel('▼', '', { includeSymbol: true })
+  arrivalsTitleNb.textContent = formatDirectionLabel('▲', getDialogDirectionSummary('▲'), { includeSymbol: true })
+  arrivalsTitleSb.textContent = formatDirectionLabel('▼', getDialogDirectionSummary('▼'), { includeSymbol: true })
   dialogDisplay.textContent = state.dialogDisplayMode ? copyValue('exit') : copyValue('board')
   dialogDisplay.setAttribute('aria-label', state.dialogDisplayMode ? copyValue('exit') : copyValue('board'))
   trainDialogClose.setAttribute('aria-label', copyValue('closeTrainDialog'))
@@ -3640,14 +3683,38 @@ async function switchSystem(systemId, { updateUrl = true, preserveDialog = false
 }
 
 async function loadStaticData() {
-  const response = await fetch(DATA_URL, { cache: 'no-store' })
-  const payload = await response.json()
-  const systems = payload.systems ?? []
-  state.systemsById = new Map(systems.map((system) => [system.id, system]))
-  state.layoutsBySystem = new Map(
-    systems.map((system) => [system.id, new Map(system.lines.map((line) => [line.id, buildLayout(line)]))]),
-  )
-  applySystem(getSystemIdFromUrl())
+  const STATIC_MAX_RETRIES = 4
+  const STATIC_RETRY_BASE_MS = 1_000
+
+  for (let attempt = 0; attempt <= STATIC_MAX_RETRIES; attempt += 1) {
+    let response = null
+    let payload = null
+
+    try {
+      response = await fetch(DATA_URL, { cache: 'no-store' })
+      payload = await response.json()
+    } catch (error) {
+      if (attempt === STATIC_MAX_RETRIES) throw error
+      await sleep(STATIC_RETRY_BASE_MS * 2 ** attempt)
+      continue
+    }
+
+    if (!response.ok) {
+      if (attempt === STATIC_MAX_RETRIES) {
+        throw new Error(`Static data load failed with ${response.status}`)
+      }
+      await sleep(STATIC_RETRY_BASE_MS * 2 ** attempt)
+      continue
+    }
+
+    const systems = payload.systems ?? []
+    state.systemsById = new Map(systems.map((system) => [system.id, system]))
+    state.layoutsBySystem = new Map(
+      systems.map((system) => [system.id, new Map(system.lines.map((line) => [line.id, buildLayout(line)]))]),
+    )
+    applySystem(getSystemIdFromUrl())
+    return
+  }
 }
 
 function parseSituation(situation) {
