@@ -123,7 +123,13 @@ document.querySelector('#app').innerHTML = `
     <div class="dialog-content">
       <header class="dialog-header">
         <div>
-          <h3 id="dialog-title">Station</h3>
+          <h3 id="dialog-title" class="dialog-title">
+            <span id="dialog-title-track" class="dialog-title-track">
+              <span id="dialog-title-text" class="dialog-title-text">Station</span>
+              <span id="dialog-title-text-clone" class="dialog-title-text dialog-title-text-clone" aria-hidden="true">Station</span>
+            </span>
+          </h3>
+          <p id="dialog-service-summary" class="dialog-service-summary">Service summary</p>
         </div>
         <div class="dialog-actions">
           <div class="dialog-actions-top">
@@ -205,6 +211,10 @@ const currentTimeElement = document.querySelector('#current-time')
 const updatedAtElement = document.querySelector('#updated-at')
 const dialog = document.querySelector('#station-dialog')
 const dialogTitle = document.querySelector('#dialog-title')
+const dialogTitleTrack = document.querySelector('#dialog-title-track')
+const dialogTitleText = document.querySelector('#dialog-title-text')
+const dialogTitleTextClone = document.querySelector('#dialog-title-text-clone')
+const dialogServiceSummary = document.querySelector('#dialog-service-summary')
 const dialogStatusPillElement = document.querySelector('#dialog-status-pill')
 const dialogUpdatedAtElement = document.querySelector('#dialog-updated-at')
 const dialogDisplay = document.querySelector('#dialog-display')
@@ -388,6 +398,42 @@ function getTodayDateKey() {
   return formatter.format(new Date())
 }
 
+function getDateKeyWithOffset(offsetDays) {
+  const now = new Date()
+  now.setDate(now.getDate() + offsetDays)
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  return formatter.format(now)
+}
+
+function parseClockToSeconds(value) {
+  const [hours = '0', minutes = '0', seconds = '0'] = String(value).split(':')
+  return Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds)
+}
+
+function getServiceDateTime(dateKey, clockValue) {
+  if (!dateKey || !clockValue) return null
+  const [year, month, day] = dateKey.split('-').map(Number)
+  const totalSeconds = parseClockToSeconds(clockValue)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  return new Date(year, month - 1, day, hours, minutes, seconds)
+}
+
+function formatDurationFromMs(ms) {
+  const totalMinutes = Math.max(0, Math.round(ms / 60_000))
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (hours && minutes) return `${hours}h ${minutes}m`
+  if (hours) return `${hours}h`
+  return `${minutes}m`
+}
+
 function formatServiceClock(clockValue) {
   if (!clockValue) return ''
   const [rawHours = '0', rawMinutes = '0'] = String(clockValue).split(':')
@@ -404,6 +450,102 @@ function getTodayServiceSpan(line) {
   const span = line.serviceSpansByDate?.[todayKey]
   if (!span) return 'Today service hours unavailable'
   return `Today ${formatServiceClock(span.start)} - ${formatServiceClock(span.end)}`
+}
+
+function getServiceReminder(line) {
+  const now = new Date()
+  const yesterdayKey = getDateKeyWithOffset(-1)
+  const todayKey = getDateKeyWithOffset(0)
+  const tomorrowKey = getDateKeyWithOffset(1)
+
+  const yesterdaySpan = line.serviceSpansByDate?.[yesterdayKey]
+  const todaySpan = line.serviceSpansByDate?.[todayKey]
+  const tomorrowSpan = line.serviceSpansByDate?.[tomorrowKey]
+
+  const windows = [
+    yesterdaySpan && {
+      kind: 'yesterday',
+      start: getServiceDateTime(yesterdayKey, yesterdaySpan.start),
+      end: getServiceDateTime(yesterdayKey, yesterdaySpan.end),
+      span: yesterdaySpan,
+    },
+    todaySpan && {
+      kind: 'today',
+      start: getServiceDateTime(todayKey, todaySpan.start),
+      end: getServiceDateTime(todayKey, todaySpan.end),
+      span: todaySpan,
+    },
+  ].filter(Boolean)
+
+  const activeWindow = windows.find((window) => now >= window.start && now <= window.end)
+  if (activeWindow) {
+    return {
+      tone: 'active',
+      headline: `Last trip ${formatServiceClock(activeWindow.span.end)}`,
+      detail: `Ends in ${formatDurationFromMs(activeWindow.end.getTime() - now.getTime())}`,
+      compact: `Ends in ${formatDurationFromMs(activeWindow.end.getTime() - now.getTime())}`,
+    }
+  }
+
+  if (todaySpan) {
+    const todayStart = getServiceDateTime(todayKey, todaySpan.start)
+    const todayEnd = getServiceDateTime(todayKey, todaySpan.end)
+
+    if (now < todayStart) {
+      return {
+        tone: 'upcoming',
+        headline: `First trip ${formatServiceClock(todaySpan.start)}`,
+        detail: `Starts in ${formatDurationFromMs(todayStart.getTime() - now.getTime())}`,
+        compact: `Starts in ${formatDurationFromMs(todayStart.getTime() - now.getTime())}`,
+      }
+    }
+
+    if (now > todayEnd) {
+      return {
+        tone: 'ended',
+        headline: `Service ended ${formatServiceClock(todaySpan.end)}`,
+        detail: tomorrowSpan ? `Next start ${formatServiceClock(tomorrowSpan.start)}` : 'No next service loaded',
+        compact: tomorrowSpan ? `Next ${formatServiceClock(tomorrowSpan.start)}` : 'Ended',
+      }
+    }
+  }
+
+  if (tomorrowSpan) {
+    return {
+      tone: 'upcoming',
+      headline: `Next first trip ${formatServiceClock(tomorrowSpan.start)}`,
+      detail: 'No service remaining today',
+      compact: `Next ${formatServiceClock(tomorrowSpan.start)}`,
+    }
+  }
+
+  return {
+    tone: 'muted',
+    headline: 'Service hours unavailable',
+    detail: 'Static schedule data missing for this date',
+    compact: 'Unavailable',
+  }
+}
+
+function renderServiceReminderChip(line) {
+  const reminder = getServiceReminder(line)
+  return `
+    <div class="service-reminder service-reminder-${reminder.tone}">
+      <p class="service-reminder-headline">${reminder.headline}</p>
+      <p class="service-reminder-detail">${reminder.detail}</p>
+    </div>
+  `
+}
+
+function renderStationServiceSummary(station) {
+  const summaries = getDialogStations(station)
+    .map(({ line }) => {
+      const reminder = getServiceReminder(line)
+      return `${line.name}: ${reminder.compact}`
+    })
+    .slice(0, 3)
+
+  dialogServiceSummary.textContent = summaries.join('  ·  ') || 'Service summary unavailable'
 }
 
 function formatAlertEffect(effect) {
@@ -1359,6 +1501,7 @@ function setDialogDisplayMode(isDisplayMode) {
     refreshStationDialog(state.currentDialogStation).catch(console.error)
   }
 
+  syncDialogTitleMarquee()
   syncDialogDisplayScroll()
 }
 
@@ -1690,7 +1833,8 @@ function renderStationAlertPills(station) {
 }
 
 async function showStationDialog(station, updateUrl = true) {
-  dialogTitle.textContent = station.name
+  setDialogTitle(station.name)
+  renderStationServiceSummary(station)
   state.currentDialogStationId = station.id
   state.currentDialogStation = station
 
@@ -1701,6 +1845,7 @@ async function showStationDialog(station, updateUrl = true) {
     setStationParam(station)
   }
   dialog.showModal()
+  syncDialogTitleMarquee()
   startDialogAutoRefresh()
 
   await refreshStationDialog(station)
@@ -1790,6 +1935,7 @@ function renderLine(line) {
             </div>
             <p>${vehicles.length} live ${vehicles.length === 1 ? vehicleLabel.toLowerCase() : getVehicleLabelPlural().toLowerCase()}</p>
             <p>${getTodayServiceSpan(line)}</p>
+            ${renderServiceReminderChip(line)}
           </div>
         </div>
       </header>
@@ -1864,6 +2010,7 @@ function renderTrainList() {
                   ${renderInlineAlerts(lineAlerts, line.id)}
                 </div>
                 <p>${lineVehicles.length} ${lineVehicles.length === 1 ? vehicleLabel.toLowerCase() : getVehicleLabelPlural().toLowerCase()} in service · ${getTodayServiceSpan(line)}</p>
+                ${renderServiceReminderChip(line)}
               </div>
             </div>
             </header>
@@ -1885,6 +2032,25 @@ function formatClockTime(timestamp) {
     hour: 'numeric',
     minute: '2-digit',
   })
+}
+
+function setDialogTitle(title) {
+  dialogTitleText.textContent = title
+  dialogTitleTextClone.textContent = title
+  syncDialogTitleMarquee()
+}
+
+function syncDialogTitleMarquee() {
+  const title = dialogTitle
+  const track = dialogTitleTrack
+  if (!title || !track) return
+
+  const shouldMarquee =
+    state.dialogDisplayMode &&
+    dialog.open &&
+    dialogTitleText.scrollWidth > title.clientWidth
+
+  title.classList.toggle('is-marquee', shouldMarquee)
 }
 
 function haversineKm(lat1, lon1, lat2, lon2) {
@@ -2067,6 +2233,7 @@ function renderInsightsBoard() {
               <div>
                 <h2>${line.name}</h2>
                 <p>${vehicles.length} live ${vehicles.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()} · ${getTodayServiceSpan(line)}</p>
+                ${renderServiceReminderChip(line)}
               </div>
             </div>
           </header>
@@ -2421,6 +2588,7 @@ async function init() {
   const handleViewportResize = () => {
     const previousCompactLayout = state.compactLayout
     updateViewportState()
+    syncDialogTitleMarquee()
     if (previousCompactLayout !== state.compactLayout) {
       render()
       return

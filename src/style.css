@@ -560,6 +560,48 @@ h1 {
   min-width: 0;
 }
 
+.service-reminder {
+  display: grid;
+  gap: 2px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.service-reminder-headline,
+.service-reminder-detail {
+  margin: 0;
+}
+
+.service-reminder-headline {
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+}
+
+.service-reminder-detail {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+
+.service-reminder-active {
+  border-color: color-mix(in srgb, var(--accent-strong) 28%, var(--border-color));
+}
+
+.service-reminder-upcoming {
+  border-color: color-mix(in srgb, #9ecbff 34%, var(--border-color));
+}
+
+.service-reminder-ended {
+  border-color: color-mix(in srgb, #ff9a6a 34%, var(--border-color));
+}
+
+.service-reminder-muted {
+  border-color: var(--border-color);
+}
+
 .line-marquee {
   position: relative;
   overflow: hidden;
@@ -1483,6 +1525,29 @@ h1 {
   color: var(--text-primary);
 }
 
+.dialog-service-summary {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dialog-title {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.dialog-title-track {
+  display: block;
+  max-width: 100%;
+}
+
+.dialog-title-text-clone {
+  display: none;
+}
+
 .dialog-header > div:first-child {
   min-width: 0;
 }
@@ -1844,19 +1909,51 @@ h1 {
     calc(32px + env(safe-area-inset-left));
 }
 
+.station-dialog.is-display-mode .transfer-section {
+  display: none;
+}
+
 .station-dialog.is-display-mode .dialog-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: 28px;
-  row-gap: 18px;
-  margin-bottom: 24px;
-  padding-bottom: 20px;
+  column-gap: 20px;
+  row-gap: 10px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
   align-items: start;
+  position: relative;
+}
+
+.station-dialog.is-display-mode .dialog-header > div:first-child {
+  min-width: 0;
 }
 
 .station-dialog.is-display-mode .dialog-header h3 {
-  font-size: clamp(2.4rem, 4vw, 4rem);
+  font-size: clamp(2rem, 3.4vw, 3rem);
   letter-spacing: 0.04em;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.station-dialog.is-display-mode .dialog-title-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 2.5rem;
+  min-width: 0;
+}
+
+.station-dialog.is-display-mode .dialog-title.is-marquee .dialog-title-track {
+  width: max-content;
+  animation: dialogTitleMarquee 12s linear infinite;
+}
+
+.station-dialog.is-display-mode .dialog-title.is-marquee .dialog-title-text-clone {
+  display: inline;
+}
+
+.station-dialog.is-display-mode .dialog-service-summary {
+  margin-top: 10px;
+  font-size: 0.98rem;
 }
 
 .station-dialog.is-display-mode .dialog-meta {
@@ -1870,15 +1967,16 @@ h1 {
 
 .station-dialog.is-display-mode .dialog-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(320px, 42vw) auto;
   grid-template-areas:
     "tabs status"
-    "exit meta";
-  align-items: center;
-  justify-items: stretch;
+    "tabs meta";
+  align-items: start;
+  justify-items: end;
   align-content: start;
-  gap: 12px 18px;
-  min-width: min(58vw, 760px);
+  gap: 10px 14px;
+  min-width: min(46vw, 620px);
+  padding-right: 100px;
 }
 
 .station-dialog.is-display-mode .dialog-actions-top {
@@ -1898,8 +1996,11 @@ h1 {
 }
 
 .station-dialog.is-display-mode .dialog-mode-button {
-  grid-area: exit;
-  justify-self: start;
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  min-width: 82px;
 }
 
 .station-dialog.is-display-mode .dialog-meta .status-pill {
@@ -1998,6 +2099,16 @@ h1 {
   }
 }
 
+@keyframes dialogTitleMarquee {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(calc(-50% - 1.25rem));
+  }
+}
+
 @media (max-width: 1100px) {
   .board {
     grid-template-columns: 1fr;
@@ -2075,23 +2186,24 @@ h1 {
   }
 
   .station-dialog.is-display-mode .dialog-header {
-    gap: 14px;
+    gap: 10px;
     grid-template-columns: 1fr;
     column-gap: 0;
   }
 
   .station-dialog.is-display-mode .dialog-header h3 {
-    font-size: 1.85rem;
+    font-size: 1.5rem;
   }
 
   .station-dialog.is-display-mode .dialog-actions {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       "tabs status"
-      "exit meta";
-    align-items: center;
-    gap: 12px 14px;
+      "tabs meta";
+    align-items: start;
+    gap: 10px 12px;
     min-width: 0;
+    padding-right: 84px;
   }
 
   .station-dialog.is-display-mode .dialog-direction-tabs {
