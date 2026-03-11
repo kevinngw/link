@@ -3,7 +3,7 @@ import { registerSW } from 'virtual:pwa-register'
 import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, MAX_TRANSFER_RECOMMENDATIONS, OBA_ARRIVALS_CONCURRENCY, OBA_BASE_URL, OBA_COOLDOWN_BASE_MS, OBA_COOLDOWN_MAX_MS, OBA_INTER_REQUEST_DELAY_MS, OBA_KEY, OBA_MAX_RETRIES, OBA_RETRY_BASE_DELAY_MS, SYSTEM_META, THEME_STORAGE_KEY, TRANSFER_BOARDING_BUFFER_MS, TRANSFER_FETCH_DELAY_MS, TRANSFER_MAX_WALK_KM, TRANSFER_WALKING_SPEED_KMPH, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, formatWalkDistance as formatWalkDistanceValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
-import { clamp, getBearingDegrees, haversineKm, parseClockToSeconds, pluralizeVehicleLabel, slugifyStation } from './utils'
+import { clamp, getBearingDegrees, haversineKm, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
 import { createObaClient } from './oba'
 import { createArrivalsHelpers, getLineRouteId, getStatusTone } from './arrivals'
 import { parseVehicle } from './vehicles'
@@ -1561,6 +1561,10 @@ async function refreshStationDialog(station) {
   // Phase 2: fetch fresh arrivals and re-render
   const arrivalsByLine = await Promise.all(dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line)))
   renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
+
+  await sleep(5000)
+
+  if (state.currentDialogStationId !== station.id) return
 
   const transferCandidates = getNearbyTransferCandidates(station)
   if (!transferCandidates.length) {
