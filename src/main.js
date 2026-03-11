@@ -968,6 +968,8 @@ function parseVehicle(rawVehicle, line, layout, tripsById) {
     previousLabel: previousStop.label,
     currentStopLabel: currentStop.label,
     upcomingLabel: upcomingStop.label,
+    currentIndex,
+    upcomingStopIndex,
     status: rawVehicle.tripStatus?.status ?? '',
     closestStop,
     nextStop,
@@ -2280,6 +2282,55 @@ function formatClockTime(timestamp) {
   })
 }
 
+function formatEtaClockFromNow(offsetSeconds) {
+  return formatClockTime(Date.now() + Math.max(0, offsetSeconds) * 1000)
+}
+
+function getVehicleDestinationLabel(vehicle, layout) {
+  const terminalIndex = vehicle.directionSymbol === '▲' ? 0 : layout.stations.length - 1
+  return layout.stations[terminalIndex]?.label ?? vehicle.upcomingLabel
+}
+
+function getTrainTimelineEntries(vehicle, layout, maxEntries = 6) {
+  if (!layout?.stations?.length) return []
+
+  const directionStep = vehicle.directionSymbol === '▲' ? -1 : 1
+  const timeline = []
+  const seenIndexes = new Set()
+  const nextIndex = vehicle.upcomingStopIndex ?? vehicle.currentIndex
+  const nextOffset = Math.max(0, vehicle.nextOffset ?? 0)
+
+  const pushEntry = (stationIndex, etaSeconds, { isNext = false, isTerminal = false } = {}) => {
+    if (stationIndex == null || seenIndexes.has(stationIndex)) return
+    const station = layout.stations[stationIndex]
+    if (!station) return
+    seenIndexes.add(stationIndex)
+    timeline.push({
+      id: `${vehicle.id}:${station.id}`,
+      label: station.label,
+      etaSeconds: Math.max(0, Math.round(etaSeconds)),
+      clockTime: formatEtaClockFromNow(etaSeconds),
+      isNext,
+      isTerminal,
+    })
+  }
+
+  pushEntry(nextIndex, nextOffset, { isNext: true })
+
+  let runningEtaSeconds = nextOffset
+  for (let stationIndex = nextIndex + directionStep; timeline.length < maxEntries; stationIndex += directionStep) {
+    if (stationIndex < 0 || stationIndex >= layout.stations.length) break
+
+    const previousIndex = stationIndex - directionStep
+    const previousStation = layout.stations[previousIndex]
+    runningEtaSeconds += Math.max(0, Math.round((previousStation?.segmentMinutes ?? 0) * 60))
+    const isTerminal = stationIndex === 0 || stationIndex === layout.stations.length - 1
+    pushEntry(stationIndex, runningEtaSeconds, { isTerminal })
+  }
+
+  return timeline
+}
+
 function setDialogTitle(title) {
   dialogTitleText.textContent = title
   dialogTitleTextClone.textContent = title
@@ -2554,11 +2605,17 @@ function renderTrainDialog(vehicle) {
   const currentLabel = isBetweenStops ? 'Between' : 'Now'
   const nextName = isBetweenStops ? vehicle.toLabel : vehicle.upcomingLabel
   const segmentProgress = isBetweenStops ? vehicle.progress : 0.5
+  const layout = state.layouts.get(vehicle.lineId)
+  const timelineEntries = getTrainTimelineEntries(vehicle, layout)
+  const destinationLabel = layout ? getVehicleDestinationLabel(vehicle, layout) : vehicle.upcomingLabel
+  const terminalEtaSeconds = timelineEntries.at(-1)?.etaSeconds ?? Math.max(0, vehicle.nextOffset ?? 0)
+  const directionLabel = vehicle.directionSymbol === '▲' ? 'Northbound' : vehicle.directionSymbol === '▼' ? 'Southbound' : 'In service'
 
   trainDialogTitle.textContent = `${vehicle.lineName} ${getVehicleLabel()} ${vehicle.label}`
-  trainDialogSubtitle.textContent = vehicle.directionSymbol === '▲' ? 'Direction A movement' : 'Direction B movement'
+  trainDialogSubtitle.textContent = `${directionLabel} to ${destinationLabel}`
   trainDialogStatus.className = `train-detail-status train-list-status-${getStatusTone(vehicle.serviceStatus)}`
-  trainDialogStatus.textContent = vehicle.serviceStatus
+  trainDialogStatus.innerHTML = renderStatusPills(getVehicleStatusPills(vehicle))
+  trainDialog.querySelector('.train-eta-panel')?.remove()
   trainDialogLine.innerHTML = `
     <div class="train-detail-spine" style="--line-color:${vehicle.lineColor};"></div>
     <div
@@ -2593,6 +2650,51 @@ function renderTrainDialog(vehicle) {
       </div>
     </div>
   `
+  trainDialogLine.insertAdjacentHTML(
+    'afterend',
+    `
+      <section class="train-eta-panel">
+        <div class="train-eta-summary">
+          <div class="metric-chip">
+            <p class="metric-chip-label">Direction</p>
+            <p class="metric-chip-value">${directionLabel}</p>
+          </div>
+          <div class="metric-chip">
+            <p class="metric-chip-label">Terminal</p>
+            <p class="metric-chip-value">${destinationLabel}</p>
+          </div>
+          <div class="metric-chip">
+            <p class="metric-chip-label">ETA to Terminal</p>
+            <p class="metric-chip-value">${formatArrivalTime(terminalEtaSeconds)}</p>
+          </div>
+        </div>
+        <div class="train-eta-timeline">
+          <div class="train-eta-header">
+            <p class="train-detail-label">Upcoming stops</p>
+            <p class="train-eta-header-copy">Live ETA now</p>
+          </div>
+          ${timelineEntries.length
+            ? timelineEntries
+              .map(
+                (entry) => `
+                  <article class="train-eta-stop${entry.isNext ? ' is-next' : ''}${entry.isTerminal ? ' is-terminal' : ''}">
+                    <div>
+                      <p class="train-eta-stop-label">${entry.isNext ? 'Next stop' : entry.isTerminal ? 'Terminal' : 'Upcoming'}</p>
+                      <p class="train-eta-stop-name">${entry.label}</p>
+                    </div>
+                    <div class="train-eta-stop-side">
+                      <p class="train-eta-stop-countdown">${formatArrivalTime(entry.etaSeconds)}</p>
+                      <p class="train-eta-stop-clock">${entry.clockTime}</p>
+                    </div>
+                  </article>
+                `,
+              )
+              .join('')
+            : '<p class="train-readout muted">No downstream ETA available for this train right now.</p>'}
+        </div>
+      </section>
+    `,
+  )
 
   if (!trainDialog.open) trainDialog.showModal()
 }
