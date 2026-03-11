@@ -1052,6 +1052,35 @@ function computeLineHeadways(nb, sb) {
   return { nbGaps: gaps(sortedNb), sbGaps: gaps(sortedSb) }
 }
 
+function computeGapStats(gaps) {
+  if (!gaps.length) {
+    return { avg: null, max: null, min: null, spread: null, ratio: null }
+  }
+
+  const avg = gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length
+  const max = Math.max(...gaps)
+  const min = Math.min(...gaps)
+  return {
+    avg: Math.round(avg),
+    max,
+    min,
+    spread: max - min,
+    ratio: max / Math.max(min, 1),
+  }
+}
+
+function classifyHeadwayHealth(gaps, count) {
+  const stats = computeGapStats(gaps)
+  if (count < 2 || stats.avg == null) return { health: 'quiet', stats }
+
+  let health = 'healthy'
+  if ((stats.max >= 12 && stats.min <= 4) || stats.ratio >= 3) health = 'bunched'
+  else if (stats.max >= 12 || stats.spread >= 6) health = 'uneven'
+  else if (stats.avg >= 18) health = 'sparse'
+
+  return { health, stats }
+}
+
 function summarizeHeadways(gaps, count) {
   if (!gaps.length || count < 2) {
     return {
@@ -1277,18 +1306,6 @@ function computeSystemSummaryMetrics(insightsItems) {
     }
   }
 
-  const healthScore = Math.max(
-    0,
-    Math.min(
-      100,
-      100
-        - totalAlerts * 8
-        - delayedLineIds.size * 10
-        - unevenLineIds.size * 8
-        - Math.max(0, 100 - (onTimeRate ?? 100)) / 2,
-    ),
-  )
-
   return {
     totalLines,
     totalVehicles,
@@ -1301,7 +1318,6 @@ function computeSystemSummaryMetrics(insightsItems) {
     onTimeRate,
     rankedLines,
     topIssue,
-    healthScore: Math.round(healthScore),
   }
 }
 
@@ -1343,11 +1359,6 @@ function renderSystemSummary(insightsItems) {
 
   const trendItems = [
     {
-      label: 'Health Score',
-      value: metrics.healthScore,
-      delta: formatMetricDelta(metrics.healthScore, previousSnapshot?.healthScore),
-    },
-    {
       label: 'On-Time Rate',
       value: metrics.onTimeRate != null ? `${metrics.onTimeRate}%` : '—',
       delta: formatMetricDelta(metrics.onTimeRate, previousSnapshot?.onTimeRate, { suffix: '%' }),
@@ -1369,11 +1380,6 @@ function renderSystemSummary(insightsItems) {
               <h2>${getActiveSystemMeta().label} Summary</h2>
               <p>${metrics.totalLines} line${metrics.totalLines === 1 ? '' : 's'} in system · Updated ${formatCurrentTime()}</p>
             </div>
-          </div>
-          <div class="system-score-card">
-            <p class="metric-chip-label">Health Score</p>
-            <p class="system-score-value">${metrics.healthScore}</p>
-            <p class="system-score-copy">${metrics.healthScore >= 85 ? 'Stable' : metrics.healthScore >= 70 ? 'Watch' : 'Stressed'}</p>
           </div>
         </div>
       </header>
