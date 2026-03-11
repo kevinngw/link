@@ -1,263 +1,9 @@
 import './style.css'
 import { registerSW } from 'virtual:pwa-register'
-
-const DATA_URL = './pulse-data.json'
-const OBA_BASE_URL = 'https://api.pugetsound.onebusaway.org/api/where'
-const OBA_KEY = (import.meta.env.VITE_OBA_KEY || 'TEST').trim() || 'TEST'
-const IS_PUBLIC_TEST_KEY = OBA_KEY === 'TEST'
-const ARRIVALS_CACHE_TTL_MS = IS_PUBLIC_TEST_KEY ? 60_000 : 20_000
-const OBA_MAX_RETRIES = 3
-const OBA_RETRY_BASE_DELAY_MS = 800
-const OBA_COOLDOWN_BASE_MS = IS_PUBLIC_TEST_KEY ? 20_000 : 5_000
-const OBA_COOLDOWN_MAX_MS = IS_PUBLIC_TEST_KEY ? 120_000 : 30_000
-const OBA_INTER_REQUEST_DELAY_MS = IS_PUBLIC_TEST_KEY ? 1_200 : 0
-const OBA_ARRIVALS_CONCURRENCY = IS_PUBLIC_TEST_KEY ? 1 : 3
-const COMPACT_LAYOUT_BREAKPOINT = 1100
-const VEHICLE_REFRESH_INTERVAL_MS = IS_PUBLIC_TEST_KEY ? 45_000 : 15_000
-const DIALOG_REFRESH_INTERVAL_MS = IS_PUBLIC_TEST_KEY ? 90_000 : 30_000
-const DIALOG_DISPLAY_SCROLL_INTERVAL_MS = 4_000
-const DIALOG_DISPLAY_DIRECTION_ROTATE_MS = 15_000
-const DIALOG_DISPLAY_DIRECTION_ANIMATION_MS = 520
-const GHOST_HISTORY_LIMIT = 6
-const GHOST_MAX_AGE_MS = 4 * 60_000
-const TRANSFER_WALKING_SPEED_KMPH = 4.8
-const TRANSFER_MAX_WALK_KM = 0.35
-const TRANSFER_FETCH_DELAY_MS = 3_000
-const TRANSFER_BOARDING_BUFFER_MS = 45_000
-const MAX_TRANSFER_RECOMMENDATIONS = 4
-const THEME_STORAGE_KEY = 'link-pulse-theme'
-const LANGUAGE_STORAGE_KEY = 'link-pulse-language'
-const DEFAULT_SYSTEM_ID = 'link'
-const SYSTEM_META = {
-  link: {
-    id: 'link',
-    agencyId: '40',
-    label: 'Link',
-    kicker: 'SEATTLE LIGHT RAIL',
-    title: 'LINK PULSE',
-    vehicleLabel: 'Train',
-    vehicleLabelPlural: 'Trains',
-  },
-  rapidride: {
-    id: 'rapidride',
-    agencyId: '1',
-    label: 'RapidRide',
-    kicker: 'KING COUNTY METRO',
-    title: 'RAPIDRIDE PULSE',
-    vehicleLabel: 'Bus',
-    vehicleLabelPlural: 'Buses',
-  },
-  swift: {
-    id: 'swift',
-    agencyId: '29',
-    label: 'Swift',
-    kicker: 'COMMUNITY TRANSIT',
-    title: 'SWIFT PULSE',
-    vehicleLabel: 'Bus',
-    vehicleLabelPlural: 'Buses',
-  },
-}
-
-const UI_COPY = {
-  en: {
-    languageToggle: '中文',
-    languageToggleAria: 'Switch to Chinese',
-    themeLight: 'Light',
-    themeDark: 'Dark',
-    themeToggleAria: 'Toggle color theme',
-    transitSystems: 'Transit systems',
-    boardViews: 'Board views',
-    tabMap: 'Map',
-    tabInsights: 'Insights',
-    statusSync: 'SYNC',
-    statusHold: 'HOLD',
-    statusFail: 'FAIL',
-    nowPrefix: 'Now',
-    waitingSnapshot: 'Waiting for snapshot',
-    updatedNow: 'Updated now',
-    updatedSecondsAgo: (seconds) => `Updated ${seconds}s ago`,
-    updatedMinutesAgo: (minutes) => `Updated ${minutes}m ago`,
-    station: 'Station',
-    serviceSummary: 'Service summary',
-    boardDirectionView: 'Board direction view',
-    both: 'Both',
-    auto: 'Auto',
-    board: 'Board',
-    exit: 'Exit',
-    northbound: 'Northbound (▲)',
-    southbound: 'Southbound (▼)',
-    train: 'Train',
-    currentMovement: 'Current movement',
-    closeTrainDialog: 'Close train dialog',
-    serviceAlert: 'Service Alert',
-    transitAdvisory: 'Transit advisory',
-    closeAlertDialog: 'Close alert dialog',
-    readOfficialAlert: 'Read official alert',
-    arriving: 'Arriving',
-    todayServiceUnavailable: 'Today service hours unavailable',
-    todayServiceSpan: (start, end) => `Today ${start} - ${end}`,
-    lastTrip: (time) => `Last trip ${time}`,
-    endsIn: (duration) => `Ends in ${duration}`,
-    firstTrip: (time) => `First trip ${time}`,
-    startsIn: (duration) => `Starts in ${duration}`,
-    serviceEnded: (time) => `Service ended ${time}`,
-    nextStart: (time) => `Next start ${time}`,
-    noNextServiceLoaded: 'No next service loaded',
-    ended: 'Ended',
-    nextFirstTrip: (time) => `Next first trip ${time}`,
-    noServiceRemainingToday: 'No service remaining today',
-    serviceHoursUnavailable: 'Service hours unavailable',
-    staticScheduleMissing: 'Static schedule data missing for this date',
-    unavailable: 'Unavailable',
-    serviceSummaryUnavailable: 'Service summary unavailable',
-    alertsWord: (count) => `alert${count === 1 ? '' : 's'}`,
-    scheduled: 'Scheduled',
-    onTime: 'On Time',
-    unknown: 'Unknown',
-    arrivingStatus: 'ARRIVING',
-    delayedStatus: 'DELAYED',
-    enRoute: 'EN ROUTE',
-    arrivingNow: 'Arriving now',
-    arrivingIn: (time) => `Arriving in ${time}`,
-    nextStopIn: (time) => `Next stop in ${time}`,
-    active: 'Active',
-    noLiveVehicles: (label) => `No live ${label}`,
-    liveCount: (count, label) => `${count} live ${label}`,
-    inServiceCount: (count, label) => `${count} ${label} in service`,
-    activeVehicles: (label) => `Active ${label}`,
-    previous: 'Previous',
-    now: 'Now',
-    next: 'Next',
-    direction: 'Direction',
-    terminal: 'Terminal',
-    etaToTerminal: 'ETA to Terminal',
-    upcomingStops: 'Upcoming stops',
-    liveEtaNow: 'Live ETA now',
-    nextStop: 'Next stop',
-    upcoming: 'Upcoming',
-    noDownstreamEta: 'No downstream ETA available for this train right now.',
-    terminalFallback: 'Terminal',
-    loadingArrivals: 'Loading arrivals...',
-    noUpcomingVehicles: (label) => `No upcoming ${label}`,
-    noAdditionalVehicles: (label) => `No additional ${label}`,
-    stopAway: (count) => `${count} stop${count === 1 ? '' : 's'} away`,
-    toDestination: (name) => `To ${name}`,
-    transfers: 'Transfers',
-    checkingNearbyConnections: 'Checking nearby connections...',
-    loadingTransferRecommendations: 'Loading transfer recommendations...',
-    closestBoardableConnections: 'Closest boardable connections from this station',
-    walkToStop: (minutes, stopName) => `Walk ${minutes} min to ${stopName}`,
-    walkKm: (distanceKm) => `${distanceKm.toFixed(1)} km walk`,
-    walkMeters: (meters) => `${meters} m walk`,
-    leaveNow: 'Leave now',
-    boardInOneMinute: 'Board in ~1 min',
-    boardInMinutes: (minutes) => `Board in ~${minutes} min`,
-    activeAlerts: (count) => `${count} active ${count === 1 ? 'alert' : 'alerts'}`,
-    noActiveAlerts: 'No active alerts.',
-    noAdditionalAlertDetails: 'No additional alert details available.',
-    affectedLineAlerts: (lineName, count) => `${lineName} Alerts`,
-    realtimeOffline: 'Realtime offline',
-  },
-  'zh-CN': {
-    languageToggle: 'EN',
-    languageToggleAria: '切换到英文',
-    themeLight: '浅色',
-    themeDark: '深色',
-    themeToggleAria: '切换主题',
-    transitSystems: '交通系统',
-    boardViews: '视图切换',
-    tabMap: '地图',
-    tabInsights: '洞察',
-    statusSync: '同步',
-    statusHold: '保留',
-    statusFail: '失败',
-    nowPrefix: '当前',
-    waitingSnapshot: '等待快照',
-    updatedNow: '刚刚更新',
-    updatedSecondsAgo: (seconds) => `${seconds} 秒前更新`,
-    updatedMinutesAgo: (minutes) => `${minutes} 分钟前更新`,
-    station: '站点',
-    serviceSummary: '服务摘要',
-    boardDirectionView: '到站屏方向视图',
-    both: '双向',
-    auto: '自动',
-    board: '到站屏',
-    exit: '退出',
-    northbound: '北向 (▲)',
-    southbound: '南向 (▼)',
-    train: '列车',
-    currentMovement: '当前位置',
-    closeTrainDialog: '关闭列车详情',
-    serviceAlert: '服务告警',
-    transitAdvisory: '交通提示',
-    closeAlertDialog: '关闭告警详情',
-    readOfficialAlert: '查看官方告警',
-    arriving: '即将到站',
-    todayServiceUnavailable: '今日运营时间不可用',
-    todayServiceSpan: (start, end) => `今日 ${start} - ${end}`,
-    lastTrip: (time) => `末班 ${time}`,
-    endsIn: (duration) => `${duration} 后结束`,
-    firstTrip: (time) => `首班 ${time}`,
-    startsIn: (duration) => `${duration} 后开始`,
-    serviceEnded: (time) => `已于 ${time} 收班`,
-    nextStart: (time) => `下次首班 ${time}`,
-    noNextServiceLoaded: '暂无下一班服务数据',
-    ended: '已结束',
-    nextFirstTrip: (time) => `下一次首班 ${time}`,
-    noServiceRemainingToday: '今日无剩余服务',
-    serviceHoursUnavailable: '运营时间不可用',
-    staticScheduleMissing: '当前日期缺少静态时刻表数据',
-    unavailable: '不可用',
-    serviceSummaryUnavailable: '暂无服务摘要',
-    alertsWord: () => '告警',
-    scheduled: '按时刻表',
-    onTime: '准点',
-    unknown: '未知',
-    arrivingStatus: '即将到站',
-    delayedStatus: '晚点',
-    enRoute: '运行中',
-    arrivingNow: '正在进站',
-    arrivingIn: (time) => `${time} 后到站`,
-    nextStopIn: (time) => `下一站 ${time}`,
-    active: '运营中',
-    noLiveVehicles: (label) => `暂无实时${label}`,
-    liveCount: (count, label) => `${count} 辆实时${label}`,
-    inServiceCount: (count, label) => `${count} 辆${label}运营中`,
-    activeVehicles: (label) => `${label}列表`,
-    previous: '上一站',
-    now: '当前',
-    next: '下一站',
-    direction: '方向',
-    terminal: '终点',
-    etaToTerminal: '到终点 ETA',
-    upcomingStops: '后续站点',
-    liveEtaNow: '实时 ETA',
-    nextStop: '下一站',
-    upcoming: '后续',
-    noDownstreamEta: '当前暂无这趟列车后续站点 ETA。',
-    terminalFallback: '终点',
-    loadingArrivals: '正在加载到站信息...',
-    noUpcomingVehicles: (label) => `暂无即将到站的${label}`,
-    noAdditionalVehicles: (label) => `暂无更多${label}`,
-    stopAway: (count) => `还有 ${count} 站`,
-    toDestination: (name) => `开往 ${name}`,
-    transfers: '换乘',
-    checkingNearbyConnections: '正在检查附近可换乘线路...',
-    loadingTransferRecommendations: '正在加载换乘建议...',
-    closestBoardableConnections: '从本站步行可达的最近可上车连接',
-    walkToStop: (minutes, stopName) => `步行 ${minutes} 分钟到 ${stopName}`,
-    walkKm: (distanceKm) => `步行 ${distanceKm.toFixed(1)} 公里`,
-    walkMeters: (meters) => `步行 ${meters} 米`,
-    leaveNow: '现在出发',
-    boardInOneMinute: '约 1 分钟后上车',
-    boardInMinutes: (minutes) => `约 ${minutes} 分钟后上车`,
-    activeAlerts: (count) => `${count} 条生效告警`,
-    noActiveAlerts: '当前没有生效告警。',
-    noAdditionalAlertDetails: '暂无更多告警详情。',
-    affectedLineAlerts: (lineName) => `${lineName} 告警`,
-    realtimeOffline: '实时数据离线',
-  },
-}
+import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DATA_URL, DEFAULT_SYSTEM_ID, DIALOG_DISPLAY_DIRECTION_ANIMATION_MS, DIALOG_DISPLAY_DIRECTION_ROTATE_MS, DIALOG_DISPLAY_SCROLL_INTERVAL_MS, DIALOG_REFRESH_INTERVAL_MS, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, MAX_TRANSFER_RECOMMENDATIONS, OBA_ARRIVALS_CONCURRENCY, OBA_BASE_URL, OBA_COOLDOWN_BASE_MS, OBA_COOLDOWN_MAX_MS, OBA_INTER_REQUEST_DELAY_MS, OBA_KEY, OBA_MAX_RETRIES, OBA_RETRY_BASE_DELAY_MS, SYSTEM_META, THEME_STORAGE_KEY, TRANSFER_BOARDING_BUFFER_MS, TRANSFER_FETCH_DELAY_MS, TRANSFER_MAX_WALK_KM, TRANSFER_WALKING_SPEED_KMPH, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
+import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, formatWalkDistance as formatWalkDistanceValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
+import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
+import { clamp, getBearingDegrees, haversineKm, normalizeName, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
 
 const state = {
   fetchedAt: '',
@@ -522,14 +268,6 @@ function getVehicleLabel() {
   return getActiveSystemMeta().vehicleLabel ?? 'Vehicle'
 }
 
-function pluralizeVehicleLabel(label) {
-  if (/bus$/i.test(label)) {
-    return `${label}es`
-  }
-
-  return `${label}s`
-}
-
 function getVehicleLabelPlural() {
   if (state.language === 'zh-CN') {
     return getVehicleLabel()
@@ -545,6 +283,38 @@ function copyForLanguage() {
 function copyValue(key, ...args) {
   const value = copyForLanguage()[key]
   return typeof value === 'function' ? value(...args) : value
+}
+
+function formatRelativeTime(dateString) {
+  return formatRelativeTimeValue(dateString, copyValue)
+}
+
+function formatCurrentTime() {
+  return formatCurrentTimeValue(state.language)
+}
+
+function formatArrivalTime(offsetSeconds) {
+  return formatArrivalTimeValue(offsetSeconds, state.language, copyValue)
+}
+
+function formatDurationFromMs(ms) {
+  return formatDurationFromMsValue(ms, state.language)
+}
+
+function formatServiceClock(clockValue) {
+  return formatServiceClockValue(clockValue, state.language)
+}
+
+function formatClockTime(timestamp) {
+  return formatClockTimeValue(timestamp, state.language)
+}
+
+function formatEtaClockFromNow(offsetSeconds) {
+  return formatEtaClockFromNowValue(offsetSeconds, state.language)
+}
+
+function formatWalkDistance(distanceKm) {
+  return formatWalkDistanceValue(distanceKm, copyValue)
 }
 
 function getDirectionBaseLabel(directionSymbol, includeSymbol = false) {
@@ -606,14 +376,6 @@ function getDialogDirectionSummary(directionSymbol, arrivalsBucket = [], station
   return summarizeDirectionDestinations(layoutDestinations)
 }
 
-function normalizeName(name) {
-  return name
-    .replace('Station', '')
-    .replace('Univ of Washington', 'UW')
-    .replace("Int'l", 'Intl')
-    .trim()
-}
-
 function getPreferredTheme() {
   const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
   if (storedTheme === 'light' || storedTheme === 'dark') return storedTheme
@@ -660,116 +422,6 @@ function syncCompactLayoutFromBoard() {
     state.compactLayout = shouldCompact
     render()
   }
-}
-
-function slugifyStation(value) {
-  return value
-    .toLowerCase()
-    .replace(/['.]/g, '')
-    .replace(/&/g, 'and')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(value, max))
-}
-
-function formatRelativeTime(dateString) {
-  if (!dateString) return copyValue('waitingSnapshot')
-
-  const deltaSeconds = Math.max(0, Math.round((Date.now() - new Date(dateString).getTime()) / 1000))
-  if (deltaSeconds < 10) return copyValue('updatedNow')
-  if (deltaSeconds < 60) return copyValue('updatedSecondsAgo', deltaSeconds)
-  return copyValue('updatedMinutesAgo', Math.round(deltaSeconds / 60))
-}
-
-function formatCurrentTime() {
-  return new Intl.DateTimeFormat(state.language === 'zh-CN' ? 'zh-CN' : 'en-US', {
-    timeZone: 'America/Los_Angeles',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: state.language !== 'zh-CN',
-  }).format(new Date())
-}
-
-function formatArrivalTime(offsetSeconds) {
-  if (offsetSeconds <= 0) return copyValue('arriving')
-  const minutes = Math.floor(offsetSeconds / 60)
-  const seconds = offsetSeconds % 60
-  if (state.language === 'zh-CN') {
-    if (minutes > 0) return `${minutes}分 ${seconds}秒`
-    return `${seconds}秒`
-  }
-
-  if (minutes > 0) return `${minutes}m ${seconds}s`
-  return `${seconds}s`
-}
-
-function getTodayDateKey() {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Los_Angeles',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
-  return formatter.format(new Date())
-}
-
-function getDateKeyWithOffset(offsetDays) {
-  const now = new Date()
-  now.setDate(now.getDate() + offsetDays)
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Los_Angeles',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
-  return formatter.format(now)
-}
-
-function parseClockToSeconds(value) {
-  const [hours = '0', minutes = '0', seconds = '0'] = String(value).split(':')
-  return Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds)
-}
-
-function getServiceDateTime(dateKey, clockValue) {
-  if (!dateKey || !clockValue) return null
-  const [year, month, day] = dateKey.split('-').map(Number)
-  const totalSeconds = parseClockToSeconds(clockValue)
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-  return new Date(year, month - 1, day, hours, minutes, seconds)
-}
-
-function formatDurationFromMs(ms) {
-  const totalMinutes = Math.max(0, Math.round(ms / 60_000))
-  const hours = Math.floor(totalMinutes / 60)
-  const minutes = totalMinutes % 60
-  if (state.language === 'zh-CN') {
-    if (hours && minutes) return `${hours}小时${minutes}分钟`
-    if (hours) return `${hours}小时`
-    return `${minutes}分钟`
-  }
-
-  if (hours && minutes) return `${hours}h ${minutes}m`
-  if (hours) return `${hours}h`
-  return `${minutes}m`
-}
-
-function formatServiceClock(clockValue) {
-  if (!clockValue) return ''
-  const [rawHours = '0', rawMinutes = '0'] = String(clockValue).split(':')
-  const hours24 = Number(rawHours)
-  const minutes = Number(rawMinutes)
-  const normalizedHours = ((hours24 % 24) + 24) % 24
-  if (state.language === 'zh-CN') {
-    return `${String(normalizedHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
-  }
-  const period = normalizedHours >= 12 ? 'PM' : 'AM'
-  const hours12 = normalizedHours % 12 || 12
-  return `${hours12}:${String(minutes).padStart(2, '0')} ${period}`
 }
 
 function getTodayServiceSpan(line) {
@@ -932,20 +584,6 @@ function renderServiceTimeline(line) {
   `
 }
 
-function formatAlertEffect(effect) {
-  return String(effect || 'SERVICE ALERT')
-    .replaceAll('_', ' ')
-    .toLowerCase()
-    .replace(/\b\w/g, (match) => match.toUpperCase())
-}
-
-function formatAlertSeverity(severity) {
-  return String(severity || 'INFO')
-    .replaceAll('_', ' ')
-    .toLowerCase()
-    .replace(/\b\w/g, (match) => match.toUpperCase())
-}
-
 function getAlertsForLine(lineId) {
   return state.alerts.filter((alert) => alert.lineIds.includes(lineId))
 }
@@ -981,10 +619,6 @@ function renderInlineAlerts(lineAlerts, lineId) {
       <span class="line-alert-badge-copy">${copyValue('alertsWord', lineAlerts.length)}</span>
     </button>
   `
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
 function getGlobalCooldownMs() {
@@ -1482,42 +1116,6 @@ function getVisibleLines() {
   return state.compactLayout ? state.lines.filter((line) => line.id === state.activeLineId) : state.lines
 }
 
-function computeLineHeadways(nb, sb) {
-  const sortedNb = [...nb].sort((a, b) => a.minutePosition - b.minutePosition)
-  const sortedSb = [...sb].sort((a, b) => a.minutePosition - b.minutePosition)
-  const gaps = (sorted) => sorted.slice(1).map((v, i) => Math.round(v.minutePosition - sorted[i].minutePosition))
-  return { nbGaps: gaps(sortedNb), sbGaps: gaps(sortedSb) }
-}
-
-function computeGapStats(gaps) {
-  if (!gaps.length) {
-    return { avg: null, max: null, min: null, spread: null, ratio: null }
-  }
-
-  const avg = gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length
-  const max = Math.max(...gaps)
-  const min = Math.min(...gaps)
-  return {
-    avg: Math.round(avg),
-    max,
-    min,
-    spread: max - min,
-    ratio: max / Math.max(min, 1),
-  }
-}
-
-function classifyHeadwayHealth(gaps, count) {
-  const stats = computeGapStats(gaps)
-  if (count < 2 || stats.avg == null) return { health: 'quiet', stats }
-
-  let health = 'healthy'
-  if ((stats.max >= 12 && stats.min <= 4) || stats.ratio >= 3) health = 'bunched'
-  else if (stats.max >= 12 || stats.spread >= 6) health = 'uneven'
-  else if (stats.avg >= 18) health = 'sparse'
-
-  return { health, stats }
-}
-
 function summarizeHeadways(gaps, count) {
   if (!gaps.length || count < 2) {
     return {
@@ -1548,21 +1146,6 @@ function renderHeadwaySummaryCard(label, gaps, count) {
       <p class="headway-health-copy">${detailText}</p>
     </div>
   `
-}
-
-function getDelayBuckets(vehicles) {
-  return vehicles.reduce((acc, vehicle) => {
-    const delay = Number(vehicle.scheduleDeviation ?? 0)
-    if (delay <= 60) acc.onTime += 1
-    else if (delay <= 300) acc.minorLate += 1
-    else acc.severeLate += 1
-    return acc
-  }, { onTime: 0, minorLate: 0, severeLate: 0 })
-}
-
-function formatPercent(value, total) {
-  if (!total) return '—'
-  return `${Math.round((value / total) * 100)}%`
 }
 
 function getDirectionBalance(nb, sb) {
@@ -1711,48 +1294,6 @@ function buildInsightsItems(lines) {
   })
 }
 
-function getLineAttentionReasons({ worstGap, severeLateCount, alertCount, balanceDelta }) {
-  const reasons = []
-
-  if (worstGap >= 12) {
-    reasons.push({
-      key: 'gap',
-      tone: 'alert',
-      label: state.language === 'zh-CN' ? '大间隔' : 'Large gap',
-    })
-  }
-  if (severeLateCount > 0) {
-    reasons.push({
-      key: 'late',
-      tone: 'warn',
-      label: state.language === 'zh-CN' ? '严重晚点' : 'Severe late',
-    })
-  }
-  if (alertCount > 0) {
-    reasons.push({
-      key: 'alert',
-      tone: 'info',
-      label: state.language === 'zh-CN' ? '有告警' : 'Alerted',
-    })
-  }
-  if (balanceDelta >= 2) {
-    reasons.push({
-      key: 'balance',
-      tone: 'warn',
-      label: state.language === 'zh-CN' ? '方向失衡' : 'Imbalanced',
-    })
-  }
-  if (!reasons.length) {
-    reasons.push({
-      key: 'healthy',
-      tone: 'healthy',
-      label: state.language === 'zh-CN' ? '健康' : 'Healthy',
-    })
-  }
-
-  return reasons
-}
-
 function renderAttentionReasonBadges(reasons) {
   return `
     <div class="attention-reason-badges">
@@ -1790,6 +1331,7 @@ function computeSystemSummaryMetrics(insightsItems) {
         severeLateCount,
         alertCount: item.lineAlerts.length,
         balanceDelta,
+        language: state.language,
       })
 
       return {
@@ -2988,18 +2530,6 @@ function renderTrainList() {
   return groupedRows
 }
 
-function formatClockTime(timestamp) {
-  return new Date(timestamp).toLocaleTimeString(state.language === 'zh-CN' ? 'zh-CN' : 'en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: state.language !== 'zh-CN',
-  })
-}
-
-function formatEtaClockFromNow(offsetSeconds) {
-  return formatClockTime(Date.now() + Math.max(0, offsetSeconds) * 1000)
-}
-
 function getVehicleDestinationLabel(vehicle, layout) {
   if (!layout?.stations?.length) {
     return vehicle.upcomingLabel ?? vehicle.toLabel ?? vehicle.currentStopLabel ?? copyValue('terminalFallback')
@@ -3068,23 +2598,8 @@ function syncDialogTitleMarquee() {
   title.classList.toggle('is-marquee', shouldMarquee)
 }
 
-function haversineKm(lat1, lon1, lat2, lon2) {
-  const R = 6371
-  const dLat = ((lat2 - lat1) * Math.PI) / 180
-  const dLon = ((lon2 - lon1) * Math.PI) / 180
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2
-  return 2 * R * Math.asin(Math.sqrt(a))
-}
-
 function getWalkMinutes(distanceKm) {
   return Math.max(1, Math.round((distanceKm / TRANSFER_WALKING_SPEED_KMPH) * 60))
-}
-
-function formatWalkDistance(distanceKm) {
-  if (distanceKm >= 1) return copyValue('walkKm', distanceKm)
-  return copyValue('walkMeters', Math.round(distanceKm * 1000))
 }
 
 function recordVehicleGhosts(lineId, vehicles) {
@@ -3118,15 +2633,6 @@ function recordVehicleGhosts(lineId, vehicles) {
 function getVehicleGhostTrail(lineId, vehicleId) {
   const history = state.vehicleGhosts.get(`${lineId}:${vehicleId}`) ?? []
   return history.slice(0, -1)
-}
-
-function getBearingDegrees(origin, target) {
-  const lat1 = (origin.lat * Math.PI) / 180
-  const lat2 = (target.lat * Math.PI) / 180
-  const deltaLon = ((target.lon - origin.lon) * Math.PI) / 180
-  const y = Math.sin(deltaLon) * Math.cos(lat2)
-  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLon)
-  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
 }
 
 function renderTransferRadar(station, recommendations) {
