@@ -5,7 +5,7 @@ import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArri
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
 import { clamp, getBearingDegrees, haversineKm, parseClockToSeconds, pluralizeVehicleLabel, slugifyStation } from './utils'
 import { createObaClient } from './oba'
-import { createArrivalsHelpers, getStatusTone } from './arrivals'
+import { createArrivalsHelpers, getLineRouteId, getStatusTone } from './arrivals'
 import { parseVehicle } from './vehicles'
 import { createMapRenderer } from './renderers/map'
 import { createTrainRenderers } from './renderers/trains'
@@ -196,8 +196,12 @@ const {
   arrivalsSbPinned,
   arrivalsSb,
   trainDialog,
+  trainDialogTitle,
+  trainDialogSubtitle,
   trainDialogClose,
   alertDialog,
+  alertDialogTitle,
+  alertDialogSubtitle,
   alertDialogLink,
   alertDialogClose,
 } = dialogElements
@@ -356,6 +360,12 @@ function getDirectionDestinationLabel(directionSymbol, layout) {
   return layout.stations[terminalIndex]?.label ?? ''
 }
 
+function getVehicleDestinationLabel(vehicle, layout) {
+  const terminalLabel = getDirectionDestinationLabel(vehicle?.directionSymbol, layout)
+  if (terminalLabel) return terminalLabel
+  return vehicle?.upcomingLabel || vehicle?.toLabel || vehicle?.currentStopLabel || ''
+}
+
 function formatLayoutDirectionLabel(directionSymbol, layout, options = {}) {
   return formatDirectionLabel(directionSymbol, getDirectionDestinationLabel(directionSymbol, layout), options)
 }
@@ -430,6 +440,10 @@ function syncCompactLayoutFromBoard() {
     state.compactLayout = shouldCompact
     render()
   }
+}
+
+function getInsightsTickerPageSize() {
+  return state.compactLayout ? 1 : 3
 }
 
 function getTodayServiceSpan(line) {
@@ -774,6 +788,27 @@ function refreshVehicleStatusMessages() {
   })
 }
 
+function refreshArrivalCountdowns() {
+  const arrivalElements = document.querySelectorAll('.arrival-item[data-arrival-time]')
+  arrivalElements.forEach((element) => {
+    const arrivalTime = Number(element.dataset.arrivalTime)
+    if (!Number.isFinite(arrivalTime)) return
+
+    const countdownElement = element.querySelector('.arrival-countdown')
+    const statusElement = element.querySelector('.arrival-status')
+    if (!countdownElement || !statusElement) return
+
+    const diffSeconds = Math.floor((arrivalTime - Date.now()) / 1000)
+    const scheduleDeviation = Number(element.dataset.scheduleDeviation ?? 0)
+    const serviceStatus = getArrivalServiceStatus(arrivalTime, scheduleDeviation)
+    const serviceTone = getStatusTone(serviceStatus)
+
+    countdownElement.textContent = formatArrivalTime(diffSeconds)
+    statusElement.textContent = serviceStatus
+    statusElement.className = `arrival-status arrival-status-${serviceTone}`
+  })
+}
+
 function formatVehicleSegment(vehicle) {
   if (vehicle.fromLabel === vehicle.toLabel || vehicle.progress === 0) {
     return state.language === 'zh-CN' ? `位于 ${vehicle.fromLabel}` : `At ${vehicle.fromLabel}`
@@ -790,6 +825,38 @@ function formatVehicleLocationSummary(vehicle) {
   return state.language === 'zh-CN'
     ? `正从 ${vehicle.fromLabel} 开往 ${vehicle.toLabel}`
     : `Running from ${vehicle.fromLabel} to ${vehicle.toLabel}`
+}
+
+function getTrainTimelineEntries(vehicle, layout) {
+  if (!layout?.stations?.length) return []
+
+  const currentIndex = Math.max(0, Math.min(layout.stations.length - 1, vehicle.currentIndex ?? 0))
+  const nextIndex = Math.max(0, Math.min(layout.stations.length - 1, vehicle.upcomingStopIndex ?? currentIndex))
+  const directionStep = vehicle.directionSymbol === '▲' ? -1 : vehicle.directionSymbol === '▼' ? 1 : 0
+  if (!directionStep) return []
+
+  const entries = []
+  let etaSeconds = Math.max(0, vehicle.nextOffset ?? 0)
+
+  for (let index = nextIndex; index >= 0 && index < layout.stations.length; index += directionStep) {
+    const station = layout.stations[index]
+    if (!station) break
+
+    entries.push({
+      label: station.label,
+      etaSeconds,
+      clockTime: formatClockTime(Date.now() + etaSeconds * 1000),
+      isNext: index === nextIndex,
+      isTerminal: index === 0 || index === layout.stations.length - 1,
+    })
+
+    const segmentMinutes = station.segmentMinutes ?? 0
+    const previousStation = layout.stations[index - 1]
+    const reverseSegmentMinutes = previousStation?.segmentMinutes ?? 0
+    etaSeconds += Math.round((directionStep > 0 ? segmentMinutes : reverseSegmentMinutes) * 60)
+  }
+
+  return entries
 }
 
 function renderFocusMetrics(vehicle) {
@@ -1040,6 +1107,29 @@ function getSystemIdFromUrl() {
   return DEFAULT_SYSTEM_ID
 }
 
+async function syncDialogFromUrl() {
+  const url = new URL(window.location.href)
+  const requestedSystemId = url.searchParams.get('system')
+  if (requestedSystemId && state.systemsById.has(requestedSystemId) && requestedSystemId !== state.activeSystemId) {
+    await switchSystem(requestedSystemId, { updateUrl: false, preserveDialog: false })
+  }
+
+  const requestedStation = url.searchParams.get('station')
+  if (!requestedStation) {
+    closeStationDialog()
+    return
+  }
+
+  const station = findStationByParam(requestedStation)
+  if (!station) {
+    closeStationDialog()
+    return
+  }
+
+  if (state.currentDialogStationId === station.id && dialog.open) return
+  await showStationDialog(station, { updateUrl: false })
+}
+
 const stationDialogDisplay = createStationDialogDisplayController({
   state,
   elements: dialogElements,
@@ -1265,6 +1355,49 @@ function buildTransferRecommendations(candidates, arrivalFeed) {
     .slice(0, MAX_TRANSFER_RECOMMENDATIONS)
 }
 
+async function refreshStationDialog(station) {
+  if (!station) return
+
+  state.currentDialogStation = station
+  state.currentDialogStationId = station.id
+  setDialogTitle(station.name)
+  renderStationServiceSummary(station)
+
+  const dialogStations = getDialogStations(station)
+  const arrivalsByLine = await Promise.all(dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line)))
+  renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
+
+  const stationAlerts = getStationDialogAlerts(station)
+  stationAlertsContainer.innerHTML = stationAlerts.length
+    ? stationAlerts.map((alert) => `
+        <article class="insight-exception insight-exception-warn">
+          <p>${alert.title || copyValue('serviceAlert')}</p>
+        </article>
+      `).join('')
+    : ''
+
+  const transferCandidates = getNearbyTransferCandidates(station)
+  if (!transferCandidates.length) {
+    renderTransferRecommendations([], false, station)
+    renderDialogDirectionView()
+    syncDialogTitleMarquee()
+    return
+  }
+
+  renderTransferRecommendations([], true, station)
+  const transferFeed = await fetchArrivalsForStopIds(transferCandidates.flatMap((candidate) => getStationStopIds(candidate.stop, candidate.line)))
+  renderTransferRecommendations(buildTransferRecommendations(transferCandidates, transferFeed), false, station)
+  renderDialogDirectionView()
+  syncDialogTitleMarquee()
+}
+
+async function showStationDialog(station, { updateUrl = true } = {}) {
+  await refreshStationDialog(station)
+  if (!dialog.open) dialog.showModal()
+  if (updateUrl) setStationParam(station)
+  startDialogAutoRefresh()
+}
+
 const { renderLine } = createMapRenderer({
   state,
   getAlertsForLine,
@@ -1374,6 +1507,17 @@ function attachTrainClickHandlers() {
       if (!vehicle) return
       state.currentTrainId = trainId
       renderTrainDialog(vehicle)
+    })
+  })
+}
+
+function attachAlertClickHandlers() {
+  const alertButtons = document.querySelectorAll('[data-alert-line-id]')
+  alertButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const line = state.lines.find((candidate) => candidate.id === button.dataset.alertLineId)
+      if (!line) return
+      renderAlertListDialog(line)
     })
   })
 }
