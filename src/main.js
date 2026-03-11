@@ -1,6 +1,6 @@
 import './style.css'
 import { registerSW } from 'virtual:pwa-register'
-import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DATA_URL, DEFAULT_SYSTEM_ID, DIALOG_DISPLAY_DIRECTION_ANIMATION_MS, DIALOG_DISPLAY_DIRECTION_ROTATE_MS, DIALOG_DISPLAY_SCROLL_INTERVAL_MS, DIALOG_REFRESH_INTERVAL_MS, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, MAX_TRANSFER_RECOMMENDATIONS, OBA_ARRIVALS_CONCURRENCY, OBA_BASE_URL, OBA_COOLDOWN_BASE_MS, OBA_COOLDOWN_MAX_MS, OBA_INTER_REQUEST_DELAY_MS, OBA_KEY, OBA_MAX_RETRIES, OBA_RETRY_BASE_DELAY_MS, SYSTEM_META, THEME_STORAGE_KEY, TRANSFER_BOARDING_BUFFER_MS, TRANSFER_FETCH_DELAY_MS, TRANSFER_MAX_WALK_KM, TRANSFER_WALKING_SPEED_KMPH, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
+import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DATA_URL, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, MAX_TRANSFER_RECOMMENDATIONS, OBA_ARRIVALS_CONCURRENCY, OBA_BASE_URL, OBA_COOLDOWN_BASE_MS, OBA_COOLDOWN_MAX_MS, OBA_INTER_REQUEST_DELAY_MS, OBA_KEY, OBA_MAX_RETRIES, OBA_RETRY_BASE_DELAY_MS, SYSTEM_META, THEME_STORAGE_KEY, TRANSFER_BOARDING_BUFFER_MS, TRANSFER_FETCH_DELAY_MS, TRANSFER_MAX_WALK_KM, TRANSFER_WALKING_SPEED_KMPH, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, formatWalkDistance as formatWalkDistanceValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
 import { clamp, getBearingDegrees, haversineKm, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
@@ -10,6 +10,9 @@ import { parseVehicle } from './vehicles'
 import { createMapRenderer } from './renderers/map'
 import { createTrainRenderers } from './renderers/trains'
 import { createInsightsRenderers } from './renderers/insights'
+import { getDialogElements } from './dialogs/dom'
+import { createStationDialogDisplayController } from './dialogs/station-display'
+import { createOverlayDialogs } from './dialogs/overlays'
 
 const state = {
   fetchedAt: '',
@@ -175,39 +178,28 @@ const themeToggleButton = document.querySelector('#theme-toggle')
 const statusPillElement = document.querySelector('#status-pill')
 const currentTimeElement = document.querySelector('#current-time')
 const updatedAtElement = document.querySelector('#updated-at')
-const dialog = document.querySelector('#station-dialog')
-const dialogTitle = document.querySelector('#dialog-title')
-const dialogTitleTrack = document.querySelector('#dialog-title-track')
-const dialogTitleText = document.querySelector('#dialog-title-text')
-const dialogTitleTextClone = document.querySelector('#dialog-title-text-clone')
-const dialogServiceSummary = document.querySelector('#dialog-service-summary')
-const dialogStatusPillElement = document.querySelector('#dialog-status-pill')
-const dialogUpdatedAtElement = document.querySelector('#dialog-updated-at')
-const dialogDisplay = document.querySelector('#dialog-display')
-const dialogDirectionTabs = [...document.querySelectorAll('[data-dialog-direction]')]
-const arrivalsTitleNb = document.querySelector('#arrivals-title-nb')
-const arrivalsTitleSb = document.querySelector('#arrivals-title-sb')
-const stationAlertsContainer = document.querySelector('#station-alerts-container')
-const transferSection = document.querySelector('#transfer-section')
-const arrivalsSectionNb = document.querySelector('[data-direction-section="nb"]')
-const arrivalsNbPinned = document.querySelector('#arrivals-nb-pinned')
-const arrivalsNb = document.querySelector('#arrivals-nb')
-const arrivalsSectionSb = document.querySelector('[data-direction-section="sb"]')
-const arrivalsSbPinned = document.querySelector('#arrivals-sb-pinned')
-const arrivalsSb = document.querySelector('#arrivals-sb')
-const trainDialog = document.querySelector('#train-dialog')
-const trainDialogTitle = document.querySelector('#train-dialog-title')
-const trainDialogSubtitle = document.querySelector('#train-dialog-subtitle')
-const trainDialogLine = document.querySelector('#train-dialog-line')
-const trainDialogStatus = document.querySelector('#train-dialog-status')
-const trainDialogClose = document.querySelector('#train-dialog-close')
-const alertDialog = document.querySelector('#alert-dialog')
-const alertDialogTitle = document.querySelector('#alert-dialog-title')
-const alertDialogSubtitle = document.querySelector('#alert-dialog-subtitle')
-const alertDialogLines = document.querySelector('#alert-dialog-lines')
-const alertDialogBody = document.querySelector('#alert-dialog-body')
-const alertDialogLink = document.querySelector('#alert-dialog-link')
-const alertDialogClose = document.querySelector('#alert-dialog-close')
+const dialogElements = getDialogElements()
+const {
+  dialog,
+  dialogServiceSummary,
+  dialogStatusPillElement,
+  dialogUpdatedAtElement,
+  dialogDisplay,
+  dialogDirectionTabs,
+  arrivalsTitleNb,
+  arrivalsTitleSb,
+  stationAlertsContainer,
+  transferSection,
+  arrivalsNbPinned,
+  arrivalsNb,
+  arrivalsSbPinned,
+  arrivalsSb,
+  trainDialog,
+  trainDialogClose,
+  alertDialog,
+  alertDialogLink,
+  alertDialogClose,
+} = dialogElements
 
 dialogDisplay.addEventListener('click', () => toggleDialogDisplayMode())
 trainDialogClose.addEventListener('click', () => closeTrainDialog())
@@ -1093,378 +1085,29 @@ function getSystemIdFromUrl() {
   return DEFAULT_SYSTEM_ID
 }
 
-function setDialogDisplayMode(isDisplayMode) {
-  state.dialogDisplayMode = isDisplayMode
-  dialog.classList.toggle('is-display-mode', isDisplayMode)
-  dialogDisplay.textContent = isDisplayMode ? copyValue('exit') : copyValue('board')
-  dialogDisplay.setAttribute('aria-label', isDisplayMode ? copyValue('exit') : copyValue('board'))
-  state.dialogDisplayDirection = 'both'
-  state.dialogDisplayAutoPhase = 'nb'
-  renderDialogDirectionView()
+const stationDialogDisplay = createStationDialogDisplayController({
+  state,
+  elements: dialogElements,
+  copyValue,
+  refreshStationDialog: (station) => refreshStationDialog(station),
+  clearStationParam,
+})
 
-  if (dialog.open && state.currentDialogStation) {
-    refreshStationDialog(state.currentDialogStation).catch(console.error)
-  }
-
-  syncDialogTitleMarquee()
-  syncDialogDisplayScroll()
-}
-
-function toggleDialogDisplayMode() {
-  setDialogDisplayMode(!state.dialogDisplayMode)
-}
-
-function stopDialogDirectionRotation() {
-  if (state.dialogDisplayDirectionTimer) {
-    window.clearInterval(state.dialogDisplayDirectionTimer)
-    state.dialogDisplayDirectionTimer = 0
-  }
-}
-
-function stopDialogDirectionAnimation() {
-  if (state.dialogDisplayDirectionAnimationTimer) {
-    window.clearTimeout(state.dialogDisplayDirectionAnimationTimer)
-    state.dialogDisplayDirectionAnimationTimer = 0
-  }
-
-  state.dialogDisplayAnimatingDirection = ''
-  arrivalsSectionNb?.classList.remove('is-direction-animating')
-  arrivalsSectionSb?.classList.remove('is-direction-animating')
-}
-
-function startDialogDirectionAnimation(direction) {
-  if (!state.dialogDisplayMode || !direction || direction === 'both') return
-
-  stopDialogDirectionAnimation()
-  state.dialogDisplayAnimatingDirection = direction
-  const targetSection = direction === 'nb' ? arrivalsSectionNb : arrivalsSectionSb
-  if (!targetSection) return
-
-  // Force animation restart when auto mode rotates back to the same panel later.
-  void targetSection.offsetWidth
-  targetSection.classList.add('is-direction-animating')
-  state.dialogDisplayDirectionAnimationTimer = window.setTimeout(() => {
-    targetSection.classList.remove('is-direction-animating')
-    state.dialogDisplayDirectionAnimationTimer = 0
-    if (state.dialogDisplayAnimatingDirection === direction) {
-      state.dialogDisplayAnimatingDirection = ''
-    }
-  }, DIALOG_DISPLAY_DIRECTION_ANIMATION_MS)
-}
-
-function renderDialogDirectionView({ animate = false } = {}) {
-  stopDialogDirectionRotation()
-  stopDialogDirectionAnimation()
-  const requestedDirection = state.dialogDisplayDirection
-  const direction = requestedDirection === 'auto' ? state.dialogDisplayAutoPhase : requestedDirection
-  dialogDirectionTabs.forEach((button) => {
-    button.classList.toggle('is-active', button.dataset.dialogDirection === requestedDirection)
-  })
-
-  dialog.classList.toggle('show-nb-only', state.dialogDisplayMode && direction === 'nb')
-  dialog.classList.toggle('show-sb-only', state.dialogDisplayMode && direction === 'sb')
-
-  if (animate) {
-    startDialogDirectionAnimation(direction)
-  }
-
-  if (state.dialogDisplayMode && requestedDirection === 'auto') {
-    state.dialogDisplayDirectionTimer = window.setInterval(() => {
-      state.dialogDisplayAutoPhase = state.dialogDisplayAutoPhase === 'nb' ? 'sb' : 'nb'
-      renderDialogDirectionView({ animate: true })
-    }, DIALOG_DISPLAY_DIRECTION_ROTATE_MS)
-  }
-}
-
-function stopDialogAutoRefresh() {
-  if (state.dialogRefreshTimer) {
-    window.clearTimeout(state.dialogRefreshTimer)
-    state.dialogRefreshTimer = 0
-  }
-}
-
-function stopDialogDisplayScroll() {
-  if (state.dialogDisplayTimer) {
-    window.clearInterval(state.dialogDisplayTimer)
-    state.dialogDisplayTimer = 0
-  }
-}
-
-function applyDialogDisplayOffset(listElement, key) {
-  const items = [...listElement.querySelectorAll('.arrival-item:not(.muted)')]
-  listElement.style.transform = 'translateY(0)'
-
-  if (!state.dialogDisplayMode || items.length <= 3) return
-
-  const rowGap = Number.parseFloat(window.getComputedStyle(listElement).rowGap || '0') || 0
-  const itemHeight = items[0].getBoundingClientRect().height + rowGap
-  const maxIndex = Math.max(0, items.length - 3)
-  const safeIndex = Math.min(state.dialogDisplayIndexes[key], maxIndex)
-  listElement.style.transform = `translateY(-${safeIndex * itemHeight}px)`
-}
-
-function syncDialogDisplayScroll() {
-  stopDialogDisplayScroll()
-  state.dialogDisplayIndexes = { nb: 0, sb: 0 }
-  applyDialogDisplayOffset(arrivalsNb, 'nb')
-  applyDialogDisplayOffset(arrivalsSb, 'sb')
-
-  if (!state.dialogDisplayMode) return
-
-  state.dialogDisplayTimer = window.setInterval(() => {
-    for (const [key, listElement] of [['nb', arrivalsNb], ['sb', arrivalsSb]]) {
-      const items = [...listElement.querySelectorAll('.arrival-item:not(.muted)')]
-      if (items.length <= 3) continue
-
-      const maxIndex = Math.max(0, items.length - 3)
-      state.dialogDisplayIndexes[key] = state.dialogDisplayIndexes[key] >= maxIndex ? 0 : state.dialogDisplayIndexes[key] + 1
-      applyDialogDisplayOffset(listElement, key)
-    }
-  }, DIALOG_DISPLAY_SCROLL_INTERVAL_MS)
-}
-
-function refreshArrivalCountdowns() {
-  if (!dialog.open) return
-
-  const arrivalItems = dialog.querySelectorAll('.arrival-item[data-arrival-time]')
-  arrivalItems.forEach((item) => {
-    const arrivalTime = Number(item.dataset.arrivalTime)
-    const scheduleDeviation = Number(item.dataset.scheduleDeviation || 0)
-    const timeElement = item.querySelector('.arrival-countdown')
-    const statusElement = item.querySelector('.arrival-status')
-    if (!timeElement || !statusElement) return
-
-    timeElement.textContent = formatArrivalTime(Math.floor((arrivalTime - Date.now()) / 1000))
-
-    const serviceStatus = getArrivalServiceStatus(arrivalTime, scheduleDeviation)
-    const serviceTone = getStatusTone(serviceStatus)
-    statusElement.textContent = serviceStatus
-    statusElement.className = `arrival-status arrival-status-${serviceTone}`
-  })
-}
-
-function startDialogAutoRefresh() {
-  stopDialogAutoRefresh()
-  if (!state.currentDialogStation) return
-
-  const scheduleNextRefresh = () => {
-    state.dialogRefreshTimer = window.setTimeout(async () => {
-      if (!dialog.open || !state.currentDialogStation) return
-      await refreshStationDialog(state.currentDialogStation).catch(console.error)
-      scheduleNextRefresh()
-    }, DIALOG_REFRESH_INTERVAL_MS)
-  }
-
-  scheduleNextRefresh()
-}
-
-function closeStationDialog() {
-  state.currentDialogStationId = ''
-  state.currentDialogStation = null
-  if (dialog.open) {
-    dialog.close()
-  } else {
-    stopDialogAutoRefresh()
-    stopDialogDisplayScroll()
-    stopDialogDirectionRotation()
-    setDialogDisplayMode(false)
-    clearStationParam()
-  }
-}
-
-async function syncDialogFromUrl() {
-  const requestedSystemId = getSystemIdFromUrl()
-  if (requestedSystemId !== state.activeSystemId) {
-    await switchSystem(requestedSystemId, { updateUrl: false, preserveDialog: false })
-  }
-
-  const stationParam = new URL(window.location.href).searchParams.get('station')
-  const station = findStationByParam(stationParam)
-
-  state.isSyncingFromUrl = true
-  try {
-    if (!station) {
-      state.currentDialogStationId = ''
-      if (dialog.open) dialog.close()
-      return
-    }
-
-    state.activeTab = 'map'
-    render()
-
-    if (state.currentDialogStationId === station.id && dialog.open) {
-      return
-    }
-
-    await showStationDialog(station, false)
-  } finally {
-    state.isSyncingFromUrl = false
-  }
-}
-
-function renderStationAlertPills(station) {
-  const alerts = getStationDialogAlerts(station)
-  if (!alerts.length) {
-    stationAlertsContainer.innerHTML = ''
-    stationAlertsContainer.hidden = true
-    return
-  }
-  stationAlertsContainer.hidden = false
-  stationAlertsContainer.innerHTML = `
-    <div class="station-alerts">
-      ${alerts
-        .map(
-          (alert, i) => `
-        <button class="station-alert-pill" data-alert-idx="${i}" type="button">
-          <span class="station-alert-pill-meta">${formatAlertSeverity(alert.severity)} · ${formatAlertEffect(alert.effect)}</span>
-          <span class="station-alert-pill-copy">${alert.title || copyValue('serviceAlert')}</span>
-        </button>
-      `,
-        )
-        .join('')}
-    </div>
-  `
-  stationAlertsContainer.querySelectorAll('.station-alert-pill').forEach((button) => {
-    const alert = alerts[Number(button.dataset.alertIdx)]
-    if (!alert) return
-    button.addEventListener('click', () => {
-      const line = state.lines.find((l) => alert.lineIds.includes(l.id))
-      if (line) renderAlertListDialog(line)
-    })
-  })
-}
-
-async function showStationDialog(station, updateUrl = true) {
-  setDialogTitle(station.name)
-  renderStationServiceSummary(station)
-  state.currentDialogStationId = station.id
-  state.currentDialogStation = station
-
-  renderStationAlertPills(station)
-  renderTransferRecommendations([], true)
-  renderArrivalLists({ nb: [], sb: [] }, true)
-  if (updateUrl) {
-    setStationParam(station)
-  }
-  dialog.showModal()
-  syncDialogTitleMarquee()
-  startDialogAutoRefresh()
-
-  await refreshStationDialog(station)
-}
-
-async function refreshStationDialog(station) {
-  const requestId = state.activeDialogRequest + 1
-  state.activeDialogRequest = requestId
-
-  const isStaleDialogRequest = () => state.activeDialogRequest !== requestId || !dialog.open
-
-  try {
-    const dialogStations = getDialogStations(station)
-    const sharedStopIds = dialogStations.flatMap(({ station: matchedStation, line }) => getStationStopIds(matchedStation, line))
-    const arrivalFeed = await fetchArrivalsForStopIds(sharedStopIds)
-    const arrivalsByLine = await Promise.all(
-      dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line, arrivalFeed)),
-    )
-    if (isStaleDialogRequest()) return
-    renderStationAlertPills(station)
-    renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
-  } catch (error) {
-    if (isStaleDialogRequest()) return
-    renderTransferRecommendations([], false, station)
-    arrivalsNb.innerHTML = `<div class="arrival-item muted">${error.message}</div>`
-    arrivalsSb.innerHTML = `<div class="arrival-item muted">${state.language === 'zh-CN' ? '请稍后重试' : 'Retry in a moment'}</div>`
-    return
-  }
-
-  try {
-    const transferCandidates = getNearbyTransferCandidates(station)
-    if (!transferCandidates.length) {
-      if (isStaleDialogRequest()) return
-      renderTransferRecommendations([], false, station)
-      return
-    }
-
-    await sleep(TRANSFER_FETCH_DELAY_MS)
-    if (isStaleDialogRequest()) return
-
-    const transferStopIds = transferCandidates.flatMap(({ stop, line }) => getStationStopIds(stop, line))
-    const transferArrivalFeed = await fetchArrivalsForStopIds(transferStopIds)
-    if (isStaleDialogRequest()) return
-    renderTransferRecommendations(buildTransferRecommendations(transferCandidates, transferArrivalFeed), false, station)
-  } catch {
-    if (isStaleDialogRequest()) return
-    renderTransferRecommendations([], false, station)
-  }
-}
-
-function getVehicleDestinationLabel(vehicle, layout) {
-  if (!layout?.stations?.length) {
-    return vehicle.upcomingLabel ?? vehicle.toLabel ?? vehicle.currentStopLabel ?? copyValue('terminalFallback')
-  }
-
-  const terminalIndex = vehicle.directionSymbol === '▲' ? 0 : layout.stations.length - 1
-  return layout.stations[terminalIndex]?.label ?? vehicle.upcomingLabel
-}
-
-function getTrainTimelineEntries(vehicle, layout, maxEntries = 6) {
-  if (!layout?.stations?.length) return []
-
-  const directionStep = vehicle.directionSymbol === '▲' ? -1 : 1
-  const timeline = []
-  const seenIndexes = new Set()
-  const nextIndex = vehicle.upcomingStopIndex ?? vehicle.currentIndex
-  const nextOffset = Math.max(0, vehicle.nextOffset ?? 0)
-
-  const pushEntry = (stationIndex, etaSeconds, { isNext = false, isTerminal = false } = {}) => {
-    if (stationIndex == null || seenIndexes.has(stationIndex)) return
-    const station = layout.stations[stationIndex]
-    if (!station) return
-    seenIndexes.add(stationIndex)
-    timeline.push({
-      id: `${vehicle.id}:${station.id}`,
-      label: station.label,
-      etaSeconds: Math.max(0, Math.round(etaSeconds)),
-      clockTime: formatEtaClockFromNow(etaSeconds),
-      isNext,
-      isTerminal,
-    })
-  }
-
-  pushEntry(nextIndex, nextOffset, { isNext: true })
-
-  let runningEtaSeconds = nextOffset
-  for (let stationIndex = nextIndex + directionStep; timeline.length < maxEntries; stationIndex += directionStep) {
-    if (stationIndex < 0 || stationIndex >= layout.stations.length) break
-
-    const previousIndex = stationIndex - directionStep
-    const previousStation = layout.stations[previousIndex]
-    runningEtaSeconds += Math.max(0, Math.round((previousStation?.segmentMinutes ?? 0) * 60))
-    const isTerminal = stationIndex === 0 || stationIndex === layout.stations.length - 1
-    pushEntry(stationIndex, runningEtaSeconds, { isTerminal })
-  }
-
-  return timeline
-}
-
-function setDialogTitle(title) {
-  dialogTitleText.textContent = title
-  dialogTitleTextClone.textContent = title
-  syncDialogTitleMarquee()
-}
-
-function syncDialogTitleMarquee() {
-  const title = dialogTitle
-  const track = dialogTitleTrack
-  if (!title || !track) return
-
-  const shouldMarquee =
-    state.dialogDisplayMode &&
-    dialog.open &&
-    dialogTitleText.scrollWidth > title.clientWidth
-
-  title.classList.toggle('is-marquee', shouldMarquee)
-}
+const {
+  setDialogDisplayMode,
+  toggleDialogDisplayMode,
+  stopDialogDirectionRotation,
+  stopDialogDirectionAnimation,
+  renderDialogDirectionView,
+  stopDialogAutoRefresh,
+  stopDialogDisplayScroll,
+  applyDialogDisplayOffset,
+  syncDialogDisplayScroll,
+  startDialogAutoRefresh,
+  closeStationDialog,
+  setDialogTitle,
+  syncDialogTitleMarquee,
+} = stationDialogDisplay
 
 function getWalkMinutes(distanceKm) {
   return Math.max(1, Math.round((distanceKm / TRANSFER_WALKING_SPEED_KMPH) * 60))
@@ -1743,156 +1386,29 @@ function attachLineSwitcherHandlers() {
   })
 }
 
-function closeTrainDialog() {
-  state.currentTrainId = ''
-  if (trainDialog.open) trainDialog.close()
-}
+const overlayDialogs = createOverlayDialogs({
+  state,
+  elements: dialogElements,
+  copyValue,
+  formatAlertSeverity,
+  formatAlertEffect,
+  getAlertsForLine: (lineId) => getAlertsForLine(lineId),
+  getDirectionBaseLabel,
+  getVehicleLabel,
+  getVehicleDestinationLabel,
+  getTrainTimelineEntries,
+  getStatusTone,
+  getVehicleStatusPills,
+  renderStatusPills,
+  formatArrivalTime,
+})
 
-function closeAlertDialog() {
-  if (alertDialog.open) alertDialog.close()
-}
-
-function renderAlertListDialog(line) {
-  const lineAlerts = getAlertsForLine(line.id)
-  alertDialogTitle.textContent = copyValue('affectedLineAlerts', line.name, lineAlerts.length)
-  alertDialogSubtitle.textContent = copyValue('activeAlerts', lineAlerts.length)
-  alertDialogLines.textContent = line.name
-  alertDialogBody.textContent = ''
-  alertDialogBody.innerHTML = lineAlerts.length
-    ? lineAlerts
-        .map(
-          (alert) => `
-            <article class="alert-dialog-item">
-              <p class="alert-dialog-item-meta">${formatAlertSeverity(alert.severity)} • ${formatAlertEffect(alert.effect)}</p>
-              <p class="alert-dialog-item-title">${alert.title || copyValue('serviceAlert')}</p>
-              <p class="alert-dialog-item-copy">${alert.description || copyValue('noAdditionalAlertDetails')}</p>
-              ${
-                alert.url
-                  ? `<p class="alert-dialog-item-link-wrap"><a class="alert-dialog-link" href="${alert.url}" target="_blank" rel="noreferrer">${copyValue('readOfficialAlert')}</a></p>`
-                  : ''
-              }
-            </article>
-          `,
-        )
-        .join('')
-    : `<p class="alert-dialog-item-copy">${copyValue('noActiveAlerts')}</p>`
-  alertDialogLink.hidden = true
-  alertDialogLink.removeAttribute('href')
-
-  if (!alertDialog.open) alertDialog.showModal()
-}
-
-function attachAlertClickHandlers() {
-  const alertButtons = document.querySelectorAll('[data-alert-line-id]')
-  alertButtons.forEach((button) => {
-    button.addEventListener('click', () => {
-      const line = state.lines.find((candidate) => candidate.id === button.dataset.alertLineId)
-      if (!line) return
-      renderAlertListDialog(line)
-    })
-  })
-}
-
-function renderTrainDialog(vehicle) {
-  const isBetweenStops = vehicle.fromLabel !== vehicle.toLabel && vehicle.progress > 0 && vehicle.progress < 1
-  const previousName = isBetweenStops ? vehicle.fromLabel : vehicle.previousLabel
-  const currentName = isBetweenStops ? `${vehicle.fromLabel} -> ${vehicle.toLabel}` : vehicle.currentStopLabel
-  const currentLabel = isBetweenStops ? 'Between' : 'Now'
-  const nextName = isBetweenStops ? vehicle.toLabel : vehicle.upcomingLabel
-  const segmentProgress = isBetweenStops ? vehicle.progress : 0.5
-  const layout = state.layouts.get(vehicle.lineId)
-  const timelineEntries = getTrainTimelineEntries(vehicle, layout)
-  const destinationLabel = layout ? getVehicleDestinationLabel(vehicle, layout) : vehicle.upcomingLabel
-  const terminalEtaSeconds = timelineEntries.at(-1)?.etaSeconds ?? Math.max(0, vehicle.nextOffset ?? 0)
-  const directionLabel = getDirectionBaseLabel(vehicle.directionSymbol)
-
-  trainDialogTitle.textContent = `${vehicle.lineName} ${getVehicleLabel()} ${vehicle.label}`
-  trainDialogSubtitle.textContent = state.language === 'zh-CN' ? `${directionLabel} · ${copyValue('toDestination', destinationLabel)}` : `${directionLabel} to ${destinationLabel}`
-  trainDialogStatus.className = `train-detail-status train-list-status-${getStatusTone(vehicle.serviceStatus)}`
-  trainDialogStatus.innerHTML = renderStatusPills(getVehicleStatusPills(vehicle))
-  trainDialog.querySelector('.train-eta-panel')?.remove()
-  trainDialogLine.innerHTML = `
-    <div class="train-detail-spine" style="--line-color:${vehicle.lineColor};"></div>
-    <div
-      class="train-detail-marker-floating"
-      style="--line-color:${vehicle.lineColor}; --segment-progress:${segmentProgress}; --direction-offset:${vehicle.directionSymbol === '▼' ? '10px' : '-10px'};"
-    >
-      <span class="train-detail-vehicle-marker">
-        <svg viewBox="-10 -10 20 20" class="train-detail-arrow" aria-hidden="true">
-          <path d="M 0 -8 L 7 6 L -7 6 Z" transform="${vehicle.directionSymbol === '▼' ? 'rotate(180)' : ''}"></path>
-        </svg>
-      </span>
-    </div>
-    <div class="train-detail-stop">
-      <span class="train-detail-marker"></span>
-      <div>
-        <p class="train-detail-label">${copyValue('previous')}</p>
-        <p class="train-detail-name">${previousName}</p>
-      </div>
-    </div>
-    <div class="train-detail-stop is-current">
-      <span class="train-detail-marker train-detail-marker-ghost"></span>
-      <div>
-        <p class="train-detail-label">${currentLabel === 'Between' ? (state.language === 'zh-CN' ? '区间' : 'Between') : copyValue('now')}</p>
-        <p class="train-detail-name">${currentName}</p>
-      </div>
-    </div>
-    <div class="train-detail-stop">
-      <span class="train-detail-marker"></span>
-      <div>
-        <p class="train-detail-label">${copyValue('next')}</p>
-        <p class="train-detail-name">${nextName}</p>
-      </div>
-    </div>
-  `
-  trainDialogLine.insertAdjacentHTML(
-    'afterend',
-    `
-      <section class="train-eta-panel">
-        <div class="train-eta-summary">
-          <div class="metric-chip">
-            <p class="metric-chip-label">${copyValue('direction')}</p>
-            <p class="metric-chip-value">${directionLabel}</p>
-          </div>
-          <div class="metric-chip">
-            <p class="metric-chip-label">${copyValue('terminal')}</p>
-            <p class="metric-chip-value">${destinationLabel}</p>
-          </div>
-          <div class="metric-chip">
-            <p class="metric-chip-label">${copyValue('etaToTerminal')}</p>
-            <p class="metric-chip-value">${formatArrivalTime(terminalEtaSeconds)}</p>
-          </div>
-        </div>
-        <div class="train-eta-timeline">
-          <div class="train-eta-header">
-            <p class="train-detail-label">${copyValue('upcomingStops')}</p>
-            <p class="train-eta-header-copy">${copyValue('liveEtaNow')}</p>
-          </div>
-          ${timelineEntries.length
-            ? timelineEntries
-              .map(
-                (entry) => `
-                  <article class="train-eta-stop${entry.isNext ? ' is-next' : ''}${entry.isTerminal ? ' is-terminal' : ''}">
-                    <div>
-                      <p class="train-eta-stop-label">${entry.isNext ? copyValue('nextStop') : entry.isTerminal ? copyValue('terminal') : copyValue('upcoming')}</p>
-                      <p class="train-eta-stop-name">${entry.label}</p>
-                    </div>
-                    <div class="train-eta-stop-side">
-                      <p class="train-eta-stop-countdown">${formatArrivalTime(entry.etaSeconds)}</p>
-                      <p class="train-eta-stop-clock">${entry.clockTime}</p>
-                    </div>
-                  </article>
-                `,
-              )
-              .join('')
-            : `<p class="train-readout muted">${copyValue('noDownstreamEta')}</p>`}
-        </div>
-      </section>
-    `,
-  )
-
-  if (!trainDialog.open) trainDialog.showModal()
-}
+const {
+  closeTrainDialog,
+  closeAlertDialog,
+  renderAlertListDialog,
+  renderTrainDialog,
+} = overlayDialogs
 
 function attachTrainClickHandlers() {
   const trainItems = document.querySelectorAll('[data-train-id]')
