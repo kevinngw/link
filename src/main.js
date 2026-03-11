@@ -1355,6 +1355,125 @@ function buildTransferRecommendations(candidates, arrivalFeed) {
     .slice(0, MAX_TRANSFER_RECOMMENDATIONS)
 }
 
+function buildInsightsItems(lines) {
+  return lines.map((line) => {
+    const layout = state.layouts.get(line.id)
+    const vehicles = state.vehiclesByLine.get(line.id) ?? []
+    const nb = vehicles.filter((vehicle) => vehicle.directionSymbol === '▲')
+    const sb = vehicles.filter((vehicle) => vehicle.directionSymbol === '▼')
+    const lineAlerts = getAlertsForLine(line.id)
+
+    return {
+      line,
+      layout,
+      vehicles,
+      nb,
+      sb,
+      lineAlerts,
+    }
+  })
+}
+
+function computeSystemSummaryMetrics(insightsItems) {
+  const totalLines = insightsItems.length
+  const totalVehicles = insightsItems.reduce((sum, item) => sum + item.vehicles.length, 0)
+  const totalAlerts = insightsItems.reduce((sum, item) => sum + item.lineAlerts.length, 0)
+  const impactedLines = insightsItems.filter((item) => item.lineAlerts.length > 0).length
+  const impactedStopCount = new Set(insightsItems.flatMap((item) => item.lineAlerts.flatMap((alert) => alert.stopIds ?? []))).size
+  const allVehicles = insightsItems.flatMap((item) => item.vehicles)
+  const delayBuckets = getDelayBuckets(allVehicles)
+
+  const rankedLines = insightsItems
+    .map((item) => {
+      const { nbGaps, sbGaps } = computeLineHeadways(item.nb, item.sb)
+      const worstGap = [...nbGaps, ...sbGaps].length ? Math.max(...nbGaps, ...sbGaps) : 0
+      const severeLateCount = item.vehicles.filter((vehicle) => Number(vehicle.scheduleDeviation ?? 0) > 300).length
+      const balanceDelta = Math.abs(item.nb.length - item.sb.length)
+      const nbHealth = classifyHeadwayHealth(nbGaps, item.nb.length).health
+      const sbHealth = classifyHeadwayHealth(sbGaps, item.sb.length).health
+      const isUneven = [nbHealth, sbHealth].some((health) => health === 'uneven' || health === 'bunched' || health === 'sparse')
+      const hasSevereLate = severeLateCount > 0
+      const score = item.lineAlerts.length * 5 + severeLateCount * 3 + Math.max(0, worstGap - 10)
+      const attentionReasons = getLineAttentionReasons({
+        worstGap,
+        severeLateCount,
+        alertCount: item.lineAlerts.length,
+        balanceDelta,
+        language: state.language,
+      })
+
+      return {
+        line: item.line,
+        score,
+        worstGap,
+        severeLateCount,
+        alertCount: item.lineAlerts.length,
+        balanceDelta,
+        hasSevereLate,
+        isUneven,
+        attentionReasons,
+      }
+    })
+    .sort((left, right) => right.score - left.score || right.worstGap - left.worstGap)
+
+  const delayedLineIds = new Set(rankedLines.filter((item) => item.hasSevereLate).map((item) => item.line.id))
+  const unevenLineIds = new Set(rankedLines.filter((item) => item.isUneven).map((item) => item.line.id))
+  const lateOnlyLineCount = rankedLines.filter((item) => item.hasSevereLate && !item.isUneven).length
+  const unevenOnlyLineCount = rankedLines.filter((item) => item.isUneven && !item.hasSevereLate).length
+  const mixedIssueLineCount = rankedLines.filter((item) => item.hasSevereLate && item.isUneven).length
+  const attentionLineCount = new Set([...delayedLineIds, ...unevenLineIds]).size
+  const healthyLineCount = Math.max(0, totalLines - attentionLineCount)
+  const onTimeRate = totalVehicles ? Math.round((delayBuckets.onTime / totalVehicles) * 100) : null
+  const priorityLines = rankedLines.filter((item) => item.score > 0).slice(0, 2)
+
+  let topIssue = {
+    tone: 'healthy',
+    copy: state.language === 'zh-CN' ? '当前没有明显的主要问题。' : 'No major active issues right now.',
+  }
+  const topLine = rankedLines[0] ?? null
+  if (topLine?.alertCount) {
+    topIssue = {
+      tone: 'info',
+      copy: state.language === 'zh-CN'
+        ? `${topLine.line.name} 当前有 ${topLine.alertCount} 条生效告警。`
+        : `${topLine.line.name} has ${topLine.alertCount} active alert${topLine.alertCount === 1 ? '' : 's'}.`,
+    }
+  } else if (topLine?.worstGap >= 12) {
+    topIssue = {
+      tone: 'alert',
+      copy: state.language === 'zh-CN'
+        ? `当前最大实时间隔为空 ${topLine.line.name} 的 ${topLine.worstGap} 分钟。`
+        : `Largest live gap: ${topLine.worstGap} min on ${topLine.line.name}.`,
+    }
+  } else if (topLine?.severeLateCount) {
+    topIssue = {
+      tone: 'warn',
+      copy: state.language === 'zh-CN'
+        ? `${topLine.line.name} 有 ${topLine.severeLateCount} 辆${topLine.severeLateCount === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()}晚点超过 5 分钟。`
+        : `${topLine.line.name} has ${topLine.severeLateCount} ${topLine.severeLateCount === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()} running 5+ min late.`,
+    }
+  }
+
+  return {
+    totalLines,
+    totalVehicles,
+    totalAlerts,
+    impactedLines,
+    impactedStopCount,
+    delayedLineIds,
+    unevenLineIds,
+    lateOnlyLineCount,
+    unevenOnlyLineCount,
+    mixedIssueLineCount,
+    attentionLineCount,
+    healthyLineCount,
+    onTimeRate,
+    rankedLines,
+    priorityLines,
+    topIssue,
+  }
+}
+
 async function refreshStationDialog(station) {
   if (!station) return
 
