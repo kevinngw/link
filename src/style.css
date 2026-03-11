@@ -1964,7 +1964,8 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   min-width: 0;
 }
 
@@ -2072,16 +2073,136 @@ h1 {
 }
 
 @media (max-width: 700px) {
+  .dialog-content {
+    padding: 16px;
+  }
+
   .dialog-header {
     grid-template-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+  }
+
+  .dialog-header h3 {
+    font-size: 1.1rem;
+    line-height: 1.25;
+  }
+
+  .dialog-service-summary {
+    margin-top: 6px;
+    font-size: 0.78rem;
   }
 
   .dialog-actions {
     justify-items: stretch;
+    gap: 8px;
   }
 
   .dialog-actions-top {
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: start;
+    justify-content: stretch;
+    gap: 8px;
+  }
+
+  .dialog-direction-tabs {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .dialog-direction-tab {
+    min-width: 0;
+    padding: 8px 10px;
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+  }
+
+  .dialog-actions .status-pill {
+    align-self: stretch;
+    justify-content: center;
+    padding-inline: 10px;
+  }
+
+  .dialog-mode-button {
+    min-width: 60px;
+    height: 40px;
+    padding: 0 10px;
+    font-size: 0.74rem;
+  }
+
+  .dialog-meta {
+    margin-top: 0;
+  }
+
+  .dialog-meta .updated-at {
+    margin-top: 0;
+    font-size: 0.8rem;
+  }
+
+  .dialog-body {
+    gap: 14px;
+  }
+
+  .arrivals-section {
+    padding: 14px;
+  }
+
+  .arrivals-title {
+    margin-bottom: 10px;
+    font-size: 0.86rem;
+  }
+
+  .arrival-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 10px 12px;
+    padding: 12px;
+  }
+
+  .arrival-meta {
+    align-items: start;
+  }
+
+  .arrival-line-token {
+    width: 24px;
+    height: 24px;
+    margin-top: 1px;
+  }
+
+  .arrival-copy {
+    gap: 5px;
+  }
+
+  .arrival-vehicle {
+    white-space: normal;
+    text-wrap: balance;
+  }
+
+  .arrival-destination {
+    white-space: normal;
+  }
+
+  .arrival-side {
+    justify-items: end;
+    align-self: stretch;
+    min-width: 74px;
+  }
+
+  .arrival-status {
+    font-size: 0.64rem;
+  }
+
+  .arrival-time {
+    font-size: 1.02rem;
+  }
+
+  .arrival-precision {
+    max-width: 12ch;
+    font-size: 0.68rem;
+    text-wrap: pretty;
   }
 }
 
@@ -2329,6 +2450,7 @@ h1 {
   font-weight: 600;
   color: var(--accent-strong);
   letter-spacing: 0.05em;
+  line-height: 1.35;
 }
 
 .arrivals-list {
@@ -2345,10 +2467,10 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 12px;
+  padding: 12px;
   background: var(--surface-soft);
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid var(--border-color);
   min-width: 0;
 }
@@ -2364,7 +2486,7 @@ h1 {
 
 .arrival-copy {
   display: grid;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -2382,15 +2504,18 @@ h1 {
 }
 
 .arrival-vehicle {
-  font-size: 0.85rem;
-  color: color-mix(in srgb, var(--text-primary) 80%, transparent);
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: color-mix(in srgb, var(--text-primary) 88%, transparent);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .arrival-destination {
-  font-size: 0.76rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -2398,8 +2523,10 @@ h1 {
 }
 
 .arrival-time {
-  font-size: 0.9rem;
-  font-weight: 600;
+  display: grid;
+  gap: 2px;
+  font-size: 0.96rem;
+  font-weight: 700;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -2408,7 +2535,7 @@ h1 {
 .arrival-side {
   display: grid;
   justify-items: end;
-  gap: 4px;
+  gap: 6px;
   flex: 0 0 auto;
   text-align: right;
 }

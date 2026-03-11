@@ -582,6 +582,30 @@ function formatLayoutDirectionLabel(directionSymbol, layout, options = {}) {
   return formatDirectionLabel(directionSymbol, getDirectionDestinationLabel(directionSymbol, layout), options)
 }
 
+function summarizeDirectionDestinations(destinations) {
+  const uniqueDestinations = [...new Set(destinations.map((destination) => destination?.trim()).filter(Boolean))]
+  if (!uniqueDestinations.length) return ''
+  const labels = uniqueDestinations.slice(0, 2)
+  if (uniqueDestinations.length > 2) {
+    labels.push(state.language === 'zh-CN' ? '等' : 'etc.')
+  }
+  return labels.join(' / ')
+}
+
+function getDialogDirectionSummary(directionSymbol, arrivalsBucket = [], station = state.currentDialogStation) {
+  const arrivalDestinations = arrivalsBucket.map((arrival) => arrival.destination)
+  const arrivalSummary = summarizeDirectionDestinations(arrivalDestinations)
+  if (arrivalSummary) return arrivalSummary
+
+  if (!station) return ''
+
+  const layoutDestinations = getDialogStations(station)
+    .map(({ line }) => state.layouts.get(line.id))
+    .map((layout) => getDirectionDestinationLabel(directionSymbol, layout))
+
+  return summarizeDirectionDestinations(layoutDestinations)
+}
+
 function normalizeName(name) {
   return name
     .replace('Station', '')
@@ -2150,11 +2174,17 @@ function renderArrivalLists(arrivals, loading = false) {
         </span>
         <span class="arrival-side">
           <span class="arrival-status arrival-status-${serviceTone}">${serviceStatus}</span>
-          <span class="arrival-time"><span class="arrival-countdown">${timeStr}</span><span class="arrival-precision">${precisionInfo}</span></span>
+          <span class="arrival-time">
+            <span class="arrival-countdown">${timeStr}</span>
+            <span class="arrival-precision">${precisionInfo}</span>
+          </span>
         </span>
       </div>
     `
   }
+
+  const nbSummary = getDialogDirectionSummary('▲', arrivals.nb)
+  const sbSummary = getDialogDirectionSummary('▼', arrivals.sb)
 
   if (loading) {
     arrivalsNbPinned.innerHTML = ''
@@ -2163,16 +2193,6 @@ function renderArrivalLists(arrivals, loading = false) {
     arrivalsSb.innerHTML = `<div class="arrival-item muted">${copyValue('loadingArrivals')}</div>`
     syncDialogDisplayScroll()
     return
-  }
-
-  const summarizeDestinations = (bucket) => {
-    const uniqueDestinations = [...new Set(bucket.map((arrival) => arrival.destination).filter(Boolean))]
-    if (!uniqueDestinations.length) return ''
-    const labels = uniqueDestinations.slice(0, 2)
-    if (uniqueDestinations.length > 2) {
-      labels.push(state.language === 'zh-CN' ? '等' : 'etc.')
-    }
-    return labels.join(' / ')
   }
 
   const renderBucket = (bucket, pinnedElement, listElement) => {
@@ -2195,8 +2215,8 @@ function renderArrivalLists(arrivals, loading = false) {
 
   renderBucket(arrivals.nb, arrivalsNbPinned, arrivalsNb)
   renderBucket(arrivals.sb, arrivalsSbPinned, arrivalsSb)
-  arrivalsTitleNb.textContent = formatDirectionLabel('▲', summarizeDestinations(arrivals.nb), { includeSymbol: true })
-  arrivalsTitleSb.textContent = formatDirectionLabel('▼', summarizeDestinations(arrivals.sb), { includeSymbol: true })
+  arrivalsTitleNb.textContent = formatDirectionLabel('▲', nbSummary, { includeSymbol: true })
+  arrivalsTitleSb.textContent = formatDirectionLabel('▼', sbSummary, { includeSymbol: true })
 
   syncDialogDisplayScroll()
 }
@@ -3498,8 +3518,8 @@ function render() {
   systemBarElement.setAttribute('aria-label', copyValue('transitSystems'))
   viewBarElement.setAttribute('aria-label', copyValue('boardViews'))
   document.querySelector('#dialog-direction-tabs')?.setAttribute('aria-label', copyValue('boardDirectionView'))
-  arrivalsTitleNb.textContent = formatDirectionLabel('▲', '', { includeSymbol: true })
-  arrivalsTitleSb.textContent = formatDirectionLabel('▼', '', { includeSymbol: true })
+  arrivalsTitleNb.textContent = formatDirectionLabel('▲', getDialogDirectionSummary('▲'), { includeSymbol: true })
+  arrivalsTitleSb.textContent = formatDirectionLabel('▼', getDialogDirectionSummary('▼'), { includeSymbol: true })
   dialogDisplay.textContent = state.dialogDisplayMode ? copyValue('exit') : copyValue('board')
   dialogDisplay.setAttribute('aria-label', state.dialogDisplayMode ? copyValue('exit') : copyValue('board'))
   trainDialogClose.setAttribute('aria-label', copyValue('closeTrainDialog'))
