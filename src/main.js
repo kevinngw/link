@@ -1803,10 +1803,10 @@ function renderTrainList() {
                   <h2>${line.name}</h2>
                   ${renderInlineAlerts(lineAlerts, line.id)}
                 </div>
-                <p>${lineVehicles.length} ${lineVehicles.length === 1 ? vehicleLabel.toLowerCase() : getVehicleLabelPlural().toLowerCase()} in service</p>
+                <p>${lineVehicles.length} ${lineVehicles.length === 1 ? vehicleLabel.toLowerCase() : getVehicleLabelPlural().toLowerCase()} in service · ${getTodayServiceSpan(line)}</p>
               </div>
             </div>
-          </header>
+            </header>
           ${renderLineStatusMarquee(line.color, lineVehicles)}
           <div class="line-readout line-readout-grid train-columns">
             ${renderTrainColumn('NB', northboundVehicles)}
