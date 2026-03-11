@@ -664,7 +664,17 @@ h1 {
 .station-label {
   fill: var(--text-primary);
   font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
   transition: all 0.2s ease;
+}
+
+.station-label-multiline {
+  font-size: 12.5px;
+}
+
+.station-label tspan {
+  dominant-baseline: hanging;
 }
 
 .station-hitbox {
@@ -2836,8 +2846,8 @@ h1 {
 
   .screen-header {
     display: grid;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: 8px;
+    margin-bottom: 8px;
   }
 
   .screen-kicker {
@@ -2853,7 +2863,7 @@ h1 {
   .screen-meta {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, max-content));
-    gap: 8px;
+    gap: 6px 8px;
     margin-top: 0;
     text-align: left;
     justify-content: start;
@@ -2873,8 +2883,8 @@ h1 {
     position: sticky;
     top: max(8px, var(--safe-area-top));
     z-index: 20;
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: 6px;
+    margin-bottom: 8px;
     padding: 2px 0 0;
   }
 
@@ -2924,25 +2934,30 @@ h1 {
 
   .line-card,
   .panel-card {
-    padding: 16px 14px 14px;
+    padding: 12px 12px 10px;
     border-radius: 18px;
   }
 
   .line-card-header {
-    gap: 10px;
-    margin-bottom: 6px;
+    gap: 8px;
+    margin-bottom: 2px;
   }
 
   .line-title {
-    gap: 10px;
+    gap: 8px;
   }
 
   .line-title h2 {
-    font-size: 1.05rem;
+    font-size: 1rem;
   }
 
   .line-title p {
-    font-size: 0.82rem;
+    font-size: 0.78rem;
+    line-height: 1.2;
+  }
+
+  .line-title-copy p:last-child {
+    display: none;
   }
 
   .service-reminder {
@@ -2950,38 +2965,26 @@ h1 {
   }
 
   .line-marquee {
-    margin-top: 8px;
-    padding-top: 8px;
-  }
-
-  .line-marquee-track {
-    gap: 8px;
-  }
-
-  .line-marquee-item {
-    padding: 6px 10px;
-    font-size: 0.72rem;
-  }
-
-  .line-marquee-token {
-    width: 18px;
-    height: 18px;
-    font-size: 0.62rem;
+    display: none;
   }
 
   .line-diagram {
     display: block;
-    height: clamp(480px, 64dvh, 820px);
-    min-height: 480px;
-    margin-top: 6px;
+    height: clamp(560px, 78dvh, 980px);
+    min-height: 560px;
+    margin-top: 2px;
   }
 
   .station-label {
+    font-size: 16px;
+  }
+
+  .station-label-multiline {
     font-size: 14px;
   }
 
   .segment-time {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .times-item-main {

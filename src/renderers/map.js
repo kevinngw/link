@@ -13,6 +13,35 @@ export function createMapRenderer(deps) {
     renderServiceReminderChip,
   } = deps
 
+  function splitStationLabel(label) {
+    const words = String(label).trim().split(/\s+/).filter(Boolean)
+    if (words.length <= 1 || label.length <= 16) return [label]
+
+    const midpoint = Math.ceil(words.length / 2)
+    const firstLine = words.slice(0, midpoint).join(' ')
+    const secondLine = words.slice(midpoint).join(' ')
+
+    if (Math.max(firstLine.length, secondLine.length) > label.length - 4) {
+      return [label]
+    }
+
+    return [firstLine, secondLine]
+  }
+
+  function renderStationLabel(station, layout) {
+    const labelLines = splitStationLabel(station.label)
+    const baseY = labelLines.length > 1 ? -5 : 5
+    const labelClass = `station-label${labelLines.length > 1 ? ' station-label-multiline' : ''}`
+
+    return `
+      <text x="${layout.labelX}" y="${baseY}" class="${labelClass}">
+        ${labelLines
+          .map((line, index) => `<tspan x="${layout.labelX}" dy="${index === 0 ? 0 : 15}">${line}</tspan>`)
+          .join('')}
+      </text>
+    `
+  }
+
   function renderLine(line) {
     const layout = state.layouts.get(line.id)
     const vehicles = state.vehiclesByLine.get(line.id) ?? []
@@ -41,8 +70,8 @@ export function createMapRenderer(deps) {
                 : ''
             }
             ${hasAlert ? `<circle cx="${layout.trackX + alertDotOffset}" cy="-8" r="4" class="station-alert-dot"></circle>` : ''}
-            <text x="${layout.labelX}" y="5" class="station-label">${station.label}</text>
-            <rect x="0" y="-24" width="400" height="48" fill="transparent" class="station-hitbox"></rect>
+            ${renderStationLabel(station, layout)}
+            <rect x="0" y="-30" width="420" height="60" fill="transparent" class="station-hitbox"></rect>
           </g>
         `
       })

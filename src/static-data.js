@@ -6,8 +6,8 @@ export function buildLayout(line) {
   const stationGap = 48
   const topPadding = 44
   const bottomPadding = 28
-  const trackX = 88
-  const labelX = 122
+  const trackX = 76
+  const labelX = 106
   const height = topPadding + bottomPadding + (orderedStops.length - 1) * stationGap
   const stationIndexByStopId = new Map()
 
