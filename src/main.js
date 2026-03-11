@@ -86,6 +86,7 @@ const state = {
   alerts: [],
   obaCooldownUntil: 0,
   obaRateLimitStreak: 0,
+  systemSnapshots: new Map(),
 }
 
 const updateSW = registerSW({
@@ -1038,6 +1039,10 @@ function renderLineSwitcher() {
   return `<section class="line-switcher">${buttons}</section>`
 }
 
+function getVisibleLines() {
+  return state.compactLayout ? state.lines.filter((line) => line.id === state.activeLineId) : state.lines
+}
+
 function computeLineHeadways(nb, sb) {
   const sortedNb = [...nb].sort((a, b) => a.minutePosition - b.minutePosition)
   const sortedSb = [...sb].sort((a, b) => a.minutePosition - b.minutePosition)
@@ -1212,6 +1217,247 @@ function buildLineExceptions(line, nb, sb, lineAlerts) {
   }
 
   return exceptions.slice(0, 4)
+}
+
+function buildInsightsItems(lines) {
+  return lines.map((line) => {
+    const layout = state.layouts.get(line.id)
+    const vehicles = state.vehiclesByLine.get(line.id) ?? []
+    const nb = vehicles.filter((v) => v.directionSymbol === '▲')
+    const sb = vehicles.filter((v) => v.directionSymbol === '▼')
+    const lineAlerts = getAlertsForLine(line.id)
+
+    return {
+      line,
+      layout,
+      vehicles,
+      nb,
+      sb,
+      lineAlerts,
+      exceptions: buildLineExceptions(line, nb, sb, lineAlerts),
+    }
+  })
+}
+
+function computeSystemSummaryMetrics(insightsItems) {
+  const totalLines = insightsItems.length
+  const totalVehicles = insightsItems.reduce((sum, item) => sum + item.vehicles.length, 0)
+  const totalAlerts = insightsItems.reduce((sum, item) => sum + item.lineAlerts.length, 0)
+  const impactedLines = insightsItems.filter((item) => item.lineAlerts.length > 0).length
+  const allVehicles = insightsItems.flatMap((item) => item.vehicles)
+  const delayBuckets = getDelayBuckets(allVehicles)
+  const delayedLineIds = new Set(
+    insightsItems
+      .filter((item) => item.vehicles.some((vehicle) => Number(vehicle.scheduleDeviation ?? 0) > 300))
+      .map((item) => item.line.id),
+  )
+  const unevenLineIds = new Set(
+    insightsItems
+      .filter((item) => {
+        const { nbGaps, sbGaps } = computeLineHeadways(item.nb, item.sb)
+        const nbHealth = classifyHeadwayHealth(nbGaps, item.nb.length).health
+        const sbHealth = classifyHeadwayHealth(sbGaps, item.sb.length).health
+        return [nbHealth, sbHealth].some((health) => health === 'uneven' || health === 'bunched' || health === 'sparse')
+      })
+      .map((item) => item.line.id),
+  )
+  const attentionLineCount = new Set([...delayedLineIds, ...unevenLineIds]).size
+  const healthyLineCount = Math.max(0, totalLines - attentionLineCount)
+  const onTimeRate = totalVehicles ? Math.round((delayBuckets.onTime / totalVehicles) * 100) : null
+
+  const rankedLines = insightsItems
+    .map((item) => {
+      const { nbGaps, sbGaps } = computeLineHeadways(item.nb, item.sb)
+      const worstGap = [...nbGaps, ...sbGaps].length ? Math.max(...nbGaps, ...sbGaps) : 0
+      const severeLateCount = item.vehicles.filter((vehicle) => Number(vehicle.scheduleDeviation ?? 0) > 300).length
+      const score = item.lineAlerts.length * 5 + severeLateCount * 3 + Math.max(0, worstGap - 10)
+      return { line: item.line, score, worstGap, severeLateCount, alertCount: item.lineAlerts.length }
+    })
+    .sort((left, right) => right.score - left.score || right.worstGap - left.worstGap)
+
+  let topIssue = { tone: 'healthy', copy: 'No major active issues right now.' }
+  const topLine = rankedLines[0] ?? null
+  if (topLine?.alertCount) {
+    topIssue = {
+      tone: 'info',
+      copy: `${topLine.line.name} has ${topLine.alertCount} active alert${topLine.alertCount === 1 ? '' : 's'}.`,
+    }
+  } else if (topLine?.worstGap >= 12) {
+    topIssue = {
+      tone: 'alert',
+      copy: `Largest live gap: ${topLine.worstGap} min on ${topLine.line.name}.`,
+    }
+  } else if (topLine?.severeLateCount) {
+    topIssue = {
+      tone: 'warn',
+      copy: `${topLine.line.name} has ${topLine.severeLateCount} ${topLine.severeLateCount === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()} running 5+ min late.`,
+    }
+  }
+
+  const healthScore = Math.max(
+    0,
+    Math.min(
+      100,
+      100
+        - totalAlerts * 8
+        - delayedLineIds.size * 10
+        - unevenLineIds.size * 8
+        - Math.max(0, 100 - (onTimeRate ?? 100)) / 2,
+    ),
+  )
+
+  return {
+    totalLines,
+    totalVehicles,
+    totalAlerts,
+    impactedLines,
+    delayedLineIds,
+    unevenLineIds,
+    attentionLineCount,
+    healthyLineCount,
+    onTimeRate,
+    rankedLines,
+    topIssue,
+    healthScore: Math.round(healthScore),
+  }
+}
+
+function formatMetricDelta(current, previous, { suffix = '', invert = false } = {}) {
+  if (current == null || previous == null || current === previous) return 'Flat vs last snapshot'
+
+  const delta = current - previous
+  const positiveIsGood = invert ? delta < 0 : delta > 0
+  const arrow = delta > 0 ? '↑' : '↓'
+  return `${positiveIsGood ? 'Improving' : 'Worse'} ${arrow} ${Math.abs(delta)}${suffix}`
+}
+
+function renderSystemSummary(insightsItems) {
+  const metrics = computeSystemSummaryMetrics(insightsItems)
+  const previousSnapshot = state.systemSnapshots.get(state.activeSystemId)?.previous ?? null
+
+  const exceptions = []
+  if (metrics.totalAlerts > 0) {
+    exceptions.push({
+      tone: 'info',
+      copy: `${metrics.totalAlerts} active alert${metrics.totalAlerts === 1 ? '' : 's'} across ${metrics.impactedLines} line${metrics.impactedLines === 1 ? '' : 's'}.`,
+    })
+  }
+  if (metrics.delayedLineIds.size > 0) {
+    exceptions.push({
+      tone: 'warn',
+      copy: `${metrics.delayedLineIds.size} line${metrics.delayedLineIds.size === 1 ? '' : 's'} have vehicles running 5+ min late.`,
+    })
+  }
+  if (metrics.unevenLineIds.size > 0) {
+    exceptions.push({
+      tone: 'alert',
+      copy: `${metrics.unevenLineIds.size} line${metrics.unevenLineIds.size === 1 ? '' : 's'} show uneven spacing right now.`,
+    })
+  }
+  if (!exceptions.length) {
+    exceptions.push({ tone: 'healthy', copy: 'System looks stable right now with no major active issues.' })
+  }
+
+  const trendItems = [
+    {
+      label: 'Health Score',
+      value: metrics.healthScore,
+      delta: formatMetricDelta(metrics.healthScore, previousSnapshot?.healthScore),
+    },
+    {
+      label: 'On-Time Rate',
+      value: metrics.onTimeRate != null ? `${metrics.onTimeRate}%` : '—',
+      delta: formatMetricDelta(metrics.onTimeRate, previousSnapshot?.onTimeRate, { suffix: '%' }),
+    },
+    {
+      label: 'Attention Lines',
+      value: metrics.attentionLineCount,
+      delta: formatMetricDelta(metrics.attentionLineCount, previousSnapshot?.attentionLineCount, { invert: true }),
+    },
+  ]
+
+  return `
+    <article class="panel-card panel-card-wide system-summary-card">
+      <header class="panel-header">
+        <div class="system-summary-header">
+          <div class="line-title">
+            <span class="line-token" style="--line-color:var(--accent-strong);">${getActiveSystemMeta().label[0]}</span>
+            <div class="line-title-copy">
+              <h2>${getActiveSystemMeta().label} Summary</h2>
+              <p>${metrics.totalLines} line${metrics.totalLines === 1 ? '' : 's'} in system · Updated ${formatCurrentTime()}</p>
+            </div>
+          </div>
+          <div class="system-score-card">
+            <p class="metric-chip-label">Health Score</p>
+            <p class="system-score-value">${metrics.healthScore}</p>
+            <p class="system-score-copy">${metrics.healthScore >= 85 ? 'Stable' : metrics.healthScore >= 70 ? 'Watch' : 'Stressed'}</p>
+          </div>
+        </div>
+      </header>
+      <div class="system-summary-hero">
+        <div class="insight-exception insight-exception-${metrics.topIssue.tone}">
+          <p>${metrics.topIssue.copy}</p>
+        </div>
+        <div class="system-trend-strip">
+          ${trendItems.map((item) => `
+            <div class="metric-chip system-trend-chip">
+              <p class="metric-chip-label">${item.label}</p>
+              <p class="metric-chip-value">${item.value}</p>
+              <p class="system-trend-copy">${item.delta}</p>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="metric-strip system-summary-strip">
+        <div class="metric-chip">
+          <p class="metric-chip-label">Healthy Lines</p>
+          <p class="metric-chip-value">${metrics.healthyLineCount}</p>
+        </div>
+        <div class="metric-chip">
+          <p class="metric-chip-label">Live ${getVehicleLabelPlural()}</p>
+          <p class="metric-chip-value">${metrics.totalVehicles}</p>
+        </div>
+        <div class="metric-chip ${metrics.totalAlerts ? 'metric-chip-warn' : 'metric-chip-healthy'}">
+          <p class="metric-chip-label">Alerts</p>
+          <p class="metric-chip-value">${metrics.totalAlerts}</p>
+        </div>
+        <div class="metric-chip ${metrics.attentionLineCount ? 'metric-chip-warn' : 'metric-chip-healthy'}">
+          <p class="metric-chip-label">Lines Needing Attention</p>
+          <p class="metric-chip-value">${metrics.attentionLineCount}</p>
+        </div>
+      </div>
+      <div class="system-ranking">
+        <div class="insight-exceptions-header">
+          <p class="headway-chart-title">Attention Ranking</p>
+          <p class="headway-chart-copy">${state.error ? 'Realtime degraded, using last successful snapshot' : 'Derived from the current live snapshot only'}</p>
+        </div>
+        <div class="system-ranking-list">
+          ${metrics.rankedLines.slice(0, 3).map(({ line, score, worstGap, alertCount, severeLateCount }) => `
+            <div class="system-ranking-item">
+              <div class="line-title">
+                <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
+                <div class="line-title-copy">
+                  <p class="headway-chart-title">${line.name}</p>
+                  <p class="headway-chart-copy">Score ${score}${worstGap ? ` · gap ${worstGap} min` : ''}${alertCount ? ` · ${alertCount} alert${alertCount === 1 ? '' : 's'}` : ''}${severeLateCount ? ` · ${severeLateCount} severe late` : ''}</p>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="insight-exceptions">
+        <div class="insight-exceptions-header">
+          <p class="headway-chart-title">System Status</p>
+          <p class="headway-chart-copy">${state.error ? 'Realtime degraded, using last successful snapshot' : 'Derived from the current live snapshot only'}</p>
+        </div>
+        ${exceptions.map((item) => `
+          <div class="insight-exception insight-exception-${item.tone}">
+            <p>${item.copy}</p>
+          </div>
+        `).join('')}
+      </div>
+    </article>
+  `
 }
 
 function buildInsightsTicker(items) {
@@ -1928,16 +2174,16 @@ function renderLine(line) {
       <header class="line-card-header">
         <div class="line-title">
           <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
-          <div>
+          <div class="line-title-copy">
             <div class="line-title-row">
               <h2>${line.name}</h2>
               ${renderInlineAlerts(lineAlerts, line.id)}
             </div>
             <p>${vehicles.length} live ${vehicles.length === 1 ? vehicleLabel.toLowerCase() : getVehicleLabelPlural().toLowerCase()}</p>
             <p>${getTodayServiceSpan(line)}</p>
-            ${renderServiceReminderChip(line)}
           </div>
         </div>
+        ${renderServiceReminderChip(line)}
       </header>
       ${renderLineStatusMarquee(line.color, vehicles.map((vehicle) => ({ ...vehicle, lineToken: line.name[0] })))}
       <svg viewBox="0 0 460 ${layout.height}" class="line-diagram" role="img" aria-label="${line.name} live LED board">
@@ -2004,16 +2250,16 @@ function renderTrainList() {
           <header class="line-card-header train-list-section-header">
             <div class="line-title">
               <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
-              <div>
+              <div class="line-title-copy">
                 <div class="line-title-row">
                   <h2>${line.name}</h2>
                   ${renderInlineAlerts(lineAlerts, line.id)}
                 </div>
                 <p>${lineVehicles.length} ${lineVehicles.length === 1 ? vehicleLabel.toLowerCase() : getVehicleLabelPlural().toLowerCase()} in service · ${getTodayServiceSpan(line)}</p>
-                ${renderServiceReminderChip(line)}
               </div>
             </div>
-            </header>
+            ${renderServiceReminderChip(line)}
+          </header>
           ${renderLineStatusMarquee(line.color, lineVehicles)}
           <div class="line-readout line-readout-grid train-columns">
             ${renderTrainColumn('NB', northboundVehicles)}
@@ -2200,42 +2446,29 @@ function buildTransferRecommendations(candidates, arrivalFeed) {
 }
 
 function renderInsightsBoard() {
-  const visibleLines = state.compactLayout ? state.lines.filter((line) => line.id === state.activeLineId) : state.lines
+  const visibleLines = getVisibleLines()
+  const systemInsightsItems = buildInsightsItems(state.lines)
   const vehicleLabel = getVehicleLabel()
-  const insightsItems = visibleLines.map((line) => {
-    const layout = state.layouts.get(line.id)
-    const vehicles = state.vehiclesByLine.get(line.id) ?? []
-    const nb = vehicles.filter((v) => v.directionSymbol === '▲')
-    const sb = vehicles.filter((v) => v.directionSymbol === '▼')
-    const lineAlerts = getAlertsForLine(line.id)
-    return {
-      line,
-      layout,
-      vehicles,
-      nb,
-      sb,
-      lineAlerts,
-      exceptions: buildLineExceptions(line, nb, sb, lineAlerts),
-    }
-  })
+  const insightsItems = buildInsightsItems(visibleLines)
 
   return `
     ${buildInsightsTicker(insightsItems)}
+    ${renderSystemSummary(systemInsightsItems)}
     ${insightsItems
       .map(({ line, layout, vehicles, nb, sb, lineAlerts }) => {
         const insightsHtml = renderLineInsights(line, layout, nb, sb, lineAlerts)
 
         return `
         <article class="panel-card panel-card-wide">
-          <header class="panel-header">
+          <header class="panel-header line-card-header">
             <div class="line-title">
               <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
-              <div>
+              <div class="line-title-copy">
                 <h2>${line.name}</h2>
                 <p>${vehicles.length} live ${vehicles.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()} · ${getTodayServiceSpan(line)}</p>
-                ${renderServiceReminderChip(line)}
               </div>
             </div>
+            ${renderServiceReminderChip(line)}
           </header>
           ${insightsHtml || `<p class="train-readout muted">Waiting for live ${vehicleLabel.toLowerCase()} data…</p>`}
         </article>
@@ -2411,7 +2644,7 @@ function render() {
 
   if (state.activeTab === 'map') {
     boardElement.className = 'board'
-    const visibleLines = state.compactLayout ? state.lines.filter((line) => line.id === state.activeLineId) : state.lines
+    const visibleLines = getVisibleLines()
     boardElement.innerHTML = `${renderLineSwitcher()}${visibleLines.map(renderLine).join('')}`
     attachLineSwitcherHandlers()
     attachAlertClickHandlers()
@@ -2565,6 +2798,13 @@ async function refreshVehicles() {
         .filter(Boolean)
       state.vehiclesByLine.set(line.id, vehicles)
     }
+
+    const currentMetrics = computeSystemSummaryMetrics(buildInsightsItems(state.lines))
+    const snapshot = state.systemSnapshots.get(state.activeSystemId)
+    state.systemSnapshots.set(state.activeSystemId, {
+      previous: snapshot?.current ?? null,
+      current: currentMetrics,
+    })
   } catch (error) {
     state.error = 'Realtime offline'
     console.error(error)

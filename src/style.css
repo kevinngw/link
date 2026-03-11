@@ -277,6 +277,90 @@ h1 {
   max-width: 920px;
 }
 
+.system-summary-card {
+  grid-column: 1 / -1;
+  max-width: none;
+}
+
+.system-summary-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.system-summary-hero {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.system-score-card {
+  min-width: 132px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent-strong) 32%, var(--border-color));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--accent-strong) 8%, var(--surface-soft));
+  text-align: right;
+}
+
+.system-score-value,
+.system-score-copy,
+.system-trend-copy {
+  margin: 0;
+}
+
+.system-score-value {
+  margin-top: 8px;
+  color: var(--text-primary);
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.system-score-copy {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.system-trend-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.system-trend-chip {
+  min-height: 100%;
+}
+
+.system-trend-copy {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+
+.system-ranking {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.system-ranking-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.system-ranking-item {
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--surface-soft);
+}
+
 .insights-ticker {
   grid-column: 1 / -1;
   overflow: hidden;
@@ -367,13 +451,23 @@ h1 {
 }
 
 .line-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 8px;
 }
 
 .line-title {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.line-title-copy {
+  min-width: 0;
 }
 
 .line-title-row {
@@ -563,11 +657,15 @@ h1 {
 .service-reminder {
   display: grid;
   gap: 2px;
-  margin-top: 10px;
   padding: 10px 12px;
   border: 1px solid var(--border-color);
   border-radius: 12px;
   background: var(--surface-soft);
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-left: auto;
+  min-width: 180px;
+  max-width: min(240px, 42%);
 }
 
 .service-reminder-headline,
@@ -1435,6 +1533,16 @@ h1 {
 }
 
 @media (max-width: 700px) {
+  .line-card-header {
+    flex-direction: column;
+  }
+
+  .service-reminder {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+  }
+
   .train-detail-stop {
     grid-template-columns: 28px minmax(0, 1fr);
     gap: 14px;
@@ -2136,6 +2244,19 @@ h1 {
   }
 
   .flow-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .system-summary-header {
+    display: grid;
+  }
+
+  .system-score-card {
+    text-align: left;
+  }
+
+  .system-trend-strip,
+  .system-ranking-list {
     grid-template-columns: 1fr;
   }
 
