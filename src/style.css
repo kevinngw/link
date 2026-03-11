@@ -2970,8 +2970,7 @@ h1 {
 
   .line-diagram {
     display: block;
-    height: clamp(560px, 78dvh, 980px);
-    min-height: 560px;
+    height: auto;
     margin-top: 2px;
   }
 

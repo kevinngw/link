@@ -121,7 +121,7 @@ export function createMapRenderer(deps) {
           ${renderServiceReminderChip(line)}
         </header>
         ${renderLineStatusMarquee(line.color, vehicles.map((vehicle) => ({ ...vehicle, lineToken: line.name[0] })))}
-        <svg viewBox="0 0 460 ${layout.height}" class="line-diagram" role="img" aria-label="${state.language === 'zh-CN' ? `${line.name} 实时线路图` : `${line.name} live LED board`}">
+        <svg viewBox="0 0 ${state.compactLayout ? 320 : 460} ${layout.height}" class="line-diagram" role="img" aria-label="${state.language === 'zh-CN' ? `${line.name} 实时线路图` : `${line.name} live LED board`}">
           <line x1="${layout.trackX}" x2="${layout.trackX}" y1="${layout.stations[0].y}" y2="${layout.stations.at(-1).y}" class="spine" style="--line-color:${line.color};"></line>
           ${rows}
           ${trainDots}
