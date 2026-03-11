@@ -1052,51 +1052,32 @@ function computeLineHeadways(nb, sb) {
   return { nbGaps: gaps(sortedNb), sbGaps: gaps(sortedSb) }
 }
 
-function computeGapStats(gaps) {
-  if (!gaps.length) {
-    return { avg: null, max: null, min: null, spread: null, ratio: null }
+function summarizeHeadways(gaps, count) {
+  if (!gaps.length || count < 2) {
+    return {
+      averageText: '—',
+      detailText: `Too few ${getVehicleLabelPlural().toLowerCase()} for a spacing read`,
+    }
   }
 
-  const avg = gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length
-  const max = Math.max(...gaps)
+  const avg = Math.round(gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length)
   const min = Math.min(...gaps)
+  const max = Math.max(...gaps)
+
   return {
-    avg: Math.round(avg),
-    max,
-    min,
-    spread: max - min,
-    ratio: max / Math.max(min, 1),
+    averageText: `~${avg} min`,
+    detailText: `${min}-${max} min observed gap`,
   }
 }
 
-function classifyHeadwayHealth(gaps, count) {
-  const stats = computeGapStats(gaps)
-  if (count < 2 || stats.avg == null) return { health: 'quiet', stats }
-
-  let health = 'healthy'
-  if ((stats.max >= 12 && stats.min <= 4) || stats.ratio >= 3) health = 'bunched'
-  else if (stats.max >= 12 || stats.spread >= 6) health = 'uneven'
-  else if (stats.avg >= 18) health = 'sparse'
-
-  return { health, stats }
-}
-
-function renderHeadwayHealthCard(label, gaps, count) {
-  const { health, stats } = classifyHeadwayHealth(gaps, count)
-  const valueText = stats.avg != null ? `~${stats.avg} min` : '—'
-  const copyText =
-    health === 'healthy' ? 'Consistent spacing now'
-    : health === 'uneven' ? `Largest gap ${stats.max} min`
-    : health === 'bunched' ? 'Short and long gaps at once'
-    : health === 'sparse' ? 'Service spread is thin'
-    : count < 2 ? `Too few ${getVehicleLabelPlural().toLowerCase()}`
-    : 'Low frequency'
+function renderHeadwaySummaryCard(label, gaps, count) {
+  const { averageText, detailText } = summarizeHeadways(gaps, count)
 
   return `
-    <div class="headway-health-card headway-health-card-${health}">
+    <div class="headway-health-card">
       <p class="headway-health-label">${label}</p>
-      <p class="headway-health-value">${valueText}</p>
-      <p class="headway-health-copy">${copyText}</p>
+      <p class="headway-health-value">${averageText}</p>
+      <p class="headway-health-copy">${detailText}</p>
     </div>
   `
 }
@@ -1547,8 +1528,8 @@ function renderLineInsights(line, layout, nb, sb, lineAlerts) {
         </div>
       </div>
       <div class="headway-health-grid">
-        ${renderHeadwayHealthCard('Direction ▲', nbGaps, nb.length)}
-        ${renderHeadwayHealthCard('Direction ▼', sbGaps, sb.length)}
+        ${renderHeadwaySummaryCard('Direction ▲', nbGaps, nb.length)}
+        ${renderHeadwaySummaryCard('Direction ▼', sbGaps, sb.length)}
       </div>
       ${renderDelayDistribution(delayBuckets, total)}
       <div class="flow-grid">

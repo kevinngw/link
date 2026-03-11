@@ -829,23 +829,6 @@ h1 {
   background: var(--surface-soft);
 }
 
-.headway-health-card-healthy {
-  border-color: color-mix(in srgb, #4ade80 30%, var(--border-color));
-}
-
-.headway-health-card-uneven {
-  border-color: color-mix(in srgb, #facc15 34%, var(--border-color));
-}
-
-.headway-health-card-bunched {
-  border-color: color-mix(in srgb, #ff9a6a 36%, var(--border-color));
-}
-
-.headway-health-card-sparse,
-.headway-health-card-quiet {
-  border-color: color-mix(in srgb, var(--text-muted) 28%, var(--border-color));
-}
-
 .headway-health-value {
   margin-top: 6px;
   color: var(--text-primary);
