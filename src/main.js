@@ -17,6 +17,8 @@ const VEHICLE_REFRESH_INTERVAL_MS = IS_PUBLIC_TEST_KEY ? 45_000 : 15_000
 const DIALOG_REFRESH_INTERVAL_MS = IS_PUBLIC_TEST_KEY ? 90_000 : 30_000
 const DIALOG_DISPLAY_SCROLL_INTERVAL_MS = 4_000
 const DIALOG_DISPLAY_DIRECTION_ROTATE_MS = 15_000
+const GHOST_HISTORY_LIMIT = 6
+const GHOST_MAX_AGE_MS = 4 * 60_000
 const TRANSFER_WALKING_SPEED_KMPH = 4.8
 const TRANSFER_MAX_WALK_KM = 0.35
 const TRANSFER_BOARDING_BUFFER_MS = 45_000
@@ -289,6 +291,7 @@ const state = {
   obaCooldownUntil: 0,
   obaRateLimitStreak: 0,
   systemSnapshots: new Map(),
+  vehicleGhosts: new Map(),
   language: 'en',
 }
 
@@ -807,6 +810,63 @@ function renderStationServiceSummary(station) {
   dialogServiceSummary.textContent = summaries.join('  ·  ') || copyValue('serviceSummaryUnavailable')
 }
 
+function getTimelineHour(date) {
+  return date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600
+}
+
+function getServiceTimelineData(line) {
+  const todayKey = getDateKeyWithOffset(0)
+  const span = line.serviceSpansByDate?.[todayKey]
+  if (!span) return null
+
+  const startHours = parseClockToSeconds(span.start) / 3600
+  const endHours = parseClockToSeconds(span.end) / 3600
+  const nowHours = getTimelineHour(new Date())
+  const axisMax = Math.max(24, endHours, nowHours, 1)
+
+  return {
+    startHours,
+    endHours,
+    nowHours,
+    axisMax,
+    startLabel: formatServiceClock(span.start),
+    endLabel: formatServiceClock(span.end),
+  }
+}
+
+function renderServiceTimeline(line) {
+  const timeline = getServiceTimelineData(line)
+  if (!timeline) return ''
+
+  const startPercent = clamp((timeline.startHours / timeline.axisMax) * 100, 0, 100)
+  const endPercent = clamp((timeline.endHours / timeline.axisMax) * 100, startPercent, 100)
+  const nowPercent = clamp((timeline.nowHours / timeline.axisMax) * 100, 0, 100)
+  const isLive = timeline.nowHours >= timeline.startHours && timeline.nowHours <= timeline.endHours
+
+  return `
+    <section class="service-timeline-card">
+      <div class="service-timeline-header">
+        <div>
+          <p class="headway-chart-title">${state.language === 'zh-CN' ? '今日运营时间带' : 'Today Service Window'}</p>
+          <p class="headway-chart-copy">${state.language === 'zh-CN' ? '首末班与当前时刻' : 'First trip, last trip, and current time'}</p>
+        </div>
+        <span class="service-timeline-badge ${isLive ? 'is-live' : 'is-off'}">${isLive ? (state.language === 'zh-CN' ? '运营中' : 'In service') : (state.language === 'zh-CN' ? '未运营' : 'Off hours')}</span>
+      </div>
+      <div class="service-timeline-track">
+        <div class="service-timeline-band" style="left:${startPercent}%; width:${Math.max(2, endPercent - startPercent)}%;"></div>
+        <div class="service-timeline-now" style="left:${nowPercent}%;">
+          <span class="service-timeline-now-dot"></span>
+          <span class="service-timeline-now-label">${state.language === 'zh-CN' ? '当前' : 'Now'}</span>
+        </div>
+      </div>
+      <div class="service-timeline-labels">
+        <span>${timeline.startLabel}</span>
+        <span>${timeline.endLabel}</span>
+      </div>
+    </section>
+  `
+}
+
 function formatAlertEffect(effect) {
   return String(effect || 'SERVICE ALERT')
     .replaceAll('_', ' ')
@@ -1246,6 +1306,37 @@ function formatVehicleSegment(vehicle) {
   }
 
   return `${vehicle.fromLabel} -> ${vehicle.toLabel}`
+}
+
+function formatVehicleLocationSummary(vehicle) {
+  if (vehicle.fromLabel === vehicle.toLabel || vehicle.progress === 0) {
+    return state.language === 'zh-CN' ? `当前位于 ${vehicle.fromLabel}` : `Currently at ${vehicle.fromLabel}`
+  }
+
+  return state.language === 'zh-CN'
+    ? `正从 ${vehicle.fromLabel} 开往 ${vehicle.toLabel}`
+    : `Running from ${vehicle.fromLabel} to ${vehicle.toLabel}`
+}
+
+function renderFocusMetrics(vehicle) {
+  const layout = state.layouts.get(vehicle.lineId)
+  const terminalEta = Math.max(0, (getTrainTimelineEntries(vehicle, layout).at(-1)?.etaSeconds) ?? (vehicle.nextOffset ?? 0))
+  const nextStopName = vehicle.upcomingLabel || vehicle.toLabel || vehicle.currentStopLabel
+
+  return `
+    <div class="train-focus-metrics">
+      <div class="train-focus-metric">
+        <p class="train-focus-metric-label">${state.language === 'zh-CN' ? '下一站' : 'Next stop'}</p>
+        <p class="train-focus-metric-value">${nextStopName}</p>
+        <p class="train-focus-metric-copy">${formatArrivalTime(getRealtimeOffset(vehicle.nextOffset ?? 0))}</p>
+      </div>
+      <div class="train-focus-metric">
+        <p class="train-focus-metric-label">${state.language === 'zh-CN' ? '终点' : 'Terminal'}</p>
+        <p class="train-focus-metric-value">${getVehicleDestinationLabel(vehicle, layout)}</p>
+        <p class="train-focus-metric-copy">${formatArrivalTime(getRealtimeOffset(terminalEta))}</p>
+      </div>
+    </div>
+  `
 }
 
 function getAllVehicles() {
@@ -1784,8 +1875,7 @@ function renderLineInsights(line, layout, nb, sb, lineAlerts) {
   if (!total) return ''
 
   const { nbGaps, sbGaps } = computeLineHeadways(nb, sb)
-  const allVehicles = [...nb, ...sb]
-  const delayBuckets = getDelayBuckets(allVehicles)
+  const delayBuckets = getDelayBuckets([...nb, ...sb])
   const worstGap = [...nbGaps, ...sbGaps].length ? Math.max(...nbGaps, ...sbGaps) : null
   const balance = getDirectionBalance(nb, sb)
   const exceptions = buildLineExceptions(line, nb, sb, lineAlerts)
@@ -2376,12 +2466,12 @@ async function refreshStationDialog(station) {
       dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line, arrivalFeed)),
     )
     if (state.activeDialogRequest !== requestId || !dialog.open) return
-    renderTransferRecommendations(buildTransferRecommendations(transferCandidates, arrivalFeed))
+    renderTransferRecommendations(buildTransferRecommendations(transferCandidates, arrivalFeed), false, station)
     renderStationAlertPills(station)
     renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
   } catch (error) {
     if (state.activeDialogRequest !== requestId || !dialog.open) return
-    renderTransferRecommendations([])
+    renderTransferRecommendations([], false, station)
     arrivalsNb.innerHTML = `<div class="arrival-item muted">${error.message}</div>`
     arrivalsSb.innerHTML = `<div class="arrival-item muted">${state.language === 'zh-CN' ? '请稍后重试' : 'Retry in a moment'}</div>`
   }
@@ -2423,14 +2513,29 @@ function renderLine(line) {
     .join('')
 
   const trainDots = vehicles
-    .map(
-      (vehicle, index) => `
-        <g transform="translate(${layout.trackX}, ${vehicle.y + ((index % 3) - 1) * 1.5})" class="train">
-          <circle r="13" class="train-wave" style="--line-color:${line.color}; animation-delay:${index * 0.18}s;"></circle>
-          <path d="M 0 -8 L 7 6 L -7 6 Z" transform="${vehicle.directionSymbol === '▼' ? 'rotate(180)' : ''}" class="train-arrow" style="--line-color:${line.color};"></path>
+    .map((vehicle, index) => {
+      const ghostTrail = getVehicleGhostTrail(line.id, vehicle.id)
+      return `
+        <g transform="translate(${layout.trackX}, 0)" class="train" data-train-id="${vehicle.id}">
+          ${ghostTrail
+            .map(
+              (ghost, ghostIndex) => `
+                <circle
+                  cy="${ghost.y + ((index % 3) - 1) * 1.5}"
+                  r="${Math.max(3, 7 - ghostIndex)}"
+                  class="train-ghost-dot"
+                  style="--line-color:${line.color}; --ghost-opacity:${Math.max(0.18, 0.56 - ghostIndex * 0.1)};"
+                ></circle>
+              `,
+            )
+            .join('')}
+          <g transform="translate(0, ${vehicle.y + ((index % 3) - 1) * 1.5})">
+            <circle r="13" class="train-wave" style="--line-color:${line.color}; animation-delay:${index * 0.18}s;"></circle>
+            <path d="M 0 -8 L 7 6 L -7 6 Z" transform="${vehicle.directionSymbol === '▼' ? 'rotate(180)' : ''}" class="train-arrow" style="--line-color:${line.color};"></path>
+          </g>
         </g>
-      `,
-    )
+      `
+    })
     .join('')
 
   const vehicleLabel = getVehicleLabel()
@@ -2482,32 +2587,38 @@ function renderTrainList() {
     .map((line) => {
       const lineVehicles = vehicles.filter((vehicle) => vehicle.lineId === line.id)
       const lineAlerts = getAlertsForLine(line.id)
-      const northboundVehicles = lineVehicles.filter((vehicle) => vehicle.directionSymbol === '▲')
-      const southboundVehicles = lineVehicles.filter((vehicle) => vehicle.directionSymbol === '▼')
-      const renderTrainColumn = (label, directionVehicles) => `
-        <div class="train-direction-column">
-          <p class="direction-column-title">${label}</p>
-          ${
-            directionVehicles.length
-              ? directionVehicles
-                  .map(
-                    (vehicle) => `
-                      <article class="train-list-item" data-train-id="${vehicle.id}">
-                        <div class="train-list-main">
-                          <span class="line-token train-list-token" style="--line-color:${vehicle.lineColor};">${vehicle.lineToken}</span>
-                          <div>
-                            <p class="train-list-title">${vehicle.lineName} ${vehicleLabel} ${vehicle.label}</p>
-                            <p class="train-list-subtitle">${formatVehicleSegment(vehicle)}</p>
-                            <p class="train-list-status ${getVehicleStatusClass(vehicle, getRealtimeOffset(vehicle.nextOffset ?? 0))}" data-vehicle-status="${vehicle.id}">${formatVehicleStatus(vehicle)}</p>
-                          </div>
-                        </div>
-                      </article>
-                    `,
-                  )
-                  .join('')
-              : `<p class="train-readout muted">${copyValue('noLiveVehicles', getVehicleLabelPlural().toLowerCase())}</p>`
-          }
-        </div>
+      const sortedLineVehicles = [...lineVehicles].sort(
+        (left, right) => getRealtimeOffset(left.nextOffset ?? 0) - getRealtimeOffset(right.nextOffset ?? 0),
+      )
+      const focusVehicle = sortedLineVehicles[0] ?? null
+      const queueVehicles = sortedLineVehicles.slice(1)
+      const renderDirectionBadge = (vehicle) => `
+        <span class="train-direction-badge">
+          ${vehicle.directionSymbol === '▲'
+            ? (state.language === 'zh-CN' ? '▲ 北向' : '▲ Northbound')
+            : vehicle.directionSymbol === '▼'
+              ? (state.language === 'zh-CN' ? '▼ 南向' : '▼ Southbound')
+              : (state.language === 'zh-CN' ? '运营中' : 'Active')}
+        </span>
+      `
+      const renderQueueItem = (vehicle) => `
+        <article class="train-list-item train-queue-item" data-train-id="${vehicle.id}">
+          <div class="train-list-main">
+            <span class="line-token train-list-token" style="--line-color:${vehicle.lineColor};">${vehicle.lineToken}</span>
+            <div>
+              <div class="train-list-row">
+                <p class="train-list-title">${vehicle.lineName} ${vehicleLabel} ${vehicle.label}</p>
+                ${renderDirectionBadge(vehicle)}
+              </div>
+              <p class="train-list-subtitle">${copyValue('toDestination', getVehicleDestinationLabel(vehicle, state.layouts.get(vehicle.lineId)))}</p>
+              <p class="train-list-status ${getVehicleStatusClass(vehicle, getRealtimeOffset(vehicle.nextOffset ?? 0))}" data-vehicle-status="${vehicle.id}">${formatVehicleStatus(vehicle)}</p>
+            </div>
+          </div>
+          <div class="train-queue-side">
+            <p class="train-queue-time">${formatArrivalTime(getRealtimeOffset(vehicle.nextOffset ?? 0))}</p>
+            <p class="train-queue-clock">${formatEtaClockFromNow(getRealtimeOffset(vehicle.nextOffset ?? 0))}</p>
+          </div>
+        </article>
       `
 
       return `
@@ -2526,9 +2637,42 @@ function renderTrainList() {
             ${renderServiceReminderChip(line)}
           </header>
           ${renderLineStatusMarquee(line.color, lineVehicles)}
-          <div class="line-readout line-readout-grid train-columns">
-            ${renderTrainColumn(state.language === 'zh-CN' ? '北向' : 'NB', northboundVehicles)}
-            ${renderTrainColumn(state.language === 'zh-CN' ? '南向' : 'SB', southboundVehicles)}
+          <div class="line-readout train-columns train-stack-layout">
+            ${
+              focusVehicle
+                ? `
+                  <article class="train-focus-card train-list-item" data-train-id="${focusVehicle.id}">
+                    <div class="train-focus-header">
+                      <div>
+                        <p class="train-focus-kicker">${state.language === 'zh-CN' ? '最近一班' : 'Next up'}</p>
+                        <div class="train-list-row">
+                          <p class="train-focus-title">${focusVehicle.lineName} ${vehicleLabel} ${focusVehicle.label}</p>
+                          ${renderDirectionBadge(focusVehicle)}
+                        </div>
+                      </div>
+                      <div class="train-focus-side">
+                        <p class="train-focus-time">${formatArrivalTime(getRealtimeOffset(focusVehicle.nextOffset ?? 0))}</p>
+                        <p class="train-focus-clock">${formatEtaClockFromNow(getRealtimeOffset(focusVehicle.nextOffset ?? 0))}</p>
+                      </div>
+                    </div>
+                    <p class="train-focus-destination">${copyValue('toDestination', getVehicleDestinationLabel(focusVehicle, state.layouts.get(focusVehicle.lineId)))}</p>
+                    <p class="train-focus-segment">${formatVehicleLocationSummary(focusVehicle)}</p>
+                    ${renderFocusMetrics(focusVehicle)}
+                    <p class="train-list-status ${getVehicleStatusClass(focusVehicle, getRealtimeOffset(focusVehicle.nextOffset ?? 0))}" data-vehicle-status="${focusVehicle.id}">${formatVehicleStatus(focusVehicle)}</p>
+                  </article>
+                `
+                : `<p class="train-readout muted">${copyValue('noLiveVehicles', getVehicleLabelPlural().toLowerCase())}</p>`
+            }
+            ${
+              queueVehicles.length
+                ? `
+                  <div class="train-queue-list">
+                    <p class="train-queue-heading">${state.language === 'zh-CN' ? '后续车次' : 'Following vehicles'}</p>
+                    ${queueVehicles.map(renderQueueItem).join('')}
+                  </div>
+                `
+                : ''
+            }
           </div>
         </article>
       `
@@ -2633,6 +2777,84 @@ function formatWalkDistance(distanceKm) {
   return copyValue('walkMeters', Math.round(distanceKm * 1000))
 }
 
+function recordVehicleGhosts(lineId, vehicles) {
+  const now = Date.now()
+  const activeKeys = new Set()
+
+  for (const vehicle of vehicles) {
+    const key = `${lineId}:${vehicle.id}`
+    activeKeys.add(key)
+    const existing = state.vehicleGhosts.get(key) ?? []
+    const nextHistory = [
+      ...existing.filter((entry) => now - entry.timestamp <= GHOST_MAX_AGE_MS),
+      { y: vehicle.y, minutePosition: vehicle.minutePosition, timestamp: now },
+    ].slice(-GHOST_HISTORY_LIMIT)
+    state.vehicleGhosts.set(key, nextHistory)
+  }
+
+  for (const [key, history] of state.vehicleGhosts.entries()) {
+    if (!key.startsWith(`${lineId}:`)) continue
+    const freshHistory = history.filter((entry) => now - entry.timestamp <= GHOST_MAX_AGE_MS)
+    if (!activeKeys.has(key) || freshHistory.length === 0) {
+      state.vehicleGhosts.delete(key)
+      continue
+    }
+    if (freshHistory.length !== history.length) {
+      state.vehicleGhosts.set(key, freshHistory)
+    }
+  }
+}
+
+function getVehicleGhostTrail(lineId, vehicleId) {
+  const history = state.vehicleGhosts.get(`${lineId}:${vehicleId}`) ?? []
+  return history.slice(0, -1)
+}
+
+function getBearingDegrees(origin, target) {
+  const lat1 = (origin.lat * Math.PI) / 180
+  const lat2 = (target.lat * Math.PI) / 180
+  const deltaLon = ((target.lon - origin.lon) * Math.PI) / 180
+  const y = Math.sin(deltaLon) * Math.cos(lat2)
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLon)
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
+}
+
+function renderTransferRadar(station, recommendations) {
+  if (!station || !recommendations.length) return ''
+
+  const maxDistance = Math.max(...recommendations.map((item) => item.distanceKm), TRANSFER_MAX_WALK_KM / 2)
+  const center = 82
+
+  return `
+    <div class="transfer-radar">
+      <svg viewBox="0 0 164 164" class="transfer-radar-svg" aria-hidden="true">
+        <circle cx="${center}" cy="${center}" r="64" class="transfer-radar-ring"></circle>
+        <circle cx="${center}" cy="${center}" r="44" class="transfer-radar-ring"></circle>
+        <circle cx="${center}" cy="${center}" r="24" class="transfer-radar-ring"></circle>
+        <circle cx="${center}" cy="${center}" r="8" class="transfer-radar-core"></circle>
+        ${recommendations
+          .map((item) => {
+            const bearing = getBearingDegrees(station, item.stop)
+            const radius = 22 + (item.distanceKm / maxDistance) * 44
+            const x = center + Math.sin((bearing * Math.PI) / 180) * radius
+            const y = center - Math.cos((bearing * Math.PI) / 180) * radius
+            return `
+              <g>
+                <line x1="${center}" y1="${center}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" class="transfer-radar-spoke"></line>
+                <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" class="transfer-radar-stop" style="--line-color:${item.line.color};"></circle>
+              </g>
+            `
+          })
+          .join('')}
+      </svg>
+      <div class="transfer-radar-copy">
+        <p class="headway-chart-title">${state.language === 'zh-CN' ? '换乘雷达' : 'Transfer Radar'}</p>
+        <p class="headway-chart-copy">${state.language === 'zh-CN' ? '中心为当前站，越远表示步行越久' : 'Center is this station; farther dots mean longer walks'}</p>
+      </div>
+    </div>
+  `
+}
+
 function getNearbyTransferCandidates(station) {
   if (!station) return []
 
@@ -2669,7 +2891,7 @@ function getNearbyTransferCandidates(station) {
     .slice(0, MAX_TRANSFER_RECOMMENDATIONS * 2)
 }
 
-function renderTransferRecommendations(recommendations, loading = false) {
+function renderTransferRecommendations(recommendations, loading = false, station = state.currentDialogStation) {
   if (loading) {
     transferSection.hidden = false
     transferSection.innerHTML = `
@@ -2699,6 +2921,7 @@ function renderTransferRecommendations(recommendations, loading = false) {
         <h4 class="arrivals-title">${copyValue('transfers')}</h4>
         <p class="transfer-panel-copy">${copyValue('closestBoardableConnections')}</p>
       </div>
+      ${renderTransferRadar(station, recommendations)}
       <div class="transfer-list">
         ${recommendations
           .map(
@@ -2785,6 +3008,7 @@ function renderInsightsBoard() {
             </div>
             ${renderServiceReminderChip(line)}
           </header>
+          ${renderServiceTimeline(line)}
           ${insightsHtml || `<p class="train-readout muted">${state.language === 'zh-CN' ? `等待实时${vehicleLabel.toLowerCase()}数据…` : `Waiting for live ${vehicleLabel.toLowerCase()} data…`}</p>`}
         </article>
       `
@@ -3049,6 +3273,7 @@ function render() {
     attachLineSwitcherHandlers()
     attachAlertClickHandlers()
     attachStationClickHandlers()
+    attachTrainClickHandlers()
     queueMicrotask(syncCompactLayoutFromBoard)
     return
   }
@@ -3131,6 +3356,7 @@ function applySystem(systemId) {
   state.error = ''
   state.fetchedAt = ''
   state.insightsTickerIndex = 0
+  state.vehicleGhosts = new Map()
 }
 
 async function switchSystem(systemId, { updateUrl = true, preserveDialog = false } = {}) {
@@ -3197,6 +3423,7 @@ async function refreshVehicles() {
         .map((vehicle) => parseVehicle(vehicle, line, layout, tripsById))
         .filter(Boolean)
       state.vehiclesByLine.set(line.id, vehicles)
+      recordVehicleGhosts(line.id, vehicles)
     }
 
     const currentMetrics = computeSystemSummaryMetrics(buildInsightsItems(state.lines))
