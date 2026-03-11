@@ -627,46 +627,74 @@ function getVehicleStatusClass(vehicle, nextOffset) {
   return vehicle.delayInfo.colorClass
 }
 
-function formatVehicleArrivalMessage(vehicle) {
-  const liveNextOffset = getRealtimeOffset(vehicle.nextOffset ?? 0)
-  const liveClosestOffset = getRealtimeOffset(vehicle.closestOffset ?? 0)
-  const delayText = vehicle.delayInfo.text
-  const stopLabel = vehicle.upcomingLabel || vehicle.toLabel || vehicle.currentStopLabel
-
-  if (liveNextOffset <= 15) {
-    return `${vehicle.label} arriving now at ${stopLabel} • ${delayText}`
-  }
-
-  if (liveNextOffset <= 90) {
-    return `${vehicle.label} arriving at ${stopLabel} in ${formatArrivalTime(liveNextOffset)} • ${delayText}`
-  }
-
-  if (liveClosestOffset < 0 && liveNextOffset > 0) {
-    return `${vehicle.label} next stop ${stopLabel} in ${formatArrivalTime(liveNextOffset)} • ${delayText}`
-  }
-
-  return `${vehicle.label} en route to ${stopLabel} • ${delayText}`
-}
-
-function formatVehicleStatus(vehicle) {
+function getVehicleStatusPills(vehicle) {
   const liveNextOffset = getRealtimeOffset(vehicle.nextOffset ?? 0)
   const liveClosestOffset = getRealtimeOffset(vehicle.closestOffset ?? 0)
   const delayText = vehicle.delayInfo.text
 
   if (liveNextOffset <= 15) {
-    return `Arriving now • ${delayText}`
+    return [
+      { text: 'Arriving now', toneClass: 'status-arriving' },
+      { text: delayText, toneClass: vehicle.delayInfo.colorClass },
+    ]
   }
 
   if (liveNextOffset <= 90) {
-    return `Arriving in ${formatArrivalTime(liveNextOffset)} • ${delayText}`
+    return [
+      { text: `Arriving in ${formatArrivalTime(liveNextOffset)}`, toneClass: 'status-arriving' },
+      { text: delayText, toneClass: vehicle.delayInfo.colorClass },
+    ]
   }
 
   if (liveClosestOffset < 0 && liveNextOffset > 0) {
-    return `Next stop in ${formatArrivalTime(liveNextOffset)} • ${delayText}`
+    return [
+      { text: `Next stop in ${formatArrivalTime(liveNextOffset)}`, toneClass: 'status-arriving' },
+      { text: delayText, toneClass: vehicle.delayInfo.colorClass },
+    ]
   }
 
   const statusText = formatServiceStatus(vehicle.serviceStatus)
-  return `${statusText} • ${delayText}`
+  return [
+    { text: statusText, toneClass: getVehicleStatusClass(vehicle, liveNextOffset) },
+    { text: delayText, toneClass: vehicle.delayInfo.colorClass },
+  ]
+}
+
+function renderStatusPills(pills) {
+  return pills
+    .map(
+      (pill) => `
+        <span class="status-chip ${pill.toneClass}">
+          ${pill.text}
+        </span>
+      `,
+    )
+    .join('')
+}
+
+function formatVehicleArrivalMessage(vehicle) {
+  const liveNextOffset = getRealtimeOffset(vehicle.nextOffset ?? 0)
+  const liveClosestOffset = getRealtimeOffset(vehicle.closestOffset ?? 0)
+  const stopLabel = vehicle.upcomingLabel || vehicle.toLabel || vehicle.currentStopLabel
+  const [statusPill, delayPill] = getVehicleStatusPills(vehicle)
+
+  if (liveNextOffset <= 15) {
+    return `${vehicle.label} at ${stopLabel} ${renderStatusPills([statusPill, delayPill])}`
+  }
+
+  if (liveNextOffset <= 90) {
+    return `${vehicle.label} at ${stopLabel} ${renderStatusPills([statusPill, delayPill])}`
+  }
+
+  if (liveClosestOffset < 0 && liveNextOffset > 0) {
+    return `${vehicle.label} ${stopLabel} ${renderStatusPills([statusPill, delayPill])}`
+  }
+
+  return `${vehicle.label} to ${stopLabel} ${renderStatusPills([statusPill, delayPill])}`
+}
+
+function formatVehicleStatus(vehicle) {
+  return renderStatusPills(getVehicleStatusPills(vehicle))
 }
 
 function renderLineStatusMarquee(lineColor, vehicles) {
@@ -702,7 +730,7 @@ function refreshVehicleStatusMessages() {
     const vehicle = getAllVehicles().find((candidate) => candidate.id === vehicleId)
     if (!vehicle) return
     const liveNextOffset = getRealtimeOffset(vehicle.nextOffset ?? 0)
-    element.textContent = formatVehicleStatus(vehicle)
+    element.innerHTML = formatVehicleStatus(vehicle)
     element.className = `train-list-status ${getVehicleStatusClass(vehicle, liveNextOffset)}`
   })
 
@@ -715,7 +743,7 @@ function refreshVehicleStatusMessages() {
     element.className = `line-marquee-item ${getVehicleStatusClass(vehicle, liveNextOffset)}`
     const copyElement = element.querySelector('.line-marquee-copy')
     if (copyElement) {
-      copyElement.textContent = formatVehicleArrivalMessage(vehicle)
+      copyElement.innerHTML = formatVehicleArrivalMessage(vehicle)
     }
   })
 }
@@ -1057,18 +1085,37 @@ function buildInsightsTicker(items) {
     `
   }
 
-  const activeIndex = state.insightsTickerIndex % entries.length
-  const entry = entries[activeIndex]
+  const pageSize = getInsightsTickerPageSize()
+  const totalPages = Math.ceil(entries.length / pageSize)
+  const activePage = state.insightsTickerIndex % totalPages
+  const visibleEntries = entries.slice(activePage * pageSize, activePage * pageSize + pageSize)
   return `
     <section class="insights-ticker" aria-label="Current insights summary">
       <div class="insights-ticker-viewport">
-        <span class="insights-ticker-item insights-ticker-item-${entry.tone} insights-ticker-item-animated">
-          <span class="insights-ticker-dot" style="--line-color:${entry.lineColor};"></span>
-          <span>${entry.copy}</span>
-        </span>
+        ${visibleEntries
+          .map(
+            (entry) => `
+              <span class="insights-ticker-item insights-ticker-item-${entry.tone} insights-ticker-item-animated">
+                <span class="insights-ticker-dot" style="--line-color:${entry.lineColor};"></span>
+                <span class="insights-ticker-copy">${entry.copy}</span>
+              </span>
+            `,
+          )
+          .join('')}
       </div>
     </section>
   `
+}
+
+function getInsightsTickerPageSize() {
+  const visualViewportWidth = window.visualViewport?.width ?? Number.POSITIVE_INFINITY
+  const innerWidth = window.innerWidth || Number.POSITIVE_INFINITY
+  const documentWidth = document.documentElement?.clientWidth || Number.POSITIVE_INFINITY
+  const viewportWidth = Math.min(innerWidth, visualViewportWidth, documentWidth)
+
+  if (viewportWidth >= 1680) return 3
+  if (viewportWidth >= 980) return 2
+  return 1
 }
 
 function renderLineInsights(line, layout, nb, sb, lineAlerts) {
