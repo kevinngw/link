@@ -17,11 +17,16 @@ const VEHICLE_REFRESH_INTERVAL_MS = IS_PUBLIC_TEST_KEY ? 45_000 : 15_000
 const DIALOG_REFRESH_INTERVAL_MS = IS_PUBLIC_TEST_KEY ? 90_000 : 30_000
 const DIALOG_DISPLAY_SCROLL_INTERVAL_MS = 4_000
 const DIALOG_DISPLAY_DIRECTION_ROTATE_MS = 15_000
+const DIALOG_DISPLAY_DIRECTION_ANIMATION_MS = 520
+const GHOST_HISTORY_LIMIT = 6
+const GHOST_MAX_AGE_MS = 4 * 60_000
 const TRANSFER_WALKING_SPEED_KMPH = 4.8
 const TRANSFER_MAX_WALK_KM = 0.35
+const TRANSFER_FETCH_DELAY_MS = 3_000
 const TRANSFER_BOARDING_BUFFER_MS = 45_000
 const MAX_TRANSFER_RECOMMENDATIONS = 4
 const THEME_STORAGE_KEY = 'link-pulse-theme'
+const LANGUAGE_STORAGE_KEY = 'link-pulse-language'
 const DEFAULT_SYSTEM_ID = 'link'
 const SYSTEM_META = {
   link: {
@@ -53,6 +58,207 @@ const SYSTEM_META = {
   },
 }
 
+const UI_COPY = {
+  en: {
+    languageToggle: '中文',
+    languageToggleAria: 'Switch to Chinese',
+    themeLight: 'Light',
+    themeDark: 'Dark',
+    themeToggleAria: 'Toggle color theme',
+    transitSystems: 'Transit systems',
+    boardViews: 'Board views',
+    tabMap: 'Map',
+    tabInsights: 'Insights',
+    statusSync: 'SYNC',
+    statusHold: 'HOLD',
+    statusFail: 'FAIL',
+    nowPrefix: 'Now',
+    waitingSnapshot: 'Waiting for snapshot',
+    updatedNow: 'Updated now',
+    updatedSecondsAgo: (seconds) => `Updated ${seconds}s ago`,
+    updatedMinutesAgo: (minutes) => `Updated ${minutes}m ago`,
+    station: 'Station',
+    serviceSummary: 'Service summary',
+    boardDirectionView: 'Board direction view',
+    both: 'Both',
+    auto: 'Auto',
+    board: 'Board',
+    exit: 'Exit',
+    northbound: 'Northbound (▲)',
+    southbound: 'Southbound (▼)',
+    train: 'Train',
+    currentMovement: 'Current movement',
+    closeTrainDialog: 'Close train dialog',
+    serviceAlert: 'Service Alert',
+    transitAdvisory: 'Transit advisory',
+    closeAlertDialog: 'Close alert dialog',
+    readOfficialAlert: 'Read official alert',
+    arriving: 'Arriving',
+    todayServiceUnavailable: 'Today service hours unavailable',
+    todayServiceSpan: (start, end) => `Today ${start} - ${end}`,
+    lastTrip: (time) => `Last trip ${time}`,
+    endsIn: (duration) => `Ends in ${duration}`,
+    firstTrip: (time) => `First trip ${time}`,
+    startsIn: (duration) => `Starts in ${duration}`,
+    serviceEnded: (time) => `Service ended ${time}`,
+    nextStart: (time) => `Next start ${time}`,
+    noNextServiceLoaded: 'No next service loaded',
+    ended: 'Ended',
+    nextFirstTrip: (time) => `Next first trip ${time}`,
+    noServiceRemainingToday: 'No service remaining today',
+    serviceHoursUnavailable: 'Service hours unavailable',
+    staticScheduleMissing: 'Static schedule data missing for this date',
+    unavailable: 'Unavailable',
+    serviceSummaryUnavailable: 'Service summary unavailable',
+    alertsWord: (count) => `alert${count === 1 ? '' : 's'}`,
+    scheduled: 'Scheduled',
+    onTime: 'On Time',
+    unknown: 'Unknown',
+    arrivingStatus: 'ARRIVING',
+    delayedStatus: 'DELAYED',
+    enRoute: 'EN ROUTE',
+    arrivingNow: 'Arriving now',
+    arrivingIn: (time) => `Arriving in ${time}`,
+    nextStopIn: (time) => `Next stop in ${time}`,
+    active: 'Active',
+    noLiveVehicles: (label) => `No live ${label}`,
+    liveCount: (count, label) => `${count} live ${label}`,
+    inServiceCount: (count, label) => `${count} ${label} in service`,
+    activeVehicles: (label) => `Active ${label}`,
+    previous: 'Previous',
+    now: 'Now',
+    next: 'Next',
+    direction: 'Direction',
+    terminal: 'Terminal',
+    etaToTerminal: 'ETA to Terminal',
+    upcomingStops: 'Upcoming stops',
+    liveEtaNow: 'Live ETA now',
+    nextStop: 'Next stop',
+    upcoming: 'Upcoming',
+    noDownstreamEta: 'No downstream ETA available for this train right now.',
+    terminalFallback: 'Terminal',
+    loadingArrivals: 'Loading arrivals...',
+    noUpcomingVehicles: (label) => `No upcoming ${label}`,
+    noAdditionalVehicles: (label) => `No additional ${label}`,
+    stopAway: (count) => `${count} stop${count === 1 ? '' : 's'} away`,
+    toDestination: (name) => `To ${name}`,
+    transfers: 'Transfers',
+    checkingNearbyConnections: 'Checking nearby connections...',
+    loadingTransferRecommendations: 'Loading transfer recommendations...',
+    closestBoardableConnections: 'Closest boardable connections from this station',
+    walkToStop: (minutes, stopName) => `Walk ${minutes} min to ${stopName}`,
+    walkKm: (distanceKm) => `${distanceKm.toFixed(1)} km walk`,
+    walkMeters: (meters) => `${meters} m walk`,
+    leaveNow: 'Leave now',
+    boardInOneMinute: 'Board in ~1 min',
+    boardInMinutes: (minutes) => `Board in ~${minutes} min`,
+    activeAlerts: (count) => `${count} active ${count === 1 ? 'alert' : 'alerts'}`,
+    noActiveAlerts: 'No active alerts.',
+    noAdditionalAlertDetails: 'No additional alert details available.',
+    affectedLineAlerts: (lineName, count) => `${lineName} Alerts`,
+    realtimeOffline: 'Realtime offline',
+  },
+  'zh-CN': {
+    languageToggle: 'EN',
+    languageToggleAria: '切换到英文',
+    themeLight: '浅色',
+    themeDark: '深色',
+    themeToggleAria: '切换主题',
+    transitSystems: '交通系统',
+    boardViews: '视图切换',
+    tabMap: '地图',
+    tabInsights: '洞察',
+    statusSync: '同步',
+    statusHold: '保留',
+    statusFail: '失败',
+    nowPrefix: '当前',
+    waitingSnapshot: '等待快照',
+    updatedNow: '刚刚更新',
+    updatedSecondsAgo: (seconds) => `${seconds} 秒前更新`,
+    updatedMinutesAgo: (minutes) => `${minutes} 分钟前更新`,
+    station: '站点',
+    serviceSummary: '服务摘要',
+    boardDirectionView: '到站屏方向视图',
+    both: '双向',
+    auto: '自动',
+    board: '到站屏',
+    exit: '退出',
+    northbound: '北向 (▲)',
+    southbound: '南向 (▼)',
+    train: '列车',
+    currentMovement: '当前位置',
+    closeTrainDialog: '关闭列车详情',
+    serviceAlert: '服务告警',
+    transitAdvisory: '交通提示',
+    closeAlertDialog: '关闭告警详情',
+    readOfficialAlert: '查看官方告警',
+    arriving: '即将到站',
+    todayServiceUnavailable: '今日运营时间不可用',
+    todayServiceSpan: (start, end) => `今日 ${start} - ${end}`,
+    lastTrip: (time) => `末班 ${time}`,
+    endsIn: (duration) => `${duration} 后结束`,
+    firstTrip: (time) => `首班 ${time}`,
+    startsIn: (duration) => `${duration} 后开始`,
+    serviceEnded: (time) => `已于 ${time} 收班`,
+    nextStart: (time) => `下次首班 ${time}`,
+    noNextServiceLoaded: '暂无下一班服务数据',
+    ended: '已结束',
+    nextFirstTrip: (time) => `下一次首班 ${time}`,
+    noServiceRemainingToday: '今日无剩余服务',
+    serviceHoursUnavailable: '运营时间不可用',
+    staticScheduleMissing: '当前日期缺少静态时刻表数据',
+    unavailable: '不可用',
+    serviceSummaryUnavailable: '暂无服务摘要',
+    alertsWord: () => '告警',
+    scheduled: '按时刻表',
+    onTime: '准点',
+    unknown: '未知',
+    arrivingStatus: '即将到站',
+    delayedStatus: '晚点',
+    enRoute: '运行中',
+    arrivingNow: '正在进站',
+    arrivingIn: (time) => `${time} 后到站`,
+    nextStopIn: (time) => `下一站 ${time}`,
+    active: '运营中',
+    noLiveVehicles: (label) => `暂无实时${label}`,
+    liveCount: (count, label) => `${count} 辆实时${label}`,
+    inServiceCount: (count, label) => `${count} 辆${label}运营中`,
+    activeVehicles: (label) => `${label}列表`,
+    previous: '上一站',
+    now: '当前',
+    next: '下一站',
+    direction: '方向',
+    terminal: '终点',
+    etaToTerminal: '到终点 ETA',
+    upcomingStops: '后续站点',
+    liveEtaNow: '实时 ETA',
+    nextStop: '下一站',
+    upcoming: '后续',
+    noDownstreamEta: '当前暂无这趟列车后续站点 ETA。',
+    terminalFallback: '终点',
+    loadingArrivals: '正在加载到站信息...',
+    noUpcomingVehicles: (label) => `暂无即将到站的${label}`,
+    noAdditionalVehicles: (label) => `暂无更多${label}`,
+    stopAway: (count) => `还有 ${count} 站`,
+    toDestination: (name) => `开往 ${name}`,
+    transfers: '换乘',
+    checkingNearbyConnections: '正在检查附近可换乘线路...',
+    loadingTransferRecommendations: '正在加载换乘建议...',
+    closestBoardableConnections: '从本站步行可达的最近可上车连接',
+    walkToStop: (minutes, stopName) => `步行 ${minutes} 分钟到 ${stopName}`,
+    walkKm: (distanceKm) => `步行 ${distanceKm.toFixed(1)} 公里`,
+    walkMeters: (meters) => `步行 ${meters} 米`,
+    leaveNow: '现在出发',
+    boardInOneMinute: '约 1 分钟后上车',
+    boardInMinutes: (minutes) => `约 ${minutes} 分钟后上车`,
+    activeAlerts: (count) => `${count} 条生效告警`,
+    noActiveAlerts: '当前没有生效告警。',
+    noAdditionalAlertDetails: '暂无更多告警详情。',
+    affectedLineAlerts: (lineName) => `${lineName} 告警`,
+    realtimeOffline: '实时数据离线',
+  },
+}
+
 const state = {
   fetchedAt: '',
   error: '',
@@ -78,6 +284,8 @@ const state = {
   dialogDisplayDirection: 'both',
   dialogDisplayAutoPhase: 'nb',
   dialogDisplayDirectionTimer: 0,
+  dialogDisplayDirectionAnimationTimer: 0,
+  dialogDisplayAnimatingDirection: '',
   dialogDisplayTimer: 0,
   dialogDisplayIndexes: { nb: 0, sb: 0 },
   insightsTickerIndex: 0,
@@ -87,6 +295,8 @@ const state = {
   obaCooldownUntil: 0,
   obaRateLimitStreak: 0,
   systemSnapshots: new Map(),
+  vehicleGhosts: new Map(),
+  language: 'en',
 }
 
 const updateSW = registerSW({
@@ -104,6 +314,7 @@ document.querySelector('#app').innerHTML = `
         <h1 id="screen-title">LINK PULSE</h1>
       </div>
       <div class="screen-meta">
+        <button id="language-toggle" class="theme-toggle" type="button" aria-label="Switch to Chinese">中文</button>
         <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">Light</button>
         <p id="status-pill" class="status-pill">SYNC</p>
         <p id="current-time" class="updated-at">Now --:--</p>
@@ -112,7 +323,7 @@ document.querySelector('#app').innerHTML = `
     </header>
     <div class="switcher-stack">
       <section id="system-bar" class="tab-bar system-bar" aria-label="Transit systems"></section>
-      <section class="tab-bar" aria-label="Board views">
+      <section id="view-bar" class="tab-bar" aria-label="Board views">
         <button class="tab-button is-active" data-tab="map" type="button">Map</button>
         <button class="tab-button" data-tab="trains" type="button" id="tab-trains">Trains</button>
         <button class="tab-button" data-tab="insights" type="button">Insights</button>
@@ -152,12 +363,12 @@ document.querySelector('#app').innerHTML = `
       <div class="dialog-body">
         <section id="transfer-section" class="transfer-section" hidden></section>
         <div class="arrivals-section" data-direction-section="nb">
-          <h4 class="arrivals-title">Northbound (▲)</h4>
+          <h4 id="arrivals-title-nb" class="arrivals-title">Northbound (▲)</h4>
           <div id="arrivals-nb-pinned" class="arrivals-pinned"></div>
           <div class="arrivals-viewport"><div id="arrivals-nb" class="arrivals-list"></div></div>
         </div>
         <div class="arrivals-section" data-direction-section="sb">
-          <h4 class="arrivals-title">Southbound (▼)</h4>
+          <h4 id="arrivals-title-sb" class="arrivals-title">Southbound (▼)</h4>
           <div id="arrivals-sb-pinned" class="arrivals-pinned"></div>
           <div class="arrivals-viewport"><div id="arrivals-sb" class="arrivals-list"></div></div>
         </div>
@@ -205,7 +416,9 @@ const boardElement = document.querySelector('#board')
 const screenKickerElement = document.querySelector('#screen-kicker')
 const screenTitleElement = document.querySelector('#screen-title')
 const systemBarElement = document.querySelector('#system-bar')
+const viewBarElement = document.querySelector('#view-bar')
 const tabButtons = [...document.querySelectorAll('.tab-button')]
+const languageToggleButton = document.querySelector('#language-toggle')
 const themeToggleButton = document.querySelector('#theme-toggle')
 const statusPillElement = document.querySelector('#status-pill')
 const currentTimeElement = document.querySelector('#current-time')
@@ -220,10 +433,14 @@ const dialogStatusPillElement = document.querySelector('#dialog-status-pill')
 const dialogUpdatedAtElement = document.querySelector('#dialog-updated-at')
 const dialogDisplay = document.querySelector('#dialog-display')
 const dialogDirectionTabs = [...document.querySelectorAll('[data-dialog-direction]')]
+const arrivalsTitleNb = document.querySelector('#arrivals-title-nb')
+const arrivalsTitleSb = document.querySelector('#arrivals-title-sb')
 const stationAlertsContainer = document.querySelector('#station-alerts-container')
 const transferSection = document.querySelector('#transfer-section')
+const arrivalsSectionNb = document.querySelector('[data-direction-section="nb"]')
 const arrivalsNbPinned = document.querySelector('#arrivals-nb-pinned')
 const arrivalsNb = document.querySelector('#arrivals-nb')
+const arrivalsSectionSb = document.querySelector('[data-direction-section="sb"]')
 const arrivalsSbPinned = document.querySelector('#arrivals-sb-pinned')
 const arrivalsSb = document.querySelector('#arrivals-sb')
 const trainDialog = document.querySelector('#train-dialog')
@@ -243,6 +460,10 @@ const alertDialogClose = document.querySelector('#alert-dialog-close')
 dialogDisplay.addEventListener('click', () => toggleDialogDisplayMode())
 trainDialogClose.addEventListener('click', () => closeTrainDialog())
 alertDialogClose.addEventListener('click', () => closeAlertDialog())
+languageToggleButton.addEventListener('click', () => {
+  setLanguage(state.language === 'en' ? 'zh-CN' : 'en')
+  render()
+})
 dialogDirectionTabs.forEach((button) => {
   button.addEventListener('click', () => {
     state.dialogDisplayDirection = button.dataset.dialogDirection
@@ -294,6 +515,10 @@ function getVehicleUrl() {
 }
 
 function getVehicleLabel() {
+  if (state.language === 'zh-CN') {
+    return getActiveSystemMeta().vehicleLabel === 'Train' ? '列车' : '公交'
+  }
+
   return getActiveSystemMeta().vehicleLabel ?? 'Vehicle'
 }
 
@@ -306,7 +531,55 @@ function pluralizeVehicleLabel(label) {
 }
 
 function getVehicleLabelPlural() {
+  if (state.language === 'zh-CN') {
+    return getVehicleLabel()
+  }
+
   return getActiveSystemMeta().vehicleLabelPlural ?? pluralizeVehicleLabel(getVehicleLabel())
+}
+
+function copyForLanguage() {
+  return UI_COPY[state.language] ?? UI_COPY.en
+}
+
+function copyValue(key, ...args) {
+  const value = copyForLanguage()[key]
+  return typeof value === 'function' ? value(...args) : value
+}
+
+function getDirectionBaseLabel(directionSymbol, includeSymbol = false) {
+  const symbolPrefix = includeSymbol && (directionSymbol === '▲' || directionSymbol === '▼')
+    ? `${directionSymbol} `
+    : ''
+
+  if (directionSymbol === '▲') {
+    return `${symbolPrefix}${state.language === 'zh-CN' ? '北向' : 'Northbound'}`
+  }
+
+  if (directionSymbol === '▼') {
+    return `${symbolPrefix}${state.language === 'zh-CN' ? '南向' : 'Southbound'}`
+  }
+
+  return copyValue('active')
+}
+
+function formatDirectionLabel(directionSymbol, destination = '', { includeSymbol = false } = {}) {
+  const baseLabel = getDirectionBaseLabel(directionSymbol, includeSymbol)
+  if (!destination) return baseLabel
+  return state.language === 'zh-CN'
+    ? `${baseLabel} · 开往 ${destination}`
+    : `${baseLabel} to ${destination}`
+}
+
+function getDirectionDestinationLabel(directionSymbol, layout) {
+  if (!layout?.stations?.length) return ''
+  const terminalIndex = directionSymbol === '▲' ? 0 : directionSymbol === '▼' ? layout.stations.length - 1 : -1
+  if (terminalIndex < 0) return ''
+  return layout.stations[terminalIndex]?.label ?? ''
+}
+
+function formatLayoutDirectionLabel(directionSymbol, layout, options = {}) {
+  return formatDirectionLabel(directionSymbol, getDirectionDestinationLabel(directionSymbol, layout), options)
 }
 
 function normalizeName(name) {
@@ -323,10 +596,24 @@ function getPreferredTheme() {
   return 'dark'
 }
 
+function getPreferredLanguage() {
+  const storedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY)
+  if (storedLanguage === 'en' || storedLanguage === 'zh-CN') return storedLanguage
+
+  const browserLanguage = navigator.language?.toLowerCase() ?? ''
+  return browserLanguage.startsWith('zh') ? 'zh-CN' : 'en'
+}
+
 function setTheme(theme) {
   state.theme = theme
   document.documentElement.dataset.theme = theme
   window.localStorage.setItem(THEME_STORAGE_KEY, theme)
+}
+
+function setLanguage(language) {
+  state.language = language === 'zh-CN' ? 'zh-CN' : 'en'
+  document.documentElement.lang = state.language
+  window.localStorage.setItem(LANGUAGE_STORAGE_KEY, state.language)
 }
 
 function updateViewportState() {
@@ -365,26 +652,32 @@ function clamp(value, min, max) {
 }
 
 function formatRelativeTime(dateString) {
-  if (!dateString) return 'Waiting for snapshot'
+  if (!dateString) return copyValue('waitingSnapshot')
 
   const deltaSeconds = Math.max(0, Math.round((Date.now() - new Date(dateString).getTime()) / 1000))
-  if (deltaSeconds < 10) return 'Updated now'
-  if (deltaSeconds < 60) return `Updated ${deltaSeconds}s ago`
-  return `Updated ${Math.round(deltaSeconds / 60)}m ago`
+  if (deltaSeconds < 10) return copyValue('updatedNow')
+  if (deltaSeconds < 60) return copyValue('updatedSecondsAgo', deltaSeconds)
+  return copyValue('updatedMinutesAgo', Math.round(deltaSeconds / 60))
 }
 
 function formatCurrentTime() {
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat(state.language === 'zh-CN' ? 'zh-CN' : 'en-US', {
     timeZone: 'America/Los_Angeles',
     hour: 'numeric',
     minute: '2-digit',
+    hour12: state.language !== 'zh-CN',
   }).format(new Date())
 }
 
 function formatArrivalTime(offsetSeconds) {
-  if (offsetSeconds <= 0) return 'Arriving'
+  if (offsetSeconds <= 0) return copyValue('arriving')
   const minutes = Math.floor(offsetSeconds / 60)
   const seconds = offsetSeconds % 60
+  if (state.language === 'zh-CN') {
+    if (minutes > 0) return `${minutes}分 ${seconds}秒`
+    return `${seconds}秒`
+  }
+
   if (minutes > 0) return `${minutes}m ${seconds}s`
   return `${seconds}s`
 }
@@ -430,6 +723,12 @@ function formatDurationFromMs(ms) {
   const totalMinutes = Math.max(0, Math.round(ms / 60_000))
   const hours = Math.floor(totalMinutes / 60)
   const minutes = totalMinutes % 60
+  if (state.language === 'zh-CN') {
+    if (hours && minutes) return `${hours}小时${minutes}分钟`
+    if (hours) return `${hours}小时`
+    return `${minutes}分钟`
+  }
+
   if (hours && minutes) return `${hours}h ${minutes}m`
   if (hours) return `${hours}h`
   return `${minutes}m`
@@ -441,6 +740,9 @@ function formatServiceClock(clockValue) {
   const hours24 = Number(rawHours)
   const minutes = Number(rawMinutes)
   const normalizedHours = ((hours24 % 24) + 24) % 24
+  if (state.language === 'zh-CN') {
+    return `${String(normalizedHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+  }
   const period = normalizedHours >= 12 ? 'PM' : 'AM'
   const hours12 = normalizedHours % 12 || 12
   return `${hours12}:${String(minutes).padStart(2, '0')} ${period}`
@@ -449,8 +751,8 @@ function formatServiceClock(clockValue) {
 function getTodayServiceSpan(line) {
   const todayKey = getTodayDateKey()
   const span = line.serviceSpansByDate?.[todayKey]
-  if (!span) return 'Today service hours unavailable'
-  return `Today ${formatServiceClock(span.start)} - ${formatServiceClock(span.end)}`
+  if (!span) return copyValue('todayServiceUnavailable')
+  return copyValue('todayServiceSpan', formatServiceClock(span.start), formatServiceClock(span.end))
 }
 
 function getServiceReminder(line) {
@@ -482,9 +784,9 @@ function getServiceReminder(line) {
   if (activeWindow) {
     return {
       tone: 'active',
-      headline: `Last trip ${formatServiceClock(activeWindow.span.end)}`,
-      detail: `Ends in ${formatDurationFromMs(activeWindow.end.getTime() - now.getTime())}`,
-      compact: `Ends in ${formatDurationFromMs(activeWindow.end.getTime() - now.getTime())}`,
+      headline: copyValue('lastTrip', formatServiceClock(activeWindow.span.end)),
+      detail: copyValue('endsIn', formatDurationFromMs(activeWindow.end.getTime() - now.getTime())),
+      compact: copyValue('endsIn', formatDurationFromMs(activeWindow.end.getTime() - now.getTime())),
     }
   }
 
@@ -495,18 +797,18 @@ function getServiceReminder(line) {
     if (now < todayStart) {
       return {
         tone: 'upcoming',
-        headline: `First trip ${formatServiceClock(todaySpan.start)}`,
-        detail: `Starts in ${formatDurationFromMs(todayStart.getTime() - now.getTime())}`,
-        compact: `Starts in ${formatDurationFromMs(todayStart.getTime() - now.getTime())}`,
+        headline: copyValue('firstTrip', formatServiceClock(todaySpan.start)),
+        detail: copyValue('startsIn', formatDurationFromMs(todayStart.getTime() - now.getTime())),
+        compact: copyValue('startsIn', formatDurationFromMs(todayStart.getTime() - now.getTime())),
       }
     }
 
     if (now > todayEnd) {
       return {
         tone: 'ended',
-        headline: `Service ended ${formatServiceClock(todaySpan.end)}`,
-        detail: tomorrowSpan ? `Next start ${formatServiceClock(tomorrowSpan.start)}` : 'No next service loaded',
-        compact: tomorrowSpan ? `Next ${formatServiceClock(tomorrowSpan.start)}` : 'Ended',
+        headline: copyValue('serviceEnded', formatServiceClock(todaySpan.end)),
+        detail: tomorrowSpan ? copyValue('nextStart', formatServiceClock(tomorrowSpan.start)) : copyValue('noNextServiceLoaded'),
+        compact: tomorrowSpan ? copyValue('nextStart', formatServiceClock(tomorrowSpan.start)) : copyValue('ended'),
       }
     }
   }
@@ -514,17 +816,17 @@ function getServiceReminder(line) {
   if (tomorrowSpan) {
     return {
       tone: 'upcoming',
-      headline: `Next first trip ${formatServiceClock(tomorrowSpan.start)}`,
-      detail: 'No service remaining today',
-      compact: `Next ${formatServiceClock(tomorrowSpan.start)}`,
+      headline: copyValue('nextFirstTrip', formatServiceClock(tomorrowSpan.start)),
+      detail: copyValue('noServiceRemainingToday'),
+      compact: copyValue('nextStart', formatServiceClock(tomorrowSpan.start)),
     }
   }
 
   return {
     tone: 'muted',
-    headline: 'Service hours unavailable',
-    detail: 'Static schedule data missing for this date',
-    compact: 'Unavailable',
+    headline: copyValue('serviceHoursUnavailable'),
+    detail: copyValue('staticScheduleMissing'),
+    compact: copyValue('unavailable'),
   }
 }
 
@@ -546,7 +848,64 @@ function renderStationServiceSummary(station) {
     })
     .slice(0, 3)
 
-  dialogServiceSummary.textContent = summaries.join('  ·  ') || 'Service summary unavailable'
+  dialogServiceSummary.textContent = summaries.join('  ·  ') || copyValue('serviceSummaryUnavailable')
+}
+
+function getTimelineHour(date) {
+  return date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600
+}
+
+function getServiceTimelineData(line) {
+  const todayKey = getDateKeyWithOffset(0)
+  const span = line.serviceSpansByDate?.[todayKey]
+  if (!span) return null
+
+  const startHours = parseClockToSeconds(span.start) / 3600
+  const endHours = parseClockToSeconds(span.end) / 3600
+  const nowHours = getTimelineHour(new Date())
+  const axisMax = Math.max(24, endHours, nowHours, 1)
+
+  return {
+    startHours,
+    endHours,
+    nowHours,
+    axisMax,
+    startLabel: formatServiceClock(span.start),
+    endLabel: formatServiceClock(span.end),
+  }
+}
+
+function renderServiceTimeline(line) {
+  const timeline = getServiceTimelineData(line)
+  if (!timeline) return ''
+
+  const startPercent = clamp((timeline.startHours / timeline.axisMax) * 100, 0, 100)
+  const endPercent = clamp((timeline.endHours / timeline.axisMax) * 100, startPercent, 100)
+  const nowPercent = clamp((timeline.nowHours / timeline.axisMax) * 100, 0, 100)
+  const isLive = timeline.nowHours >= timeline.startHours && timeline.nowHours <= timeline.endHours
+
+  return `
+    <section class="service-timeline-card">
+      <div class="service-timeline-header">
+        <div>
+          <p class="headway-chart-title">${state.language === 'zh-CN' ? '今日运营时间带' : 'Today Service Window'}</p>
+          <p class="headway-chart-copy">${state.language === 'zh-CN' ? '首末班与当前时刻' : 'First trip, last trip, and current time'}</p>
+        </div>
+        <span class="service-timeline-badge ${isLive ? 'is-live' : 'is-off'}">${isLive ? (state.language === 'zh-CN' ? '运营中' : 'In service') : (state.language === 'zh-CN' ? '未运营' : 'Off hours')}</span>
+      </div>
+      <div class="service-timeline-track">
+        <div class="service-timeline-band" style="left:${startPercent}%; width:${Math.max(2, endPercent - startPercent)}%;"></div>
+        <div class="service-timeline-now" style="left:${nowPercent}%;">
+          <span class="service-timeline-now-dot"></span>
+          <span class="service-timeline-now-label">${state.language === 'zh-CN' ? '当前' : 'Now'}</span>
+        </div>
+      </div>
+      <div class="service-timeline-labels">
+        <span>${timeline.startLabel}</span>
+        <span>${timeline.endLabel}</span>
+      </div>
+    </section>
+  `
 }
 
 function formatAlertEffect(effect) {
@@ -595,7 +954,7 @@ function renderInlineAlerts(lineAlerts, lineId) {
   return `
     <button class="line-alert-badge" type="button" data-alert-line-id="${lineId}">
       <span class="line-alert-badge-count">${lineAlerts.length}</span>
-      <span class="line-alert-badge-copy">alert${lineAlerts.length === 1 ? '' : 's'}</span>
+      <span class="line-alert-badge-copy">${copyValue('alertsWord', lineAlerts.length)}</span>
     </button>
   `
 }
@@ -726,11 +1085,11 @@ function classifyVehicleStatus(rawVehicle) {
 
 function formatDelay(deviationSeconds, isPredicted) {
   if (!isPredicted) {
-    return { text: 'Scheduled', colorClass: 'status-muted' }
+    return { text: copyValue('scheduled'), colorClass: 'status-muted' }
   }
 
   if (deviationSeconds >= -30 && deviationSeconds <= 60) {
-    return { text: 'On Time', colorClass: 'status-ontime' }
+    return { text: copyValue('onTime'), colorClass: 'status-ontime' }
   }
 
   if (deviationSeconds > 60) {
@@ -741,25 +1100,25 @@ function formatDelay(deviationSeconds, isPredicted) {
     } else if (deviationSeconds > 300) {
       colorClass = 'status-late-moderate'
     }
-    return { text: `+${minutes} min late`, colorClass }
+    return { text: state.language === 'zh-CN' ? `晚点 ${minutes} 分钟` : `+${minutes} min late`, colorClass }
   }
 
   if (deviationSeconds < -60) {
     const minutes = Math.round(Math.abs(deviationSeconds) / 60)
-    return { text: `${minutes} min early`, colorClass: 'status-early' }
+    return { text: state.language === 'zh-CN' ? `早到 ${minutes} 分钟` : `${minutes} min early`, colorClass: 'status-early' }
   }
 
-  return { text: 'Unknown', colorClass: 'status-muted' }
+  return { text: copyValue('unknown'), colorClass: 'status-muted' }
 }
 
 function formatServiceStatus(serviceStatus) {
   switch (serviceStatus) {
     case 'ARR':
-      return 'ARRIVING'
+      return copyValue('arrivingStatus')
     case 'DELAY':
-      return 'DELAYED'
+      return copyValue('delayedStatus')
     case 'OK':
-      return 'EN ROUTE'
+      return copyValue('enRoute')
     default:
       return ''
   }
@@ -783,21 +1142,21 @@ function getVehicleStatusPills(vehicle) {
 
   if (liveNextOffset <= 15) {
     return [
-      { text: 'Arriving now', toneClass: 'status-arriving' },
+      { text: copyValue('arrivingNow'), toneClass: 'status-arriving' },
       { text: delayText, toneClass: vehicle.delayInfo.colorClass },
     ]
   }
 
   if (liveNextOffset <= 90) {
     return [
-      { text: `Arriving in ${formatArrivalTime(liveNextOffset)}`, toneClass: 'status-arriving' },
+      { text: copyValue('arrivingIn', formatArrivalTime(liveNextOffset)), toneClass: 'status-arriving' },
       { text: delayText, toneClass: vehicle.delayInfo.colorClass },
     ]
   }
 
   if (liveClosestOffset < 0 && liveNextOffset > 0) {
     return [
-      { text: `Next stop in ${formatArrivalTime(liveNextOffset)}`, toneClass: 'status-arriving' },
+      { text: copyValue('nextStopIn', formatArrivalTime(liveNextOffset)), toneClass: 'status-arriving' },
       { text: delayText, toneClass: vehicle.delayInfo.colorClass },
     ]
   }
@@ -968,6 +1327,8 @@ function parseVehicle(rawVehicle, line, layout, tripsById) {
     previousLabel: previousStop.label,
     currentStopLabel: currentStop.label,
     upcomingLabel: upcomingStop.label,
+    currentIndex,
+    upcomingStopIndex,
     status: rawVehicle.tripStatus?.status ?? '',
     closestStop,
     nextStop,
@@ -982,10 +1343,41 @@ function parseVehicle(rawVehicle, line, layout, tripsById) {
 
 function formatVehicleSegment(vehicle) {
   if (vehicle.fromLabel === vehicle.toLabel || vehicle.progress === 0) {
-    return `At ${vehicle.fromLabel}`
+    return state.language === 'zh-CN' ? `位于 ${vehicle.fromLabel}` : `At ${vehicle.fromLabel}`
   }
 
   return `${vehicle.fromLabel} -> ${vehicle.toLabel}`
+}
+
+function formatVehicleLocationSummary(vehicle) {
+  if (vehicle.fromLabel === vehicle.toLabel || vehicle.progress === 0) {
+    return state.language === 'zh-CN' ? `当前位于 ${vehicle.fromLabel}` : `Currently at ${vehicle.fromLabel}`
+  }
+
+  return state.language === 'zh-CN'
+    ? `正从 ${vehicle.fromLabel} 开往 ${vehicle.toLabel}`
+    : `Running from ${vehicle.fromLabel} to ${vehicle.toLabel}`
+}
+
+function renderFocusMetrics(vehicle) {
+  const layout = state.layouts.get(vehicle.lineId)
+  const terminalEta = Math.max(0, (getTrainTimelineEntries(vehicle, layout).at(-1)?.etaSeconds) ?? (vehicle.nextOffset ?? 0))
+  const nextStopName = vehicle.upcomingLabel || vehicle.toLabel || vehicle.currentStopLabel
+
+  return `
+    <div class="train-focus-metrics">
+      <div class="train-focus-metric">
+        <p class="train-focus-metric-label">${state.language === 'zh-CN' ? '下一站' : 'Next stop'}</p>
+        <p class="train-focus-metric-value">${nextStopName}</p>
+        <p class="train-focus-metric-copy">${formatArrivalTime(getRealtimeOffset(vehicle.nextOffset ?? 0))}</p>
+      </div>
+      <div class="train-focus-metric">
+        <p class="train-focus-metric-label">${state.language === 'zh-CN' ? '终点' : 'Terminal'}</p>
+        <p class="train-focus-metric-value">${getVehicleDestinationLabel(vehicle, layout)}</p>
+        <p class="train-focus-metric-copy">${formatArrivalTime(getRealtimeOffset(terminalEta))}</p>
+      </div>
+    </div>
+  `
 }
 
 function getAllVehicles() {
@@ -1079,22 +1471,34 @@ function classifyHeadwayHealth(gaps, count) {
   return { health, stats }
 }
 
-function renderHeadwayHealthCard(label, gaps, count) {
-  const { health, stats } = classifyHeadwayHealth(gaps, count)
-  const valueText = stats.avg != null ? `~${stats.avg} min` : '—'
-  const copyText =
-    health === 'healthy' ? 'Consistent spacing now'
-    : health === 'uneven' ? `Largest gap ${stats.max} min`
-    : health === 'bunched' ? 'Short and long gaps at once'
-    : health === 'sparse' ? 'Service spread is thin'
-    : count < 2 ? `Too few ${getVehicleLabelPlural().toLowerCase()}`
-    : 'Low frequency'
+function summarizeHeadways(gaps, count) {
+  if (!gaps.length || count < 2) {
+    return {
+      averageText: '—',
+      detailText: state.language === 'zh-CN'
+        ? `${getVehicleLabelPlural()}数量不足，无法判断间隔`
+        : `Too few ${getVehicleLabelPlural().toLowerCase()} for a spacing read`,
+    }
+  }
+
+  const avg = Math.round(gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length)
+  const min = Math.min(...gaps)
+  const max = Math.max(...gaps)
+
+  return {
+    averageText: `~${avg} min`,
+    detailText: state.language === 'zh-CN' ? `观测间隔 ${min}-${max} 分钟` : `${min}-${max} min observed gap`,
+  }
+}
+
+function renderHeadwaySummaryCard(label, gaps, count) {
+  const { averageText, detailText } = summarizeHeadways(gaps, count)
 
   return `
-    <div class="headway-health-card headway-health-card-${health}">
+    <div class="headway-health-card">
       <p class="headway-health-label">${label}</p>
-      <p class="headway-health-value">${valueText}</p>
-      <p class="headway-health-copy">${copyText}</p>
+      <p class="headway-health-value">${averageText}</p>
+      <p class="headway-health-copy">${detailText}</p>
     </div>
   `
 }
@@ -1116,16 +1520,16 @@ function formatPercent(value, total) {
 
 function getDirectionBalance(nb, sb) {
   const delta = Math.abs(nb.length - sb.length)
-  if (delta <= 1) return { label: 'Balanced', tone: 'healthy' }
-  if (nb.length > sb.length) return { label: '▲ Heavier', tone: 'warn' }
-  return { label: '▼ Heavier', tone: 'warn' }
+  if (delta <= 1) return { label: state.language === 'zh-CN' ? '均衡' : 'Balanced', tone: 'healthy' }
+  if (nb.length > sb.length) return { label: state.language === 'zh-CN' ? '北向偏多' : 'Northbound heavier', tone: 'warn' }
+  return { label: state.language === 'zh-CN' ? '南向偏多' : 'Southbound heavier', tone: 'warn' }
 }
 
 function renderDelayDistribution(delayBuckets, total) {
   const items = [
-    ['On time', delayBuckets.onTime, 'healthy'],
-    ['2-5 min late', delayBuckets.minorLate, 'warn'],
-    ['5+ min late', delayBuckets.severeLate, 'alert'],
+    [state.language === 'zh-CN' ? '准点' : 'On time', delayBuckets.onTime, 'healthy'],
+    [state.language === 'zh-CN' ? '晚点 2-5 分钟' : '2-5 min late', delayBuckets.minorLate, 'warn'],
+    [state.language === 'zh-CN' ? '晚点 5+ 分钟' : '5+ min late', delayBuckets.severeLate, 'alert'],
   ]
 
   return `
@@ -1147,7 +1551,7 @@ function renderFlowLane(label, directionVehicles, layout, lineColor) {
       <div class="flow-lane">
         <div class="flow-lane-header">
           <p class="flow-lane-title">${label}</p>
-          <p class="flow-lane-copy">No live ${getVehicleLabelPlural().toLowerCase()}</p>
+          <p class="flow-lane-copy">${copyValue('noLiveVehicles', getVehicleLabelPlural().toLowerCase())}</p>
         </div>
       </div>
     `
@@ -1163,7 +1567,7 @@ function renderFlowLane(label, directionVehicles, layout, lineColor) {
     <div class="flow-lane">
       <div class="flow-lane-header">
         <p class="flow-lane-title">${label}</p>
-        <p class="flow-lane-copy">${sortedVehicles.length} live ${sortedVehicles.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()}</p>
+        <p class="flow-lane-copy">${copyValue('liveCount', sortedVehicles.length, sortedVehicles.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase())}</p>
       </div>
       <div class="flow-track" style="--line-color:${lineColor};">
         ${positions.map((position, index) => `
@@ -1180,40 +1584,61 @@ function renderFlowLane(label, directionVehicles, layout, lineColor) {
 
 function buildLineExceptions(line, nb, sb, lineAlerts) {
   const exceptions = []
+  const layout = state.layouts.get(line.id)
+  const nbDirectionLabel = formatLayoutDirectionLabel('▲', layout, { includeSymbol: true })
+  const sbDirectionLabel = formatLayoutDirectionLabel('▼', layout, { includeSymbol: true })
   const { stats: nbStats } = classifyHeadwayHealth(computeLineHeadways(nb, []).nbGaps, nb.length)
   const { stats: sbStats } = classifyHeadwayHealth(computeLineHeadways([], sb).sbGaps, sb.length)
   const severeLateVehicles = [...nb, ...sb].filter((vehicle) => Number(vehicle.scheduleDeviation ?? 0) > 300)
   const imbalance = Math.abs(nb.length - sb.length)
 
   if (nbStats.max != null && nbStats.max >= 12) {
-    exceptions.push({ tone: 'alert', copy: `Direction ▲ has a ${nbStats.max} min service hole right now.` })
+    exceptions.push({
+      tone: 'alert',
+      copy: state.language === 'zh-CN'
+        ? `${nbDirectionLabel} 当前有 ${nbStats.max} 分钟的服务空档。`
+        : `${nbDirectionLabel} has a ${nbStats.max} min service hole right now.`,
+    })
   }
   if (sbStats.max != null && sbStats.max >= 12) {
-    exceptions.push({ tone: 'alert', copy: `Direction ▼ has a ${sbStats.max} min service hole right now.` })
+    exceptions.push({
+      tone: 'alert',
+      copy: state.language === 'zh-CN'
+        ? `${sbDirectionLabel} 当前有 ${sbStats.max} 分钟的服务空档。`
+        : `${sbDirectionLabel} has a ${sbStats.max} min service hole right now.`,
+    })
   }
   if (imbalance >= 2) {
     exceptions.push({
       tone: 'warn',
       copy: nb.length > sb.length
-        ? `Vehicle distribution is tilted toward ▲ by ${imbalance}.`
-        : `Vehicle distribution is tilted toward ▼ by ${imbalance}.`,
+        ? state.language === 'zh-CN'
+          ? `车辆分布向 ${nbDirectionLabel} 偏多 ${imbalance} 辆。`
+          : `Vehicle distribution is tilted toward ${nbDirectionLabel} by ${imbalance}.`
+        : state.language === 'zh-CN'
+          ? `车辆分布向 ${sbDirectionLabel} 偏多 ${imbalance} 辆。`
+          : `Vehicle distribution is tilted toward ${sbDirectionLabel} by ${imbalance}.`,
     })
   }
   if (severeLateVehicles.length) {
     exceptions.push({
       tone: 'warn',
-      copy: `${severeLateVehicles.length} ${severeLateVehicles.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()} are running 5+ min late.`,
+      copy: state.language === 'zh-CN'
+        ? `${severeLateVehicles.length} 辆${severeLateVehicles.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()}晚点超过 5 分钟。`
+        : `${severeLateVehicles.length} ${severeLateVehicles.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()} are running 5+ min late.`,
     })
   }
   if (lineAlerts.length) {
     exceptions.push({
       tone: 'info',
-      copy: `${lineAlerts.length} active alert${lineAlerts.length === 1 ? '' : 's'} affecting ${line.name}.`,
+      copy: state.language === 'zh-CN'
+        ? `${line.name} 当前受 ${lineAlerts.length} 条告警影响。`
+        : `${lineAlerts.length} active alert${lineAlerts.length === 1 ? '' : 's'} affecting ${line.name}.`,
     })
   }
 
   if (!exceptions.length) {
-    exceptions.push({ tone: 'healthy', copy: 'Spacing and punctuality look stable right now.' })
+    exceptions.push({ tone: 'healthy', copy: state.language === 'zh-CN' ? '当前间隔和准点性都比较稳定。' : 'Spacing and punctuality look stable right now.' })
   }
 
   return exceptions.slice(0, 4)
@@ -1239,96 +1664,167 @@ function buildInsightsItems(lines) {
   })
 }
 
+function getLineAttentionReasons({ worstGap, severeLateCount, alertCount, balanceDelta }) {
+  const reasons = []
+
+  if (worstGap >= 12) {
+    reasons.push({
+      key: 'gap',
+      tone: 'alert',
+      label: state.language === 'zh-CN' ? '大间隔' : 'Large gap',
+    })
+  }
+  if (severeLateCount > 0) {
+    reasons.push({
+      key: 'late',
+      tone: 'warn',
+      label: state.language === 'zh-CN' ? '严重晚点' : 'Severe late',
+    })
+  }
+  if (alertCount > 0) {
+    reasons.push({
+      key: 'alert',
+      tone: 'info',
+      label: state.language === 'zh-CN' ? '有告警' : 'Alerted',
+    })
+  }
+  if (balanceDelta >= 2) {
+    reasons.push({
+      key: 'balance',
+      tone: 'warn',
+      label: state.language === 'zh-CN' ? '方向失衡' : 'Imbalanced',
+    })
+  }
+  if (!reasons.length) {
+    reasons.push({
+      key: 'healthy',
+      tone: 'healthy',
+      label: state.language === 'zh-CN' ? '健康' : 'Healthy',
+    })
+  }
+
+  return reasons
+}
+
+function renderAttentionReasonBadges(reasons) {
+  return `
+    <div class="attention-reason-badges">
+      ${reasons.map((reason) => `
+        <span class="attention-reason-badge attention-reason-badge-${reason.tone}">${reason.label}</span>
+      `).join('')}
+    </div>
+  `
+}
+
 function computeSystemSummaryMetrics(insightsItems) {
   const totalLines = insightsItems.length
   const totalVehicles = insightsItems.reduce((sum, item) => sum + item.vehicles.length, 0)
   const totalAlerts = insightsItems.reduce((sum, item) => sum + item.lineAlerts.length, 0)
   const impactedLines = insightsItems.filter((item) => item.lineAlerts.length > 0).length
+  const impactedStopCount = new Set(
+    insightsItems.flatMap((item) => item.lineAlerts.flatMap((alert) => alert.stopIds ?? [])),
+  ).size
   const allVehicles = insightsItems.flatMap((item) => item.vehicles)
   const delayBuckets = getDelayBuckets(allVehicles)
-  const delayedLineIds = new Set(
-    insightsItems
-      .filter((item) => item.vehicles.some((vehicle) => Number(vehicle.scheduleDeviation ?? 0) > 300))
-      .map((item) => item.line.id),
-  )
-  const unevenLineIds = new Set(
-    insightsItems
-      .filter((item) => {
-        const { nbGaps, sbGaps } = computeLineHeadways(item.nb, item.sb)
-        const nbHealth = classifyHeadwayHealth(nbGaps, item.nb.length).health
-        const sbHealth = classifyHeadwayHealth(sbGaps, item.sb.length).health
-        return [nbHealth, sbHealth].some((health) => health === 'uneven' || health === 'bunched' || health === 'sparse')
-      })
-      .map((item) => item.line.id),
-  )
-  const attentionLineCount = new Set([...delayedLineIds, ...unevenLineIds]).size
-  const healthyLineCount = Math.max(0, totalLines - attentionLineCount)
-  const onTimeRate = totalVehicles ? Math.round((delayBuckets.onTime / totalVehicles) * 100) : null
-
   const rankedLines = insightsItems
     .map((item) => {
       const { nbGaps, sbGaps } = computeLineHeadways(item.nb, item.sb)
       const worstGap = [...nbGaps, ...sbGaps].length ? Math.max(...nbGaps, ...sbGaps) : 0
       const severeLateCount = item.vehicles.filter((vehicle) => Number(vehicle.scheduleDeviation ?? 0) > 300).length
+      const delayBucketsForLine = getDelayBuckets(item.vehicles)
+      const balanceDelta = Math.abs(item.nb.length - item.sb.length)
+      const nbHealth = classifyHeadwayHealth(nbGaps, item.nb.length).health
+      const sbHealth = classifyHeadwayHealth(sbGaps, item.sb.length).health
+      const isUneven = [nbHealth, sbHealth].some((health) => health === 'uneven' || health === 'bunched' || health === 'sparse')
+      const hasSevereLate = severeLateCount > 0
       const score = item.lineAlerts.length * 5 + severeLateCount * 3 + Math.max(0, worstGap - 10)
-      return { line: item.line, score, worstGap, severeLateCount, alertCount: item.lineAlerts.length }
+      const attentionReasons = getLineAttentionReasons({
+        worstGap,
+        severeLateCount,
+        alertCount: item.lineAlerts.length,
+        balanceDelta,
+      })
+
+      return {
+        line: item.line,
+        score,
+        worstGap,
+        severeLateCount,
+        alertCount: item.lineAlerts.length,
+        impactedStopCount: new Set(item.lineAlerts.flatMap((alert) => alert.stopIds ?? [])).size,
+        balanceDelta,
+        hasSevereLate,
+        isUneven,
+        attentionReasons,
+        delayBuckets: delayBucketsForLine,
+      }
     })
     .sort((left, right) => right.score - left.score || right.worstGap - left.worstGap)
 
-  let topIssue = { tone: 'healthy', copy: 'No major active issues right now.' }
+  const delayedLineIds = new Set(rankedLines.filter((item) => item.hasSevereLate).map((item) => item.line.id))
+  const unevenLineIds = new Set(rankedLines.filter((item) => item.isUneven).map((item) => item.line.id))
+  const lateOnlyLineCount = rankedLines.filter((item) => item.hasSevereLate && !item.isUneven).length
+  const unevenOnlyLineCount = rankedLines.filter((item) => item.isUneven && !item.hasSevereLate).length
+  const mixedIssueLineCount = rankedLines.filter((item) => item.hasSevereLate && item.isUneven).length
+  const attentionLineCount = new Set([...delayedLineIds, ...unevenLineIds]).size
+  const healthyLineCount = Math.max(0, totalLines - attentionLineCount)
+  const onTimeRate = totalVehicles ? Math.round((delayBuckets.onTime / totalVehicles) * 100) : null
+  const priorityLines = rankedLines.filter((item) => item.score > 0).slice(0, 2)
+
+  let topIssue = { tone: 'healthy', copy: state.language === 'zh-CN' ? '当前没有明显的主要问题。' : 'No major active issues right now.' }
   const topLine = rankedLines[0] ?? null
   if (topLine?.alertCount) {
     topIssue = {
       tone: 'info',
-      copy: `${topLine.line.name} has ${topLine.alertCount} active alert${topLine.alertCount === 1 ? '' : 's'}.`,
+      copy: state.language === 'zh-CN'
+        ? `${topLine.line.name} 当前有 ${topLine.alertCount} 条生效告警。`
+        : `${topLine.line.name} has ${topLine.alertCount} active alert${topLine.alertCount === 1 ? '' : 's'}.`,
     }
   } else if (topLine?.worstGap >= 12) {
     topIssue = {
       tone: 'alert',
-      copy: `Largest live gap: ${topLine.worstGap} min on ${topLine.line.name}.`,
+      copy: state.language === 'zh-CN'
+        ? `当前最大实时间隔为空 ${topLine.line.name} 的 ${topLine.worstGap} 分钟。`
+        : `Largest live gap: ${topLine.worstGap} min on ${topLine.line.name}.`,
     }
   } else if (topLine?.severeLateCount) {
     topIssue = {
       tone: 'warn',
-      copy: `${topLine.line.name} has ${topLine.severeLateCount} ${topLine.severeLateCount === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()} running 5+ min late.`,
+      copy: state.language === 'zh-CN'
+        ? `${topLine.line.name} 有 ${topLine.severeLateCount} 辆${topLine.severeLateCount === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()}晚点超过 5 分钟。`
+        : `${topLine.line.name} has ${topLine.severeLateCount} ${topLine.severeLateCount === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()} running 5+ min late.`,
     }
   }
-
-  const healthScore = Math.max(
-    0,
-    Math.min(
-      100,
-      100
-        - totalAlerts * 8
-        - delayedLineIds.size * 10
-        - unevenLineIds.size * 8
-        - Math.max(0, 100 - (onTimeRate ?? 100)) / 2,
-    ),
-  )
 
   return {
     totalLines,
     totalVehicles,
     totalAlerts,
     impactedLines,
+    impactedStopCount,
     delayedLineIds,
     unevenLineIds,
+    lateOnlyLineCount,
+    unevenOnlyLineCount,
+    mixedIssueLineCount,
     attentionLineCount,
     healthyLineCount,
     onTimeRate,
     rankedLines,
+    priorityLines,
     topIssue,
-    healthScore: Math.round(healthScore),
   }
 }
 
 function formatMetricDelta(current, previous, { suffix = '', invert = false } = {}) {
-  if (current == null || previous == null || current === previous) return 'Flat vs last snapshot'
+  if (current == null || previous == null || current === previous) return state.language === 'zh-CN' ? '与上次快照持平' : 'Flat vs last snapshot'
 
   const delta = current - previous
   const positiveIsGood = invert ? delta < 0 : delta > 0
   const arrow = delta > 0 ? '↑' : '↓'
-  return `${positiveIsGood ? 'Improving' : 'Worse'} ${arrow} ${Math.abs(delta)}${suffix}`
+  return state.language === 'zh-CN'
+    ? `${positiveIsGood ? '改善' : '变差'} ${arrow} ${Math.abs(delta)}${suffix}`
+    : `${positiveIsGood ? 'Improving' : 'Worse'} ${arrow} ${Math.abs(delta)}${suffix}`
 }
 
 function renderSystemSummary(insightsItems) {
@@ -1339,38 +1835,39 @@ function renderSystemSummary(insightsItems) {
   if (metrics.totalAlerts > 0) {
     exceptions.push({
       tone: 'info',
-      copy: `${metrics.totalAlerts} active alert${metrics.totalAlerts === 1 ? '' : 's'} across ${metrics.impactedLines} line${metrics.impactedLines === 1 ? '' : 's'}.`,
+      copy: state.language === 'zh-CN'
+        ? `${metrics.impactedLines} 条线路共受 ${metrics.totalAlerts} 条告警影响。`
+        : `${metrics.totalAlerts} active alert${metrics.totalAlerts === 1 ? '' : 's'} across ${metrics.impactedLines} line${metrics.impactedLines === 1 ? '' : 's'}.`,
     })
   }
   if (metrics.delayedLineIds.size > 0) {
     exceptions.push({
       tone: 'warn',
-      copy: `${metrics.delayedLineIds.size} line${metrics.delayedLineIds.size === 1 ? '' : 's'} have vehicles running 5+ min late.`,
+      copy: state.language === 'zh-CN'
+        ? `${metrics.delayedLineIds.size} 条线路上有车辆晚点超过 5 分钟。`
+        : `${metrics.delayedLineIds.size} line${metrics.delayedLineIds.size === 1 ? '' : 's'} have vehicles running 5+ min late.`,
     })
   }
   if (metrics.unevenLineIds.size > 0) {
     exceptions.push({
       tone: 'alert',
-      copy: `${metrics.unevenLineIds.size} line${metrics.unevenLineIds.size === 1 ? '' : 's'} show uneven spacing right now.`,
+      copy: state.language === 'zh-CN'
+        ? `${metrics.unevenLineIds.size} 条线路当前发车间隔不均。`
+        : `${metrics.unevenLineIds.size} line${metrics.unevenLineIds.size === 1 ? '' : 's'} show uneven spacing right now.`,
     })
   }
   if (!exceptions.length) {
-    exceptions.push({ tone: 'healthy', copy: 'System looks stable right now with no major active issues.' })
+    exceptions.push({ tone: 'healthy', copy: state.language === 'zh-CN' ? '系统整体稳定，当前没有明显问题。' : 'System looks stable right now with no major active issues.' })
   }
 
   const trendItems = [
     {
-      label: 'Health Score',
-      value: metrics.healthScore,
-      delta: formatMetricDelta(metrics.healthScore, previousSnapshot?.healthScore),
-    },
-    {
-      label: 'On-Time Rate',
+      label: state.language === 'zh-CN' ? '准点率' : 'On-Time Rate',
       value: metrics.onTimeRate != null ? `${metrics.onTimeRate}%` : '—',
       delta: formatMetricDelta(metrics.onTimeRate, previousSnapshot?.onTimeRate, { suffix: '%' }),
     },
     {
-      label: 'Attention Lines',
+      label: state.language === 'zh-CN' ? '需关注线路' : 'Attention Lines',
       value: metrics.attentionLineCount,
       delta: formatMetricDelta(metrics.attentionLineCount, previousSnapshot?.attentionLineCount, { invert: true }),
     },
@@ -1383,14 +1880,9 @@ function renderSystemSummary(insightsItems) {
           <div class="line-title">
             <span class="line-token" style="--line-color:var(--accent-strong);">${getActiveSystemMeta().label[0]}</span>
             <div class="line-title-copy">
-              <h2>${getActiveSystemMeta().label} Summary</h2>
-              <p>${metrics.totalLines} line${metrics.totalLines === 1 ? '' : 's'} in system · Updated ${formatCurrentTime()}</p>
+              <h2>${getActiveSystemMeta().label} ${state.language === 'zh-CN' ? '概览' : 'Summary'}</h2>
+              <p>${state.language === 'zh-CN' ? `系统内 ${metrics.totalLines} 条线路 · 更新于 ${formatCurrentTime()}` : `${metrics.totalLines} line${metrics.totalLines === 1 ? '' : 's'} in system · Updated ${formatCurrentTime()}`}</p>
             </div>
-          </div>
-          <div class="system-score-card">
-            <p class="metric-chip-label">Health Score</p>
-            <p class="system-score-value">${metrics.healthScore}</p>
-            <p class="system-score-copy">${metrics.healthScore >= 85 ? 'Stable' : metrics.healthScore >= 70 ? 'Watch' : 'Stressed'}</p>
           </div>
         </div>
       </header>
@@ -1410,35 +1902,82 @@ function renderSystemSummary(insightsItems) {
       </div>
       <div class="metric-strip system-summary-strip">
         <div class="metric-chip">
-          <p class="metric-chip-label">Healthy Lines</p>
+          <p class="metric-chip-label">${state.language === 'zh-CN' ? '健康线路' : 'Healthy Lines'}</p>
           <p class="metric-chip-value">${metrics.healthyLineCount}</p>
         </div>
         <div class="metric-chip">
-          <p class="metric-chip-label">Live ${getVehicleLabelPlural()}</p>
+          <p class="metric-chip-label">${state.language === 'zh-CN' ? `实时${getVehicleLabelPlural()}` : `Live ${getVehicleLabelPlural()}`}</p>
           <p class="metric-chip-value">${metrics.totalVehicles}</p>
         </div>
         <div class="metric-chip ${metrics.totalAlerts ? 'metric-chip-warn' : 'metric-chip-healthy'}">
-          <p class="metric-chip-label">Alerts</p>
+          <p class="metric-chip-label">${state.language === 'zh-CN' ? '告警' : 'Alerts'}</p>
           <p class="metric-chip-value">${metrics.totalAlerts}</p>
         </div>
         <div class="metric-chip ${metrics.attentionLineCount ? 'metric-chip-warn' : 'metric-chip-healthy'}">
-          <p class="metric-chip-label">Lines Needing Attention</p>
+          <p class="metric-chip-label">${state.language === 'zh-CN' ? '需关注线路' : 'Lines Needing Attention'}</p>
           <p class="metric-chip-value">${metrics.attentionLineCount}</p>
+        </div>
+        <div class="metric-chip">
+          <p class="metric-chip-label">${state.language === 'zh-CN' ? '影响站点' : 'Impacted Stops'}</p>
+          <p class="metric-chip-value">${metrics.impactedStopCount}</p>
+        </div>
+      </div>
+      <div class="system-composition">
+        <div class="insight-exceptions-header">
+          <p class="headway-chart-title">${state.language === 'zh-CN' ? '需关注线路构成' : 'Attention Breakdown'}</p>
+          <p class="headway-chart-copy">${state.language === 'zh-CN' ? '按晚点与间隔异常拆解' : 'Split by lateness and spacing issues'}</p>
+        </div>
+        <div class="attention-breakdown-grid">
+          <div class="metric-chip">
+            <p class="metric-chip-label">${state.language === 'zh-CN' ? '仅晚点' : 'Late Only'}</p>
+            <p class="metric-chip-value">${metrics.lateOnlyLineCount}</p>
+          </div>
+          <div class="metric-chip">
+            <p class="metric-chip-label">${state.language === 'zh-CN' ? '仅间隔不均' : 'Spacing Only'}</p>
+            <p class="metric-chip-value">${metrics.unevenOnlyLineCount}</p>
+          </div>
+          <div class="metric-chip">
+            <p class="metric-chip-label">${state.language === 'zh-CN' ? '两者都有' : 'Both'}</p>
+            <p class="metric-chip-value">${metrics.mixedIssueLineCount}</p>
+          </div>
+        </div>
+      </div>
+      <div class="system-priority">
+        <div class="insight-exceptions-header">
+          ${state.language === 'zh-CN' ? '' : '<p class="headway-chart-title">Recommended Next</p>'}
+          <p class="headway-chart-copy">${state.language === 'zh-CN' ? '基于当前快照的综合优先级' : 'Best next checks from the current snapshot'}</p>
+        </div>
+        <div class="system-priority-list">
+          ${(metrics.priorityLines.length ? metrics.priorityLines : metrics.rankedLines.slice(0, 1)).map(({ line, worstGap, severeLateCount, alertCount, attentionReasons }) => `
+            <div class="system-priority-item">
+              <div class="line-title">
+                <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
+                <div class="line-title-copy">
+                  <p class="headway-chart-title">${line.name}</p>
+                  <p class="headway-chart-copy">${state.language === 'zh-CN'
+                    ? `${worstGap ? `最大间隔 ${worstGap} 分钟` : '当前无明显间隔问题'}${severeLateCount ? ` · ${severeLateCount} 辆严重晚点` : ''}${alertCount ? ` · ${alertCount} 条告警` : ''}`
+                    : `${worstGap ? `Gap ${worstGap} min` : 'No major spacing issue'}${severeLateCount ? ` · ${severeLateCount} severe late` : ''}${alertCount ? ` · ${alertCount} alert${alertCount === 1 ? '' : 's'}` : ''}`}</p>
+                  ${renderAttentionReasonBadges(attentionReasons)}
+                </div>
+              </div>
+            </div>
+          `).join('')}
         </div>
       </div>
       <div class="system-ranking">
         <div class="insight-exceptions-header">
-          <p class="headway-chart-title">Attention Ranking</p>
-          <p class="headway-chart-copy">${state.error ? 'Realtime degraded, using last successful snapshot' : 'Derived from the current live snapshot only'}</p>
+          <p class="headway-chart-title">${state.language === 'zh-CN' ? '关注排名' : 'Attention Ranking'}</p>
+          <p class="headway-chart-copy">${state.error ? (state.language === 'zh-CN' ? '实时数据退化，使用最近一次成功快照' : 'Realtime degraded, using last successful snapshot') : (state.language === 'zh-CN' ? '仅基于当前实时快照' : 'Derived from the current live snapshot only')}</p>
         </div>
         <div class="system-ranking-list">
-          ${metrics.rankedLines.slice(0, 3).map(({ line, score, worstGap, alertCount, severeLateCount }) => `
+          ${metrics.rankedLines.slice(0, 3).map(({ line, score, worstGap, alertCount, severeLateCount, attentionReasons }) => `
             <div class="system-ranking-item">
               <div class="line-title">
                 <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
                 <div class="line-title-copy">
                   <p class="headway-chart-title">${line.name}</p>
-                  <p class="headway-chart-copy">Score ${score}${worstGap ? ` · gap ${worstGap} min` : ''}${alertCount ? ` · ${alertCount} alert${alertCount === 1 ? '' : 's'}` : ''}${severeLateCount ? ` · ${severeLateCount} severe late` : ''}</p>
+                  <p class="headway-chart-copy">${state.language === 'zh-CN' ? `评分 ${score}${worstGap ? ` · 最大间隔 ${worstGap} 分钟` : ''}${alertCount ? ` · ${alertCount} 条告警` : ''}${severeLateCount ? ` · ${severeLateCount} 辆严重晚点` : ''}` : `Score ${score}${worstGap ? ` · gap ${worstGap} min` : ''}${alertCount ? ` · ${alertCount} alert${alertCount === 1 ? '' : 's'}` : ''}${severeLateCount ? ` · ${severeLateCount} severe late` : ''}`}</p>
+                  ${renderAttentionReasonBadges(attentionReasons)}
                 </div>
               </div>
             </div>
@@ -1447,8 +1986,8 @@ function renderSystemSummary(insightsItems) {
       </div>
       <div class="insight-exceptions">
         <div class="insight-exceptions-header">
-          <p class="headway-chart-title">System Status</p>
-          <p class="headway-chart-copy">${state.error ? 'Realtime degraded, using last successful snapshot' : 'Derived from the current live snapshot only'}</p>
+          <p class="headway-chart-title">${state.language === 'zh-CN' ? '系统状态' : 'System Status'}</p>
+          <p class="headway-chart-copy">${state.error ? (state.language === 'zh-CN' ? '实时数据退化，使用最近一次成功快照' : 'Realtime degraded, using last successful snapshot') : (state.language === 'zh-CN' ? '仅基于当前实时快照' : 'Derived from the current live snapshot only')}</p>
         </div>
         ${exceptions.map((item) => `
           <div class="insight-exception insight-exception-${item.tone}">
@@ -1471,9 +2010,9 @@ function buildInsightsTicker(items) {
 
   if (!entries.length) {
     return `
-      <section class="insights-ticker insights-ticker-empty" aria-label="Current insights summary">
+      <section class="insights-ticker insights-ticker-empty" aria-label="${state.language === 'zh-CN' ? '当前洞察摘要' : 'Current insights summary'}">
         <div class="insights-ticker-viewport">
-          <span class="insights-ticker-item insights-ticker-item-healthy">No active issues right now.</span>
+          <span class="insights-ticker-item insights-ticker-item-healthy">${state.language === 'zh-CN' ? '当前没有活跃问题。' : 'No active issues right now.'}</span>
         </div>
       </section>
     `
@@ -1484,7 +2023,7 @@ function buildInsightsTicker(items) {
   const activePage = state.insightsTickerIndex % totalPages
   const visibleEntries = entries.slice(activePage * pageSize, activePage * pageSize + pageSize)
   return `
-    <section class="insights-ticker" aria-label="Current insights summary">
+    <section class="insights-ticker" aria-label="${state.language === 'zh-CN' ? '当前洞察摘要' : 'Current insights summary'}">
       <div class="insights-ticker-viewport">
         ${visibleEntries
           .map(
@@ -1517,8 +2056,7 @@ function renderLineInsights(line, layout, nb, sb, lineAlerts) {
   if (!total) return ''
 
   const { nbGaps, sbGaps } = computeLineHeadways(nb, sb)
-  const allVehicles = [...nb, ...sb]
-  const delayBuckets = getDelayBuckets(allVehicles)
+  const delayBuckets = getDelayBuckets([...nb, ...sb])
   const worstGap = [...nbGaps, ...sbGaps].length ? Math.max(...nbGaps, ...sbGaps) : null
   const balance = getDirectionBalance(nb, sb)
   const exceptions = buildLineExceptions(line, nb, sb, lineAlerts)
@@ -1528,35 +2066,49 @@ function renderLineInsights(line, layout, nb, sb, lineAlerts) {
     <div class="line-insights">
       <div class="metric-strip">
         <div class="metric-chip">
-          <p class="metric-chip-label">In Service</p>
+          <p class="metric-chip-label">${state.language === 'zh-CN' ? '运营中' : 'In Service'}</p>
           <p class="metric-chip-value">${total}</p>
         </div>
         <div class="metric-chip">
-          <p class="metric-chip-label">On-Time Rate</p>
+          <p class="metric-chip-label">${state.language === 'zh-CN' ? '准点率' : 'On-Time Rate'}</p>
           <p class="metric-chip-value">${formatPercent(delayBuckets.onTime, total)}</p>
         </div>
         <div class="metric-chip">
-          <p class="metric-chip-label">Worst Gap</p>
+          <p class="metric-chip-label">${state.language === 'zh-CN' ? '最大间隔' : 'Worst Gap'}</p>
           <p class="metric-chip-value">${worstGap != null ? `${worstGap} min` : '—'}</p>
         </div>
         <div class="metric-chip metric-chip-${balance.tone}">
-          <p class="metric-chip-label">Balance</p>
+          <p class="metric-chip-label">${state.language === 'zh-CN' ? '方向平衡' : 'Balance'}</p>
           <p class="metric-chip-value">${balance.label}</p>
         </div>
       </div>
       <div class="headway-health-grid">
-        ${renderHeadwayHealthCard('Direction ▲', nbGaps, nb.length)}
-        ${renderHeadwayHealthCard('Direction ▼', sbGaps, sb.length)}
+        ${renderHeadwaySummaryCard(formatLayoutDirectionLabel('▲', layout, { includeSymbol: true }), nbGaps, nb.length)}
+        ${renderHeadwaySummaryCard(formatLayoutDirectionLabel('▼', layout, { includeSymbol: true }), sbGaps, sb.length)}
       </div>
       ${renderDelayDistribution(delayBuckets, total)}
       <div class="flow-grid">
-        ${renderFlowLane('Direction ▲ Flow', nb, layout, line.color)}
-        ${renderFlowLane('Direction ▼ Flow', sb, layout, line.color)}
+        ${renderFlowLane(
+          state.language === 'zh-CN'
+            ? `${formatLayoutDirectionLabel('▲', layout, { includeSymbol: true })} 流向`
+            : `${formatLayoutDirectionLabel('▲', layout, { includeSymbol: true })} flow`,
+          nb,
+          layout,
+          line.color,
+        )}
+        ${renderFlowLane(
+          state.language === 'zh-CN'
+            ? `${formatLayoutDirectionLabel('▼', layout, { includeSymbol: true })} 流向`
+            : `${formatLayoutDirectionLabel('▼', layout, { includeSymbol: true })} flow`,
+          sb,
+          layout,
+          line.color,
+        )}
       </div>
       <div class="insight-exceptions">
         <div class="insight-exceptions-header">
-          <p class="headway-chart-title">Now</p>
-          <p class="headway-chart-copy">${lineAlerts.length ? `${lineAlerts.length} active alert${lineAlerts.length === 1 ? '' : 's'}${impactedStopCount ? ` · ${impactedStopCount} impacted stops` : ''}` : 'No active alerts on this line'}</p>
+          <p class="headway-chart-title">${state.language === 'zh-CN' ? '当前' : 'Now'}</p>
+          <p class="headway-chart-copy">${lineAlerts.length ? (state.language === 'zh-CN' ? `${lineAlerts.length} 条生效告警${impactedStopCount ? ` · 影响 ${impactedStopCount} 个站点` : ''}` : `${lineAlerts.length} active alert${lineAlerts.length === 1 ? '' : 's'}${impactedStopCount ? ` · ${impactedStopCount} impacted stops` : ''}`) : (state.language === 'zh-CN' ? '本线路当前没有生效告警' : 'No active alerts on this line')}</p>
         </div>
         ${exceptions.map((item) => `
           <div class="insight-exception insight-exception-${item.tone}">
@@ -1583,9 +2135,7 @@ function renderArrivalLists(arrivals, loading = false) {
       const distanceStr = arrival.distanceFromStop >= 1000
         ? `${(arrival.distanceFromStop / 1000).toFixed(1)}km`
         : `${Math.round(arrival.distanceFromStop)}m`
-      const stopsStr = arrival.numberOfStopsAway === 1
-        ? '1 stop away'
-        : `${arrival.numberOfStopsAway} stops away`
+      const stopsStr = copyValue('stopAway', arrival.numberOfStopsAway)
       precisionInfo = ` • ${distanceStr} • ${stopsStr}`
     }
 
@@ -1595,7 +2145,7 @@ function renderArrivalLists(arrivals, loading = false) {
           <span class="arrival-line-token" style="--line-color:${arrival.lineColor};">${arrival.lineToken}</span>
           <span class="arrival-copy">
             <span class="arrival-vehicle">${arrival.lineName} ${getVehicleLabel()} ${arrival.vehicleId}</span>
-            <span class="arrival-destination">To ${arrival.destination}</span>
+            <span class="arrival-destination">${copyValue('toDestination', arrival.destination)}</span>
           </span>
         </span>
         <span class="arrival-side">
@@ -1609,16 +2159,26 @@ function renderArrivalLists(arrivals, loading = false) {
   if (loading) {
     arrivalsNbPinned.innerHTML = ''
     arrivalsSbPinned.innerHTML = ''
-    arrivalsNb.innerHTML = '<div class="arrival-item muted">Loading arrivals...</div>'
-    arrivalsSb.innerHTML = '<div class="arrival-item muted">Loading arrivals...</div>'
+    arrivalsNb.innerHTML = `<div class="arrival-item muted">${copyValue('loadingArrivals')}</div>`
+    arrivalsSb.innerHTML = `<div class="arrival-item muted">${copyValue('loadingArrivals')}</div>`
     syncDialogDisplayScroll()
     return
+  }
+
+  const summarizeDestinations = (bucket) => {
+    const uniqueDestinations = [...new Set(bucket.map((arrival) => arrival.destination).filter(Boolean))]
+    if (!uniqueDestinations.length) return ''
+    const labels = uniqueDestinations.slice(0, 2)
+    if (uniqueDestinations.length > 2) {
+      labels.push(state.language === 'zh-CN' ? '等' : 'etc.')
+    }
+    return labels.join(' / ')
   }
 
   const renderBucket = (bucket, pinnedElement, listElement) => {
     if (!bucket.length) {
       pinnedElement.innerHTML = ''
-      listElement.innerHTML = `<div class="arrival-item muted">No upcoming ${getVehicleLabelPlural().toLowerCase()}</div>`
+      listElement.innerHTML = `<div class="arrival-item muted">${copyValue('noUpcomingVehicles', getVehicleLabelPlural().toLowerCase())}</div>`
       return
     }
 
@@ -1629,12 +2189,14 @@ function renderArrivalLists(arrivals, loading = false) {
     listElement.innerHTML = scrollingItems.length
       ? scrollingItems.map(renderArrival).join('')
       : state.dialogDisplayMode
-        ? `<div class="arrival-item muted">No additional ${getVehicleLabelPlural().toLowerCase()}</div>`
+        ? `<div class="arrival-item muted">${copyValue('noAdditionalVehicles', getVehicleLabelPlural().toLowerCase())}</div>`
         : ''
   }
 
   renderBucket(arrivals.nb, arrivalsNbPinned, arrivalsNb)
   renderBucket(arrivals.sb, arrivalsSbPinned, arrivalsSb)
+  arrivalsTitleNb.textContent = formatDirectionLabel('▲', summarizeDestinations(arrivals.nb), { includeSymbol: true })
+  arrivalsTitleSb.textContent = formatDirectionLabel('▼', summarizeDestinations(arrivals.sb), { includeSymbol: true })
 
   syncDialogDisplayScroll()
 }
@@ -1737,8 +2299,8 @@ function getSystemIdFromUrl() {
 function setDialogDisplayMode(isDisplayMode) {
   state.dialogDisplayMode = isDisplayMode
   dialog.classList.toggle('is-display-mode', isDisplayMode)
-  dialogDisplay.textContent = isDisplayMode ? 'Exit' : 'Board'
-  dialogDisplay.setAttribute('aria-label', isDisplayMode ? 'Exit display mode' : 'Toggle display mode')
+  dialogDisplay.textContent = isDisplayMode ? copyValue('exit') : copyValue('board')
+  dialogDisplay.setAttribute('aria-label', isDisplayMode ? copyValue('exit') : copyValue('board'))
   state.dialogDisplayDirection = 'both'
   state.dialogDisplayAutoPhase = 'nb'
   renderDialogDirectionView()
@@ -1762,8 +2324,40 @@ function stopDialogDirectionRotation() {
   }
 }
 
-function renderDialogDirectionView() {
+function stopDialogDirectionAnimation() {
+  if (state.dialogDisplayDirectionAnimationTimer) {
+    window.clearTimeout(state.dialogDisplayDirectionAnimationTimer)
+    state.dialogDisplayDirectionAnimationTimer = 0
+  }
+
+  state.dialogDisplayAnimatingDirection = ''
+  arrivalsSectionNb?.classList.remove('is-direction-animating')
+  arrivalsSectionSb?.classList.remove('is-direction-animating')
+}
+
+function startDialogDirectionAnimation(direction) {
+  if (!state.dialogDisplayMode || !direction || direction === 'both') return
+
+  stopDialogDirectionAnimation()
+  state.dialogDisplayAnimatingDirection = direction
+  const targetSection = direction === 'nb' ? arrivalsSectionNb : arrivalsSectionSb
+  if (!targetSection) return
+
+  // Force animation restart when auto mode rotates back to the same panel later.
+  void targetSection.offsetWidth
+  targetSection.classList.add('is-direction-animating')
+  state.dialogDisplayDirectionAnimationTimer = window.setTimeout(() => {
+    targetSection.classList.remove('is-direction-animating')
+    state.dialogDisplayDirectionAnimationTimer = 0
+    if (state.dialogDisplayAnimatingDirection === direction) {
+      state.dialogDisplayAnimatingDirection = ''
+    }
+  }, DIALOG_DISPLAY_DIRECTION_ANIMATION_MS)
+}
+
+function renderDialogDirectionView({ animate = false } = {}) {
   stopDialogDirectionRotation()
+  stopDialogDirectionAnimation()
   const requestedDirection = state.dialogDisplayDirection
   const direction = requestedDirection === 'auto' ? state.dialogDisplayAutoPhase : requestedDirection
   dialogDirectionTabs.forEach((button) => {
@@ -1773,10 +2367,14 @@ function renderDialogDirectionView() {
   dialog.classList.toggle('show-nb-only', state.dialogDisplayMode && direction === 'nb')
   dialog.classList.toggle('show-sb-only', state.dialogDisplayMode && direction === 'sb')
 
+  if (animate) {
+    startDialogDirectionAnimation(direction)
+  }
+
   if (state.dialogDisplayMode && requestedDirection === 'auto') {
     state.dialogDisplayDirectionTimer = window.setInterval(() => {
       state.dialogDisplayAutoPhase = state.dialogDisplayAutoPhase === 'nb' ? 'sb' : 'nb'
-      renderDialogDirectionView()
+      renderDialogDirectionView({ animate: true })
     }, DIALOG_DISPLAY_DIRECTION_ROTATE_MS)
   }
 }
@@ -1930,7 +2528,7 @@ function getLineRouteId(line) {
 function formatArrivalDestination(arrival) {
   const headsign = arrival.tripHeadsign?.trim()
   if (headsign) return normalizeName(headsign.replace(/^to\s+/i, ''))
-  return 'Terminal'
+  return copyValue('terminalFallback')
 }
 
 function getArrivalServiceStatus(arrivalTime, scheduleDeviation) {
@@ -1938,7 +2536,7 @@ function getArrivalServiceStatus(arrivalTime, scheduleDeviation) {
 
   if (secondsUntilArrival <= 90) return 'ARR'
   if (scheduleDeviation >= 120) return 'DELAY'
-  return 'ON TIME'
+  return state.language === 'zh-CN' ? '准点' : 'ON TIME'
 }
 
 function getStatusTone(status) {
@@ -2061,7 +2659,7 @@ function renderStationAlertPills(station) {
           (alert, i) => `
         <button class="station-alert-pill" data-alert-idx="${i}" type="button">
           <span class="station-alert-pill-meta">${formatAlertSeverity(alert.severity)} · ${formatAlertEffect(alert.effect)}</span>
-          <span class="station-alert-pill-copy">${alert.title || 'Service alert'}</span>
+          <span class="station-alert-pill-copy">${alert.title || copyValue('serviceAlert')}</span>
         </button>
       `,
         )
@@ -2101,24 +2699,44 @@ async function refreshStationDialog(station) {
   const requestId = state.activeDialogRequest + 1
   state.activeDialogRequest = requestId
 
+  const isStaleDialogRequest = () => state.activeDialogRequest !== requestId || !dialog.open
+
   try {
     const dialogStations = getDialogStations(station)
-    const transferCandidates = getNearbyTransferCandidates(station)
     const sharedStopIds = dialogStations.flatMap(({ station: matchedStation, line }) => getStationStopIds(matchedStation, line))
-    const transferStopIds = transferCandidates.flatMap(({ stop, line }) => getStationStopIds(stop, line))
-    const arrivalFeed = await fetchArrivalsForStopIds([...sharedStopIds, ...transferStopIds])
+    const arrivalFeed = await fetchArrivalsForStopIds(sharedStopIds)
     const arrivalsByLine = await Promise.all(
       dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line, arrivalFeed)),
     )
-    if (state.activeDialogRequest !== requestId || !dialog.open) return
-    renderTransferRecommendations(buildTransferRecommendations(transferCandidates, arrivalFeed))
+    if (isStaleDialogRequest()) return
     renderStationAlertPills(station)
     renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
   } catch (error) {
-    if (state.activeDialogRequest !== requestId || !dialog.open) return
-    renderTransferRecommendations([])
+    if (isStaleDialogRequest()) return
+    renderTransferRecommendations([], false, station)
     arrivalsNb.innerHTML = `<div class="arrival-item muted">${error.message}</div>`
-    arrivalsSb.innerHTML = '<div class="arrival-item muted">Retry in a moment</div>'
+    arrivalsSb.innerHTML = `<div class="arrival-item muted">${state.language === 'zh-CN' ? '请稍后重试' : 'Retry in a moment'}</div>`
+    return
+  }
+
+  try {
+    const transferCandidates = getNearbyTransferCandidates(station)
+    if (!transferCandidates.length) {
+      if (isStaleDialogRequest()) return
+      renderTransferRecommendations([], false, station)
+      return
+    }
+
+    await sleep(TRANSFER_FETCH_DELAY_MS)
+    if (isStaleDialogRequest()) return
+
+    const transferStopIds = transferCandidates.flatMap(({ stop, line }) => getStationStopIds(stop, line))
+    const transferArrivalFeed = await fetchArrivalsForStopIds(transferStopIds)
+    if (isStaleDialogRequest()) return
+    renderTransferRecommendations(buildTransferRecommendations(transferCandidates, transferArrivalFeed), false, station)
+  } catch {
+    if (isStaleDialogRequest()) return
+    renderTransferRecommendations([], false, station)
   }
 }
 
@@ -2158,14 +2776,29 @@ function renderLine(line) {
     .join('')
 
   const trainDots = vehicles
-    .map(
-      (vehicle, index) => `
-        <g transform="translate(${layout.trackX}, ${vehicle.y + ((index % 3) - 1) * 1.5})" class="train">
-          <circle r="13" class="train-wave" style="--line-color:${line.color}; animation-delay:${index * 0.18}s;"></circle>
-          <path d="M 0 -8 L 7 6 L -7 6 Z" transform="${vehicle.directionSymbol === '▼' ? 'rotate(180)' : ''}" class="train-arrow" style="--line-color:${line.color};"></path>
+    .map((vehicle, index) => {
+      const ghostTrail = getVehicleGhostTrail(line.id, vehicle.id)
+      return `
+        <g transform="translate(${layout.trackX}, 0)" class="train" data-train-id="${vehicle.id}">
+          ${ghostTrail
+            .map(
+              (ghost, ghostIndex) => `
+                <circle
+                  cy="${ghost.y + ((index % 3) - 1) * 1.5}"
+                  r="${Math.max(3, 7 - ghostIndex)}"
+                  class="train-ghost-dot"
+                  style="--line-color:${line.color}; --ghost-opacity:${Math.max(0.18, 0.56 - ghostIndex * 0.1)};"
+                ></circle>
+              `,
+            )
+            .join('')}
+          <g transform="translate(0, ${vehicle.y + ((index % 3) - 1) * 1.5})">
+            <circle r="13" class="train-wave" style="--line-color:${line.color}; animation-delay:${index * 0.18}s;"></circle>
+            <path d="M 0 -8 L 7 6 L -7 6 Z" transform="${vehicle.directionSymbol === '▼' ? 'rotate(180)' : ''}" class="train-arrow" style="--line-color:${line.color};"></path>
+          </g>
         </g>
-      `,
-    )
+      `
+    })
     .join('')
 
   const vehicleLabel = getVehicleLabel()
@@ -2179,14 +2812,14 @@ function renderLine(line) {
               <h2>${line.name}</h2>
               ${renderInlineAlerts(lineAlerts, line.id)}
             </div>
-            <p>${vehicles.length} live ${vehicles.length === 1 ? vehicleLabel.toLowerCase() : getVehicleLabelPlural().toLowerCase()}</p>
+            <p>${copyValue('liveCount', vehicles.length, vehicles.length === 1 ? vehicleLabel.toLowerCase() : getVehicleLabelPlural().toLowerCase())}</p>
             <p>${getTodayServiceSpan(line)}</p>
           </div>
         </div>
         ${renderServiceReminderChip(line)}
       </header>
       ${renderLineStatusMarquee(line.color, vehicles.map((vehicle) => ({ ...vehicle, lineToken: line.name[0] })))}
-      <svg viewBox="0 0 460 ${layout.height}" class="line-diagram" role="img" aria-label="${line.name} live LED board">
+      <svg viewBox="0 0 460 ${layout.height}" class="line-diagram" role="img" aria-label="${state.language === 'zh-CN' ? `${line.name} 实时线路图` : `${line.name} live LED board`}">
         <line x1="${layout.trackX}" x2="${layout.trackX}" y1="${layout.stations[0].y}" y2="${layout.stations.at(-1).y}" class="spine" style="--line-color:${line.color};"></line>
         ${rows}
         ${trainDots}
@@ -2205,8 +2838,8 @@ function renderTrainList() {
     return `
       <section class="board" style="grid-template-columns: 1fr;">
         <article class="panel-card">
-          <h2>Active ${vehicleLabelPlural}</h2>
-          <p>No live ${vehicleLabelPluralLower}</p>
+          <h2>${copyValue('activeVehicles', vehicleLabelPlural)}</h2>
+          <p>${copyValue('noLiveVehicles', vehicleLabelPluralLower)}</p>
         </article>
       </section>
     `
@@ -2217,32 +2850,38 @@ function renderTrainList() {
     .map((line) => {
       const lineVehicles = vehicles.filter((vehicle) => vehicle.lineId === line.id)
       const lineAlerts = getAlertsForLine(line.id)
-      const northboundVehicles = lineVehicles.filter((vehicle) => vehicle.directionSymbol === '▲')
-      const southboundVehicles = lineVehicles.filter((vehicle) => vehicle.directionSymbol === '▼')
-      const renderTrainColumn = (label, directionVehicles) => `
-        <div class="train-direction-column">
-          <p class="direction-column-title">${label}</p>
-          ${
-            directionVehicles.length
-              ? directionVehicles
-                  .map(
-                    (vehicle) => `
-                      <article class="train-list-item" data-train-id="${vehicle.id}">
-                        <div class="train-list-main">
-                          <span class="line-token train-list-token" style="--line-color:${vehicle.lineColor};">${vehicle.lineToken}</span>
-                          <div>
-                            <p class="train-list-title">${vehicle.lineName} ${vehicleLabel} ${vehicle.label}</p>
-                            <p class="train-list-subtitle">${formatVehicleSegment(vehicle)}</p>
-                            <p class="train-list-status ${getVehicleStatusClass(vehicle, getRealtimeOffset(vehicle.nextOffset ?? 0))}" data-vehicle-status="${vehicle.id}">${formatVehicleStatus(vehicle)}</p>
-                          </div>
-                        </div>
-                      </article>
-                    `,
-                  )
-                  .join('')
-              : `<p class="train-readout muted">No ${getVehicleLabelPlural().toLowerCase()}</p>`
-          }
-        </div>
+      const sortedLineVehicles = [...lineVehicles].sort(
+        (left, right) => getRealtimeOffset(left.nextOffset ?? 0) - getRealtimeOffset(right.nextOffset ?? 0),
+      )
+      const focusVehicle = sortedLineVehicles[0] ?? null
+      const queueVehicles = sortedLineVehicles.slice(1)
+      const renderDirectionBadge = (vehicle) => `
+        <span class="train-direction-badge">
+          ${formatDirectionLabel(
+            vehicle.directionSymbol,
+            getVehicleDestinationLabel(vehicle, state.layouts.get(vehicle.lineId)),
+            { includeSymbol: true },
+          )}
+        </span>
+      `
+      const renderQueueItem = (vehicle) => `
+        <article class="train-list-item train-queue-item" data-train-id="${vehicle.id}">
+          <div class="train-list-main">
+            <span class="line-token train-list-token" style="--line-color:${vehicle.lineColor};">${vehicle.lineToken}</span>
+            <div>
+              <div class="train-list-row">
+                <p class="train-list-title">${vehicle.lineName} ${vehicleLabel} ${vehicle.label}</p>
+                ${renderDirectionBadge(vehicle)}
+              </div>
+              <p class="train-list-subtitle">${copyValue('toDestination', getVehicleDestinationLabel(vehicle, state.layouts.get(vehicle.lineId)))}</p>
+              <p class="train-list-status ${getVehicleStatusClass(vehicle, getRealtimeOffset(vehicle.nextOffset ?? 0))}" data-vehicle-status="${vehicle.id}">${formatVehicleStatus(vehicle)}</p>
+            </div>
+          </div>
+          <div class="train-queue-side">
+            <p class="train-queue-time">${formatArrivalTime(getRealtimeOffset(vehicle.nextOffset ?? 0))}</p>
+            <p class="train-queue-clock">${formatEtaClockFromNow(getRealtimeOffset(vehicle.nextOffset ?? 0))}</p>
+          </div>
+        </article>
       `
 
       return `
@@ -2255,15 +2894,48 @@ function renderTrainList() {
                   <h2>${line.name}</h2>
                   ${renderInlineAlerts(lineAlerts, line.id)}
                 </div>
-                <p>${lineVehicles.length} ${lineVehicles.length === 1 ? vehicleLabel.toLowerCase() : getVehicleLabelPlural().toLowerCase()} in service · ${getTodayServiceSpan(line)}</p>
+                <p>${copyValue('inServiceCount', lineVehicles.length, lineVehicles.length === 1 ? vehicleLabel.toLowerCase() : getVehicleLabelPlural().toLowerCase())} · ${getTodayServiceSpan(line)}</p>
               </div>
             </div>
             ${renderServiceReminderChip(line)}
           </header>
           ${renderLineStatusMarquee(line.color, lineVehicles)}
-          <div class="line-readout line-readout-grid train-columns">
-            ${renderTrainColumn('NB', northboundVehicles)}
-            ${renderTrainColumn('SB', southboundVehicles)}
+          <div class="line-readout train-columns train-stack-layout">
+            ${
+              focusVehicle
+                ? `
+                  <article class="train-focus-card train-list-item" data-train-id="${focusVehicle.id}">
+                    <div class="train-focus-header">
+                      <div>
+                        <p class="train-focus-kicker">${state.language === 'zh-CN' ? '最近一班' : 'Next up'}</p>
+                        <div class="train-list-row">
+                          <p class="train-focus-title">${focusVehicle.lineName} ${vehicleLabel} ${focusVehicle.label}</p>
+                          ${renderDirectionBadge(focusVehicle)}
+                        </div>
+                      </div>
+                      <div class="train-focus-side">
+                        <p class="train-focus-time">${formatArrivalTime(getRealtimeOffset(focusVehicle.nextOffset ?? 0))}</p>
+                        <p class="train-focus-clock">${formatEtaClockFromNow(getRealtimeOffset(focusVehicle.nextOffset ?? 0))}</p>
+                      </div>
+                    </div>
+                    <p class="train-focus-destination">${copyValue('toDestination', getVehicleDestinationLabel(focusVehicle, state.layouts.get(focusVehicle.lineId)))}</p>
+                    <p class="train-focus-segment">${formatVehicleLocationSummary(focusVehicle)}</p>
+                    ${renderFocusMetrics(focusVehicle)}
+                    <p class="train-list-status ${getVehicleStatusClass(focusVehicle, getRealtimeOffset(focusVehicle.nextOffset ?? 0))}" data-vehicle-status="${focusVehicle.id}">${formatVehicleStatus(focusVehicle)}</p>
+                  </article>
+                `
+                : `<p class="train-readout muted">${copyValue('noLiveVehicles', getVehicleLabelPlural().toLowerCase())}</p>`
+            }
+            ${
+              queueVehicles.length
+                ? `
+                  <div class="train-queue-list">
+                    <p class="train-queue-heading">${state.language === 'zh-CN' ? '后续车次' : 'Following vehicles'}</p>
+                    ${queueVehicles.map(renderQueueItem).join('')}
+                  </div>
+                `
+                : ''
+            }
           </div>
         </article>
       `
@@ -2274,10 +2946,64 @@ function renderTrainList() {
 }
 
 function formatClockTime(timestamp) {
-  return new Date(timestamp).toLocaleTimeString([], {
+  return new Date(timestamp).toLocaleTimeString(state.language === 'zh-CN' ? 'zh-CN' : 'en-US', {
     hour: 'numeric',
     minute: '2-digit',
+    hour12: state.language !== 'zh-CN',
   })
+}
+
+function formatEtaClockFromNow(offsetSeconds) {
+  return formatClockTime(Date.now() + Math.max(0, offsetSeconds) * 1000)
+}
+
+function getVehicleDestinationLabel(vehicle, layout) {
+  if (!layout?.stations?.length) {
+    return vehicle.upcomingLabel ?? vehicle.toLabel ?? vehicle.currentStopLabel ?? copyValue('terminalFallback')
+  }
+
+  const terminalIndex = vehicle.directionSymbol === '▲' ? 0 : layout.stations.length - 1
+  return layout.stations[terminalIndex]?.label ?? vehicle.upcomingLabel
+}
+
+function getTrainTimelineEntries(vehicle, layout, maxEntries = 6) {
+  if (!layout?.stations?.length) return []
+
+  const directionStep = vehicle.directionSymbol === '▲' ? -1 : 1
+  const timeline = []
+  const seenIndexes = new Set()
+  const nextIndex = vehicle.upcomingStopIndex ?? vehicle.currentIndex
+  const nextOffset = Math.max(0, vehicle.nextOffset ?? 0)
+
+  const pushEntry = (stationIndex, etaSeconds, { isNext = false, isTerminal = false } = {}) => {
+    if (stationIndex == null || seenIndexes.has(stationIndex)) return
+    const station = layout.stations[stationIndex]
+    if (!station) return
+    seenIndexes.add(stationIndex)
+    timeline.push({
+      id: `${vehicle.id}:${station.id}`,
+      label: station.label,
+      etaSeconds: Math.max(0, Math.round(etaSeconds)),
+      clockTime: formatEtaClockFromNow(etaSeconds),
+      isNext,
+      isTerminal,
+    })
+  }
+
+  pushEntry(nextIndex, nextOffset, { isNext: true })
+
+  let runningEtaSeconds = nextOffset
+  for (let stationIndex = nextIndex + directionStep; timeline.length < maxEntries; stationIndex += directionStep) {
+    if (stationIndex < 0 || stationIndex >= layout.stations.length) break
+
+    const previousIndex = stationIndex - directionStep
+    const previousStation = layout.stations[previousIndex]
+    runningEtaSeconds += Math.max(0, Math.round((previousStation?.segmentMinutes ?? 0) * 60))
+    const isTerminal = stationIndex === 0 || stationIndex === layout.stations.length - 1
+    pushEntry(stationIndex, runningEtaSeconds, { isTerminal })
+  }
+
+  return timeline
 }
 
 function setDialogTitle(title) {
@@ -2314,8 +3040,86 @@ function getWalkMinutes(distanceKm) {
 }
 
 function formatWalkDistance(distanceKm) {
-  if (distanceKm >= 1) return `${distanceKm.toFixed(1)} km walk`
-  return `${Math.round(distanceKm * 1000)} m walk`
+  if (distanceKm >= 1) return copyValue('walkKm', distanceKm)
+  return copyValue('walkMeters', Math.round(distanceKm * 1000))
+}
+
+function recordVehicleGhosts(lineId, vehicles) {
+  const now = Date.now()
+  const activeKeys = new Set()
+
+  for (const vehicle of vehicles) {
+    const key = `${lineId}:${vehicle.id}`
+    activeKeys.add(key)
+    const existing = state.vehicleGhosts.get(key) ?? []
+    const nextHistory = [
+      ...existing.filter((entry) => now - entry.timestamp <= GHOST_MAX_AGE_MS),
+      { y: vehicle.y, minutePosition: vehicle.minutePosition, timestamp: now },
+    ].slice(-GHOST_HISTORY_LIMIT)
+    state.vehicleGhosts.set(key, nextHistory)
+  }
+
+  for (const [key, history] of state.vehicleGhosts.entries()) {
+    if (!key.startsWith(`${lineId}:`)) continue
+    const freshHistory = history.filter((entry) => now - entry.timestamp <= GHOST_MAX_AGE_MS)
+    if (!activeKeys.has(key) || freshHistory.length === 0) {
+      state.vehicleGhosts.delete(key)
+      continue
+    }
+    if (freshHistory.length !== history.length) {
+      state.vehicleGhosts.set(key, freshHistory)
+    }
+  }
+}
+
+function getVehicleGhostTrail(lineId, vehicleId) {
+  const history = state.vehicleGhosts.get(`${lineId}:${vehicleId}`) ?? []
+  return history.slice(0, -1)
+}
+
+function getBearingDegrees(origin, target) {
+  const lat1 = (origin.lat * Math.PI) / 180
+  const lat2 = (target.lat * Math.PI) / 180
+  const deltaLon = ((target.lon - origin.lon) * Math.PI) / 180
+  const y = Math.sin(deltaLon) * Math.cos(lat2)
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLon)
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
+}
+
+function renderTransferRadar(station, recommendations) {
+  if (!station || !recommendations.length) return ''
+
+  const maxDistance = Math.max(...recommendations.map((item) => item.distanceKm), TRANSFER_MAX_WALK_KM / 2)
+  const center = 82
+
+  return `
+    <div class="transfer-radar">
+      <svg viewBox="0 0 164 164" class="transfer-radar-svg" aria-hidden="true">
+        <circle cx="${center}" cy="${center}" r="64" class="transfer-radar-ring"></circle>
+        <circle cx="${center}" cy="${center}" r="44" class="transfer-radar-ring"></circle>
+        <circle cx="${center}" cy="${center}" r="24" class="transfer-radar-ring"></circle>
+        <circle cx="${center}" cy="${center}" r="8" class="transfer-radar-core"></circle>
+        ${recommendations
+          .map((item) => {
+            const bearing = getBearingDegrees(station, item.stop)
+            const radius = 22 + (item.distanceKm / maxDistance) * 44
+            const x = center + Math.sin((bearing * Math.PI) / 180) * radius
+            const y = center - Math.cos((bearing * Math.PI) / 180) * radius
+            return `
+              <g>
+                <line x1="${center}" y1="${center}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" class="transfer-radar-spoke"></line>
+                <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" class="transfer-radar-stop" style="--line-color:${item.line.color};"></circle>
+              </g>
+            `
+          })
+          .join('')}
+      </svg>
+      <div class="transfer-radar-copy">
+        <p class="headway-chart-title">${state.language === 'zh-CN' ? '换乘雷达' : 'Transfer Radar'}</p>
+        <p class="headway-chart-copy">${state.language === 'zh-CN' ? '中心为当前站，越远表示步行越久' : 'Center is this station; farther dots mean longer walks'}</p>
+      </div>
+    </div>
+  `
 }
 
 function getNearbyTransferCandidates(station) {
@@ -2354,17 +3158,17 @@ function getNearbyTransferCandidates(station) {
     .slice(0, MAX_TRANSFER_RECOMMENDATIONS * 2)
 }
 
-function renderTransferRecommendations(recommendations, loading = false) {
+function renderTransferRecommendations(recommendations, loading = false, station = state.currentDialogStation) {
   if (loading) {
     transferSection.hidden = false
     transferSection.innerHTML = `
       <div class="transfer-panel">
         <div class="transfer-panel-header">
-          <h4 class="arrivals-title">Transfers</h4>
-          <p class="transfer-panel-copy">Checking nearby connections...</p>
+          <h4 class="arrivals-title">${copyValue('transfers')}</h4>
+          <p class="transfer-panel-copy">${copyValue('checkingNearbyConnections')}</p>
         </div>
         <div class="transfer-list">
-          <div class="transfer-card transfer-card-loading">Loading transfer recommendations...</div>
+          <div class="transfer-card transfer-card-loading">${copyValue('loadingTransferRecommendations')}</div>
         </div>
       </div>
     `
@@ -2381,9 +3185,10 @@ function renderTransferRecommendations(recommendations, loading = false) {
   transferSection.innerHTML = `
     <div class="transfer-panel">
       <div class="transfer-panel-header">
-        <h4 class="arrivals-title">Transfers</h4>
-        <p class="transfer-panel-copy">Closest boardable connections from this station</p>
+        <h4 class="arrivals-title">${copyValue('transfers')}</h4>
+        <p class="transfer-panel-copy">${copyValue('closestBoardableConnections')}</p>
       </div>
+      ${renderTransferRadar(station, recommendations)}
       <div class="transfer-list">
         ${recommendations
           .map(
@@ -2393,8 +3198,8 @@ function renderTransferRecommendations(recommendations, loading = false) {
                   <span class="arrival-line-token" style="--line-color:${recommendation.line.color};">${recommendation.line.name[0]}</span>
                   <div class="transfer-card-copy">
                     <p class="transfer-card-title">${recommendation.line.name} <span class="transfer-system-chip">${recommendation.systemName}</span></p>
-                    <p class="transfer-card-stop">Walk ${recommendation.walkMinutes} min to ${recommendation.stop.name}</p>
-                    <p class="transfer-card-meta">${formatWalkDistance(recommendation.distanceKm)}${recommendation.arrival ? ` • To ${recommendation.arrival.destination}` : ''}</p>
+                    <p class="transfer-card-stop">${copyValue('walkToStop', recommendation.walkMinutes, recommendation.stop.name)}</p>
+                    <p class="transfer-card-meta">${formatWalkDistance(recommendation.distanceKm)}${recommendation.arrival ? ` • ${copyValue('toDestination', recommendation.arrival.destination)}` : ''}</p>
                   </div>
                 </div>
                 <div class="transfer-card-side">
@@ -2431,10 +3236,10 @@ function buildTransferRecommendations(candidates, arrivalFeed) {
       boardAt: boardableArrival.arrivalTime,
       badge:
         rawWaitMs <= 0
-          ? 'Leave now'
+          ? copyValue('leaveNow')
           : waitMinutes <= 1
-            ? 'Board in ~1 min'
-            : `Board in ~${waitMinutes} min`,
+            ? copyValue('boardInOneMinute')
+            : copyValue('boardInMinutes', waitMinutes),
       tone: waitMinutes <= 2 ? 'hot' : waitMinutes <= 8 ? 'good' : 'calm',
       timeText: formatClockTime(boardableArrival.arrivalTime),
     })
@@ -2465,12 +3270,13 @@ function renderInsightsBoard() {
               <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
               <div class="line-title-copy">
                 <h2>${line.name}</h2>
-                <p>${vehicles.length} live ${vehicles.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()} · ${getTodayServiceSpan(line)}</p>
+                <p>${copyValue('liveCount', vehicles.length, vehicles.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase())} · ${getTodayServiceSpan(line)}</p>
               </div>
             </div>
             ${renderServiceReminderChip(line)}
           </header>
-          ${insightsHtml || `<p class="train-readout muted">Waiting for live ${vehicleLabel.toLowerCase()} data…</p>`}
+          ${renderServiceTimeline(line)}
+          ${insightsHtml || `<p class="train-readout muted">${state.language === 'zh-CN' ? `等待实时${vehicleLabel.toLowerCase()}数据…` : `Waiting for live ${vehicleLabel.toLowerCase()} data…`}</p>`}
         </article>
       `
       })
@@ -2508,8 +3314,8 @@ function closeAlertDialog() {
 
 function renderAlertListDialog(line) {
   const lineAlerts = getAlertsForLine(line.id)
-  alertDialogTitle.textContent = `${line.name} Alerts`
-  alertDialogSubtitle.textContent = `${lineAlerts.length} active alert${lineAlerts.length === 1 ? '' : 's'}`
+  alertDialogTitle.textContent = copyValue('affectedLineAlerts', line.name, lineAlerts.length)
+  alertDialogSubtitle.textContent = copyValue('activeAlerts', lineAlerts.length)
   alertDialogLines.textContent = line.name
   alertDialogBody.textContent = ''
   alertDialogBody.innerHTML = lineAlerts.length
@@ -2518,18 +3324,18 @@ function renderAlertListDialog(line) {
           (alert) => `
             <article class="alert-dialog-item">
               <p class="alert-dialog-item-meta">${formatAlertSeverity(alert.severity)} • ${formatAlertEffect(alert.effect)}</p>
-              <p class="alert-dialog-item-title">${alert.title || 'Service alert'}</p>
-              <p class="alert-dialog-item-copy">${alert.description || 'No additional alert details available.'}</p>
+              <p class="alert-dialog-item-title">${alert.title || copyValue('serviceAlert')}</p>
+              <p class="alert-dialog-item-copy">${alert.description || copyValue('noAdditionalAlertDetails')}</p>
               ${
                 alert.url
-                  ? `<p class="alert-dialog-item-link-wrap"><a class="alert-dialog-link" href="${alert.url}" target="_blank" rel="noreferrer">Read official alert</a></p>`
+                  ? `<p class="alert-dialog-item-link-wrap"><a class="alert-dialog-link" href="${alert.url}" target="_blank" rel="noreferrer">${copyValue('readOfficialAlert')}</a></p>`
                   : ''
               }
             </article>
           `,
         )
         .join('')
-    : '<p class="alert-dialog-item-copy">No active alerts.</p>'
+    : `<p class="alert-dialog-item-copy">${copyValue('noActiveAlerts')}</p>`
   alertDialogLink.hidden = true
   alertDialogLink.removeAttribute('href')
 
@@ -2554,11 +3360,17 @@ function renderTrainDialog(vehicle) {
   const currentLabel = isBetweenStops ? 'Between' : 'Now'
   const nextName = isBetweenStops ? vehicle.toLabel : vehicle.upcomingLabel
   const segmentProgress = isBetweenStops ? vehicle.progress : 0.5
+  const layout = state.layouts.get(vehicle.lineId)
+  const timelineEntries = getTrainTimelineEntries(vehicle, layout)
+  const destinationLabel = layout ? getVehicleDestinationLabel(vehicle, layout) : vehicle.upcomingLabel
+  const terminalEtaSeconds = timelineEntries.at(-1)?.etaSeconds ?? Math.max(0, vehicle.nextOffset ?? 0)
+  const directionLabel = getDirectionBaseLabel(vehicle.directionSymbol)
 
   trainDialogTitle.textContent = `${vehicle.lineName} ${getVehicleLabel()} ${vehicle.label}`
-  trainDialogSubtitle.textContent = vehicle.directionSymbol === '▲' ? 'Direction A movement' : 'Direction B movement'
+  trainDialogSubtitle.textContent = state.language === 'zh-CN' ? `${directionLabel} · ${copyValue('toDestination', destinationLabel)}` : `${directionLabel} to ${destinationLabel}`
   trainDialogStatus.className = `train-detail-status train-list-status-${getStatusTone(vehicle.serviceStatus)}`
-  trainDialogStatus.textContent = vehicle.serviceStatus
+  trainDialogStatus.innerHTML = renderStatusPills(getVehicleStatusPills(vehicle))
+  trainDialog.querySelector('.train-eta-panel')?.remove()
   trainDialogLine.innerHTML = `
     <div class="train-detail-spine" style="--line-color:${vehicle.lineColor};"></div>
     <div
@@ -2574,25 +3386,70 @@ function renderTrainDialog(vehicle) {
     <div class="train-detail-stop">
       <span class="train-detail-marker"></span>
       <div>
-        <p class="train-detail-label">Previous</p>
+        <p class="train-detail-label">${copyValue('previous')}</p>
         <p class="train-detail-name">${previousName}</p>
       </div>
     </div>
     <div class="train-detail-stop is-current">
       <span class="train-detail-marker train-detail-marker-ghost"></span>
       <div>
-        <p class="train-detail-label">${currentLabel}</p>
+        <p class="train-detail-label">${currentLabel === 'Between' ? (state.language === 'zh-CN' ? '区间' : 'Between') : copyValue('now')}</p>
         <p class="train-detail-name">${currentName}</p>
       </div>
     </div>
     <div class="train-detail-stop">
       <span class="train-detail-marker"></span>
       <div>
-        <p class="train-detail-label">Next</p>
+        <p class="train-detail-label">${copyValue('next')}</p>
         <p class="train-detail-name">${nextName}</p>
       </div>
     </div>
   `
+  trainDialogLine.insertAdjacentHTML(
+    'afterend',
+    `
+      <section class="train-eta-panel">
+        <div class="train-eta-summary">
+          <div class="metric-chip">
+            <p class="metric-chip-label">${copyValue('direction')}</p>
+            <p class="metric-chip-value">${directionLabel}</p>
+          </div>
+          <div class="metric-chip">
+            <p class="metric-chip-label">${copyValue('terminal')}</p>
+            <p class="metric-chip-value">${destinationLabel}</p>
+          </div>
+          <div class="metric-chip">
+            <p class="metric-chip-label">${copyValue('etaToTerminal')}</p>
+            <p class="metric-chip-value">${formatArrivalTime(terminalEtaSeconds)}</p>
+          </div>
+        </div>
+        <div class="train-eta-timeline">
+          <div class="train-eta-header">
+            <p class="train-detail-label">${copyValue('upcomingStops')}</p>
+            <p class="train-eta-header-copy">${copyValue('liveEtaNow')}</p>
+          </div>
+          ${timelineEntries.length
+            ? timelineEntries
+              .map(
+                (entry) => `
+                  <article class="train-eta-stop${entry.isNext ? ' is-next' : ''}${entry.isTerminal ? ' is-terminal' : ''}">
+                    <div>
+                      <p class="train-eta-stop-label">${entry.isNext ? copyValue('nextStop') : entry.isTerminal ? copyValue('terminal') : copyValue('upcoming')}</p>
+                      <p class="train-eta-stop-name">${entry.label}</p>
+                    </div>
+                    <div class="train-eta-stop-side">
+                      <p class="train-eta-stop-countdown">${formatArrivalTime(entry.etaSeconds)}</p>
+                      <p class="train-eta-stop-clock">${entry.clockTime}</p>
+                    </div>
+                  </article>
+                `,
+              )
+              .join('')
+            : `<p class="train-readout muted">${copyValue('noDownstreamEta')}</p>`}
+        </div>
+      </section>
+    `,
+  )
 
   if (!trainDialog.open) trainDialog.showModal()
 }
@@ -2631,15 +3488,45 @@ function attachStationClickHandlers() {
 
 function render() {
   const systemMeta = getActiveSystemMeta()
-  themeToggleButton.textContent = state.theme === 'dark' ? 'Light' : 'Dark'
+  document.documentElement.lang = state.language
+  languageToggleButton.textContent = copyValue('languageToggle')
+  languageToggleButton.setAttribute('aria-label', copyValue('languageToggleAria'))
+  themeToggleButton.textContent = state.theme === 'dark' ? copyValue('themeLight') : copyValue('themeDark')
+  themeToggleButton.setAttribute('aria-label', copyValue('themeToggleAria'))
   screenKickerElement.textContent = systemMeta.kicker
   screenTitleElement.textContent = systemMeta.title
+  systemBarElement.setAttribute('aria-label', copyValue('transitSystems'))
+  viewBarElement.setAttribute('aria-label', copyValue('boardViews'))
+  document.querySelector('#dialog-direction-tabs')?.setAttribute('aria-label', copyValue('boardDirectionView'))
+  arrivalsTitleNb.textContent = formatDirectionLabel('▲', '', { includeSymbol: true })
+  arrivalsTitleSb.textContent = formatDirectionLabel('▼', '', { includeSymbol: true })
+  dialogDisplay.textContent = state.dialogDisplayMode ? copyValue('exit') : copyValue('board')
+  dialogDisplay.setAttribute('aria-label', state.dialogDisplayMode ? copyValue('exit') : copyValue('board'))
+  trainDialogClose.setAttribute('aria-label', copyValue('closeTrainDialog'))
+  alertDialogClose.setAttribute('aria-label', copyValue('closeAlertDialog'))
+  if (!dialog.open) {
+    setDialogTitle(copyValue('station'))
+    dialogServiceSummary.textContent = copyValue('serviceSummary')
+  }
+  if (!trainDialog.open) {
+    trainDialogTitle.textContent = copyValue('train')
+    trainDialogSubtitle.textContent = copyValue('currentMovement')
+  }
+  if (!alertDialog.open) {
+    alertDialogTitle.textContent = copyValue('serviceAlert')
+    alertDialogSubtitle.textContent = copyValue('transitAdvisory')
+  }
+  alertDialogLink.textContent = copyValue('readOfficialAlert')
   systemBarElement.hidden = state.systemsById.size < 2
   systemBarElement.innerHTML = renderSystemSwitcher()
   refreshLiveMeta()
 
   tabButtons.forEach((button) => button.classList.toggle('is-active', button.dataset.tab === state.activeTab))
-  document.querySelector('#tab-trains').textContent = getVehicleLabelPlural()
+  tabButtons.forEach((button) => {
+    if (button.dataset.tab === 'map') button.textContent = copyValue('tabMap')
+    if (button.dataset.tab === 'trains') button.textContent = getVehicleLabelPlural()
+    if (button.dataset.tab === 'insights') button.textContent = copyValue('tabInsights')
+  })
   attachSystemSwitcherHandlers()
 
   if (state.activeTab === 'map') {
@@ -2649,6 +3536,7 @@ function render() {
     attachLineSwitcherHandlers()
     attachAlertClickHandlers()
     attachStationClickHandlers()
+    attachTrainClickHandlers()
     queueMicrotask(syncCompactLayoutFromBoard)
     return
   }
@@ -2686,11 +3574,11 @@ function startInsightsTickerRotation() {
 }
 
 function refreshLiveMeta() {
-  statusPillElement.textContent = state.error ? 'HOLD' : 'SYNC'
+  statusPillElement.textContent = state.error ? copyValue('statusHold') : copyValue('statusSync')
   statusPillElement.classList.toggle('status-pill-error', Boolean(state.error))
-  currentTimeElement.textContent = `Now ${formatCurrentTime()}`
+  currentTimeElement.textContent = `${copyValue('nowPrefix')} ${formatCurrentTime()}`
   updatedAtElement.textContent = state.error
-    ? 'Using last successful snapshot'
+    ? (state.language === 'zh-CN' ? '使用最近一次成功快照' : 'Using last successful snapshot')
     : formatRelativeTime(state.fetchedAt)
   dialogStatusPillElement.textContent = statusPillElement.textContent
   dialogStatusPillElement.classList.toggle('status-pill-error', Boolean(state.error))
@@ -2731,6 +3619,7 @@ function applySystem(systemId) {
   state.error = ''
   state.fetchedAt = ''
   state.insightsTickerIndex = 0
+  state.vehicleGhosts = new Map()
 }
 
 async function switchSystem(systemId, { updateUrl = true, preserveDialog = false } = {}) {
@@ -2773,7 +3662,7 @@ function parseSituation(situation) {
     id: situation.id,
     effect: situation.reason ?? 'SERVICE ALERT',
     severity: situation.severity ?? 'INFO',
-    title: situation.summary?.value ?? 'Service alert',
+    title: situation.summary?.value ?? copyValue('serviceAlert'),
     description: situation.description?.value ?? '',
     url: situation.url?.value ?? '',
     lineIds,
@@ -2797,6 +3686,7 @@ async function refreshVehicles() {
         .map((vehicle) => parseVehicle(vehicle, line, layout, tripsById))
         .filter(Boolean)
       state.vehiclesByLine.set(line.id, vehicles)
+      recordVehicleGhosts(line.id, vehicles)
     }
 
     const currentMetrics = computeSystemSummaryMetrics(buildInsightsItems(state.lines))
@@ -2806,7 +3696,7 @@ async function refreshVehicles() {
       current: currentMetrics,
     })
   } catch (error) {
-    state.error = 'Realtime offline'
+    state.error = copyValue('realtimeOffline')
     console.error(error)
   }
 
@@ -2814,6 +3704,7 @@ async function refreshVehicles() {
 }
 
 async function init() {
+  setLanguage(getPreferredLanguage())
   setTheme(getPreferredTheme())
   updateViewportState()
   await loadStaticData()
@@ -2855,6 +3746,6 @@ async function init() {
 }
 
 init().catch((error) => {
-  statusPillElement.textContent = 'FAIL'
+  statusPillElement.textContent = copyValue('statusFail')
   updatedAtElement.textContent = error.message
 })
