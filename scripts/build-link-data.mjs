@@ -497,6 +497,21 @@ async function buildSystem(systemConfig) {
   }
 }
 
+async function writeOutputFile(payload) {
+  await fs.mkdir(path.dirname(OUTPUT_FILE), { recursive: true })
+
+  const nextContent = `${JSON.stringify(payload, null, 2)}\n`
+  const existingContent = await fs.readFile(OUTPUT_FILE, 'utf8').catch(() => '')
+
+  if (existingContent === nextContent) {
+    console.log(`Static data unchanged: ${path.relative(process.cwd(), OUTPUT_FILE)}`)
+    return
+  }
+
+  await fs.writeFile(OUTPUT_FILE, nextContent)
+  console.log(`Static data updated: ${path.relative(process.cwd(), OUTPUT_FILE)}`)
+}
+
 async function main() {
   const allConfigs = Object.values(SYSTEM_CONFIG)
   const gtfsSystems = await Promise.all(
@@ -508,18 +523,7 @@ async function main() {
   }
   const systems = [...gtfsSystems, ...obaSystems]
 
-  await fs.mkdir(path.dirname(OUTPUT_FILE), { recursive: true })
-  await fs.writeFile(
-    OUTPUT_FILE,
-    JSON.stringify(
-      {
-        generatedAt: new Date().toISOString(),
-        systems,
-      },
-      null,
-      2,
-    ),
-  )
+  await writeOutputFile({ systems })
 }
 
 main().catch((error) => {

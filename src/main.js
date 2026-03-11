@@ -1,9 +1,9 @@
 import './style.css'
 import { registerSW } from 'virtual:pwa-register'
-import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DATA_URL, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, MAX_TRANSFER_RECOMMENDATIONS, OBA_ARRIVALS_CONCURRENCY, OBA_BASE_URL, OBA_COOLDOWN_BASE_MS, OBA_COOLDOWN_MAX_MS, OBA_INTER_REQUEST_DELAY_MS, OBA_KEY, OBA_MAX_RETRIES, OBA_RETRY_BASE_DELAY_MS, SYSTEM_META, THEME_STORAGE_KEY, TRANSFER_BOARDING_BUFFER_MS, TRANSFER_FETCH_DELAY_MS, TRANSFER_MAX_WALK_KM, TRANSFER_WALKING_SPEED_KMPH, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
+import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, MAX_TRANSFER_RECOMMENDATIONS, OBA_ARRIVALS_CONCURRENCY, OBA_BASE_URL, OBA_COOLDOWN_BASE_MS, OBA_COOLDOWN_MAX_MS, OBA_INTER_REQUEST_DELAY_MS, OBA_KEY, OBA_MAX_RETRIES, OBA_RETRY_BASE_DELAY_MS, SYSTEM_META, THEME_STORAGE_KEY, TRANSFER_BOARDING_BUFFER_MS, TRANSFER_FETCH_DELAY_MS, TRANSFER_MAX_WALK_KM, TRANSFER_WALKING_SPEED_KMPH, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, formatWalkDistance as formatWalkDistanceValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
-import { clamp, getBearingDegrees, haversineKm, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
+import { clamp, getBearingDegrees, haversineKm, parseClockToSeconds, pluralizeVehicleLabel, slugifyStation } from './utils'
 import { createObaClient } from './oba'
 import { createArrivalsHelpers, getStatusTone } from './arrivals'
 import { parseVehicle } from './vehicles'
@@ -13,6 +13,7 @@ import { createInsightsRenderers } from './renderers/insights'
 import { getDialogElements } from './dialogs/dom'
 import { createStationDialogDisplayController } from './dialogs/station-display'
 import { createOverlayDialogs } from './dialogs/overlays'
+import { bootstrapApp, loadStaticData as loadStaticDataIntoState } from './static-data'
 
 const state = {
   fetchedAt: '',
@@ -626,52 +627,6 @@ function renderInlineAlerts(lineAlerts, lineId) {
       <span class="line-alert-badge-copy">${copyValue('alertsWord', lineAlerts.length)}</span>
     </button>
   `
-}
-
-function buildLayout(line) {
-  const orderedStops = [...line.stops].sort((left, right) => right.sequence - left.sequence)
-  const stationGap = 48
-  const topPadding = 44
-  const bottomPadding = 28
-  const trackX = 88
-  const labelX = 122
-  const height = topPadding + bottomPadding + (orderedStops.length - 1) * stationGap
-  const stationIndexByStopId = new Map()
-
-  const stations = orderedStops.map((stop, index) => {
-    const station = {
-      ...stop,
-      label: normalizeName(stop.name),
-      y: topPadding + index * stationGap,
-      index,
-      isTerminal: index === 0 || index === orderedStops.length - 1,
-    }
-
-    stationIndexByStopId.set(stop.id, index)
-    stationIndexByStopId.set(`${line.agencyId}_${stop.id}`, index)
-    for (const alias of line.stationAliases?.[stop.id] ?? []) {
-      stationIndexByStopId.set(alias, index)
-      stationIndexByStopId.set(`${line.agencyId}_${alias}`, index)
-    }
-
-    return station
-  })
-
-  let cumulativeMinutes = 0
-  for (let index = 0; index < stations.length; index += 1) {
-    stations[index].cumulativeMinutes = cumulativeMinutes
-    cumulativeMinutes += index < stations.length - 1 ? stations[index].segmentMinutes : 0
-  }
-
-  return {
-    totalMinutes: cumulativeMinutes,
-    height,
-    labelX,
-    stationGap,
-    stationIndexByStopId,
-    stations,
-    trackX,
-  }
 }
 
 function formatServiceStatus(serviceStatus) {
@@ -1597,38 +1552,7 @@ async function switchSystem(systemId, { updateUrl = true, preserveDialog = false
 }
 
 async function loadStaticData() {
-  const STATIC_MAX_RETRIES = 4
-  const STATIC_RETRY_BASE_MS = 1_000
-
-  for (let attempt = 0; attempt <= STATIC_MAX_RETRIES; attempt += 1) {
-    let response = null
-    let payload = null
-
-    try {
-      response = await fetch(DATA_URL, { cache: 'no-store' })
-      payload = await response.json()
-    } catch (error) {
-      if (attempt === STATIC_MAX_RETRIES) throw error
-      await sleep(STATIC_RETRY_BASE_MS * 2 ** attempt)
-      continue
-    }
-
-    if (!response.ok) {
-      if (attempt === STATIC_MAX_RETRIES) {
-        throw new Error(`Static data load failed with ${response.status}`)
-      }
-      await sleep(STATIC_RETRY_BASE_MS * 2 ** attempt)
-      continue
-    }
-
-    const systems = payload.systems ?? []
-    state.systemsById = new Map(systems.map((system) => [system.id, system]))
-    state.layoutsBySystem = new Map(
-      systems.map((system) => [system.id, new Map(system.lines.map((line) => [line.id, buildLayout(line)]))]),
-    )
-    applySystem(getSystemIdFromUrl())
-    return
-  }
+  await loadStaticDataIntoState({ state, getSystemIdFromUrl })
 }
 
 function parseSituation(situation) {
@@ -1684,47 +1608,37 @@ async function refreshVehicles() {
   render()
 }
 
-async function init() {
-  setLanguage(getPreferredLanguage())
-  setTheme(getPreferredTheme())
+const handleViewportResize = () => {
+  const previousCompactLayout = state.compactLayout
   updateViewportState()
-  await loadStaticData()
-  render()
-  await refreshVehicles()
-  await syncDialogFromUrl()
-
-  window.addEventListener('popstate', () => {
-    syncDialogFromUrl().catch(console.error)
-  })
-
-  const handleViewportResize = () => {
-    const previousCompactLayout = state.compactLayout
-    updateViewportState()
-    syncDialogTitleMarquee()
-    if (previousCompactLayout !== state.compactLayout) {
-      render()
-      return
-    }
-
-    syncCompactLayoutFromBoard()
+  syncDialogTitleMarquee()
+  if (previousCompactLayout !== state.compactLayout) {
+    render()
+    return
   }
 
-  window.addEventListener('resize', handleViewportResize)
-  window.visualViewport?.addEventListener('resize', handleViewportResize)
-
-  const boardResizeObserver = new ResizeObserver(() => {
-    syncCompactLayoutFromBoard()
-  })
-  boardResizeObserver.observe(boardElement)
-
-  startLiveRefreshLoop()
-  startInsightsTickerRotation()
-  window.setInterval(() => {
-    refreshLiveMeta()
-    refreshArrivalCountdowns()
-    refreshVehicleStatusMessages()
-  }, 1000)
+  syncCompactLayoutFromBoard()
 }
+
+const init = bootstrapApp({
+  getPreferredLanguage,
+  getPreferredTheme,
+  handleViewportResize,
+  loadStaticData,
+  refreshVehicles,
+  render,
+  refreshLiveMeta,
+  refreshArrivalCountdowns,
+  refreshVehicleStatusMessages,
+  startInsightsTickerRotation,
+  startLiveRefreshLoop,
+  syncCompactLayoutFromBoard,
+  syncDialogFromUrl,
+  updateViewportState,
+  setLanguage,
+  setTheme,
+  boardElement,
+})
 
 init().catch((error) => {
   statusPillElement.textContent = copyValue('statusFail')

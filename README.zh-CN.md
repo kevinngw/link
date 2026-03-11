@@ -45,6 +45,8 @@ npm run dev
 ```
 
 `predev` 脚本会自动拉取最新的 Sound Transit GTFS 数据并重新生成 `public/pulse-data.json`。
+该文件现在被视为本地构建产物（已加入 gitignore），所以日常 `dev/build` 不会再把工作区弄脏。
+生成脚本在内容未实际变化时也会跳过重写。
 
 ```bash
 # 生产构建
@@ -68,7 +70,8 @@ public/
 scripts/
   build-link-data.mjs   GTFS 处理脚本 — 拉取并转换 Sound Transit 数据
 src/
-  main.js               应用主逻辑（约 800 行）
+  main.js               应用编排 / 入口接线
+  static-data.js        静态数据与启动辅助逻辑
   style.css             样式（约 620 行）
 .github/workflows/
   deploy.yml            GitHub Pages CI/CD 配置
