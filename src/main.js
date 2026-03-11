@@ -17,6 +17,10 @@ const VEHICLE_REFRESH_INTERVAL_MS = IS_PUBLIC_TEST_KEY ? 45_000 : 15_000
 const DIALOG_REFRESH_INTERVAL_MS = IS_PUBLIC_TEST_KEY ? 90_000 : 30_000
 const DIALOG_DISPLAY_SCROLL_INTERVAL_MS = 4_000
 const DIALOG_DISPLAY_DIRECTION_ROTATE_MS = 15_000
+const TRANSFER_WALKING_SPEED_KMPH = 4.8
+const TRANSFER_MAX_WALK_KM = 0.35
+const TRANSFER_BOARDING_BUFFER_MS = 45_000
+const MAX_TRANSFER_RECOMMENDATIONS = 4
 const THEME_STORAGE_KEY = 'link-pulse-theme'
 const DEFAULT_SYSTEM_ID = 'link'
 const SYSTEM_META = {
@@ -139,6 +143,7 @@ document.querySelector('#app').innerHTML = `
       </header>
       <div id="station-alerts-container"></div>
       <div class="dialog-body">
+        <section id="transfer-section" class="transfer-section" hidden></section>
         <div class="arrivals-section" data-direction-section="nb">
           <h4 class="arrivals-title">Northbound (▲)</h4>
           <div id="arrivals-nb-pinned" class="arrivals-pinned"></div>
@@ -205,6 +210,7 @@ const dialogUpdatedAtElement = document.querySelector('#dialog-updated-at')
 const dialogDisplay = document.querySelector('#dialog-display')
 const dialogDirectionTabs = [...document.querySelectorAll('[data-dialog-direction]')]
 const stationAlertsContainer = document.querySelector('#station-alerts-container')
+const transferSection = document.querySelector('#transfer-section')
 const arrivalsNbPinned = document.querySelector('#arrivals-nb-pinned')
 const arrivalsNb = document.querySelector('#arrivals-nb')
 const arrivalsSbPinned = document.querySelector('#arrivals-sb-pinned')
@@ -1584,13 +1590,15 @@ async function fetchArrivalsForStopIds(stopIds) {
   return arrivals
 }
 
-function buildArrivalsForLine(arrivalFeed, line) {
+function buildArrivalsForLine(arrivalFeed, line, allowedStopIds = null) {
   const now = Date.now()
   const seen = new Set()
   const arrivals = { nb: [], sb: [] }
+  const stopIdFilter = allowedStopIds ? new Set(allowedStopIds) : null
 
   for (const arrival of arrivalFeed) {
     if (arrival.routeId !== getLineRouteId(line)) continue
+    if (stopIdFilter && !stopIdFilter.has(arrival.stopId)) continue
     const arrivalTime = arrival.predictedArrivalTime || arrival.scheduledArrivalTime
     if (!arrivalTime || arrivalTime <= now) continue
 
@@ -1631,7 +1639,7 @@ async function getArrivalsForStation(station, line, prefetchedFeed = null) {
 
   const stopIds = getStationStopIds(station, line)
   const arrivalFeed = prefetchedFeed ?? (await fetchArrivalsForStopIds(stopIds))
-  const arrivals = buildArrivalsForLine(arrivalFeed, line)
+  const arrivals = buildArrivalsForLine(arrivalFeed, line, stopIds)
   state.arrivalsCache.set(cacheKey, { fetchedAt: Date.now(), value: arrivals })
   return arrivals
 }
@@ -1687,6 +1695,7 @@ async function showStationDialog(station, updateUrl = true) {
   state.currentDialogStation = station
 
   renderStationAlertPills(station)
+  renderTransferRecommendations([], true)
   renderArrivalLists({ nb: [], sb: [] }, true)
   if (updateUrl) {
     setStationParam(station)
@@ -1703,16 +1712,20 @@ async function refreshStationDialog(station) {
 
   try {
     const dialogStations = getDialogStations(station)
+    const transferCandidates = getNearbyTransferCandidates(station)
     const sharedStopIds = dialogStations.flatMap(({ station: matchedStation, line }) => getStationStopIds(matchedStation, line))
-    const arrivalFeed = await fetchArrivalsForStopIds(sharedStopIds)
+    const transferStopIds = transferCandidates.flatMap(({ stop, line }) => getStationStopIds(stop, line))
+    const arrivalFeed = await fetchArrivalsForStopIds([...sharedStopIds, ...transferStopIds])
     const arrivalsByLine = await Promise.all(
       dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line, arrivalFeed)),
     )
     if (state.activeDialogRequest !== requestId || !dialog.open) return
+    renderTransferRecommendations(buildTransferRecommendations(transferCandidates, arrivalFeed))
     renderStationAlertPills(station)
     renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
   } catch (error) {
     if (state.activeDialogRequest !== requestId || !dialog.open) return
+    renderTransferRecommendations([])
     arrivalsNb.innerHTML = `<div class="arrival-item muted">${error.message}</div>`
     arrivalsSb.innerHTML = '<div class="arrival-item muted">Retry in a moment</div>'
   }
@@ -1872,6 +1885,152 @@ function formatClockTime(timestamp) {
     hour: 'numeric',
     minute: '2-digit',
   })
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(a))
+}
+
+function getWalkMinutes(distanceKm) {
+  return Math.max(1, Math.round((distanceKm / TRANSFER_WALKING_SPEED_KMPH) * 60))
+}
+
+function formatWalkDistance(distanceKm) {
+  if (distanceKm >= 1) return `${distanceKm.toFixed(1)} km walk`
+  return `${Math.round(distanceKm * 1000)} m walk`
+}
+
+function getNearbyTransferCandidates(station) {
+  if (!station) return []
+
+  const dialogStations = getDialogStations(station)
+  const excludedStops = new Set(dialogStations.map(({ line, station: matchedStation }) => `${line.agencyId}:${line.id}:${matchedStation.id}`))
+  const candidatesByLine = new Map()
+
+  for (const system of state.systemsById.values()) {
+    for (const line of system.lines ?? []) {
+      for (const stop of line.stops ?? []) {
+        if (excludedStops.has(`${line.agencyId}:${line.id}:${stop.id}`)) continue
+
+        const distanceKm = haversineKm(station.lat, station.lon, stop.lat, stop.lon)
+        if (distanceKm > TRANSFER_MAX_WALK_KM) continue
+
+        const key = `${system.id}:${line.id}`
+        const existing = candidatesByLine.get(key)
+        if (!existing || distanceKm < existing.distanceKm) {
+          candidatesByLine.set(key, {
+            systemId: system.id,
+            systemName: system.name,
+            line,
+            stop,
+            distanceKm,
+            walkMinutes: getWalkMinutes(distanceKm),
+          })
+        }
+      }
+    }
+  }
+
+  return [...candidatesByLine.values()]
+    .sort((left, right) => left.distanceKm - right.distanceKm || left.line.name.localeCompare(right.line.name))
+    .slice(0, MAX_TRANSFER_RECOMMENDATIONS * 2)
+}
+
+function renderTransferRecommendations(recommendations, loading = false) {
+  if (loading) {
+    transferSection.hidden = false
+    transferSection.innerHTML = `
+      <div class="transfer-panel">
+        <div class="transfer-panel-header">
+          <h4 class="arrivals-title">Transfers</h4>
+          <p class="transfer-panel-copy">Checking nearby connections...</p>
+        </div>
+        <div class="transfer-list">
+          <div class="transfer-card transfer-card-loading">Loading transfer recommendations...</div>
+        </div>
+      </div>
+    `
+    return
+  }
+
+  if (!recommendations.length) {
+    transferSection.hidden = true
+    transferSection.innerHTML = ''
+    return
+  }
+
+  transferSection.hidden = false
+  transferSection.innerHTML = `
+    <div class="transfer-panel">
+      <div class="transfer-panel-header">
+        <h4 class="arrivals-title">Transfers</h4>
+        <p class="transfer-panel-copy">Closest boardable connections from this station</p>
+      </div>
+      <div class="transfer-list">
+        ${recommendations
+          .map(
+            (recommendation) => `
+              <article class="transfer-card">
+                <div class="transfer-card-main">
+                  <span class="arrival-line-token" style="--line-color:${recommendation.line.color};">${recommendation.line.name[0]}</span>
+                  <div class="transfer-card-copy">
+                    <p class="transfer-card-title">${recommendation.line.name} <span class="transfer-system-chip">${recommendation.systemName}</span></p>
+                    <p class="transfer-card-stop">Walk ${recommendation.walkMinutes} min to ${recommendation.stop.name}</p>
+                    <p class="transfer-card-meta">${formatWalkDistance(recommendation.distanceKm)}${recommendation.arrival ? ` • To ${recommendation.arrival.destination}` : ''}</p>
+                  </div>
+                </div>
+                <div class="transfer-card-side">
+                  <span class="transfer-card-badge transfer-card-badge-${recommendation.tone}">${recommendation.badge}</span>
+                  <span class="transfer-card-time">${recommendation.timeText}</span>
+                </div>
+              </article>
+            `,
+          )
+          .join('')}
+      </div>
+    </div>
+  `
+}
+
+function buildTransferRecommendations(candidates, arrivalFeed) {
+  const now = Date.now()
+  const recommendations = []
+
+  for (const candidate of candidates) {
+    const stopIds = getStationStopIds(candidate.stop, candidate.line)
+    const arrivals = buildArrivalsForLine(arrivalFeed, candidate.line, stopIds)
+    const merged = [...arrivals.nb, ...arrivals.sb].sort((left, right) => left.arrivalTime - right.arrivalTime)
+    if (!merged.length) continue
+
+    const readyAt = now + candidate.walkMinutes * 60_000 + TRANSFER_BOARDING_BUFFER_MS
+    const boardableArrival = merged.find((arrival) => arrival.arrivalTime >= readyAt) ?? merged[0]
+    const rawWaitMs = boardableArrival.arrivalTime - now - candidate.walkMinutes * 60_000
+    const waitMinutes = Math.max(0, Math.round(rawWaitMs / 60_000))
+
+    recommendations.push({
+      ...candidate,
+      arrival: boardableArrival,
+      boardAt: boardableArrival.arrivalTime,
+      badge:
+        rawWaitMs <= 0
+          ? 'Leave now'
+          : waitMinutes <= 1
+            ? 'Board in ~1 min'
+            : `Board in ~${waitMinutes} min`,
+      tone: waitMinutes <= 2 ? 'hot' : waitMinutes <= 8 ? 'good' : 'calm',
+      timeText: formatClockTime(boardableArrival.arrivalTime),
+    })
+  }
+
+  return recommendations
+    .sort((left, right) => left.boardAt - right.boardAt || left.distanceKm - right.distanceKm)
+    .slice(0, MAX_TRANSFER_RECOMMENDATIONS)
 }
 
 function renderInsightsBoard() {

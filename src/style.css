@@ -1519,6 +1519,146 @@ h1 {
   gap: 20px;
 }
 
+.transfer-section[hidden] {
+  display: none;
+}
+
+.transfer-panel {
+  padding: 16px;
+  background: color-mix(in srgb, var(--surface-card) 88%, transparent);
+  border-radius: 12px;
+  border: 1px solid var(--border-soft);
+}
+
+.transfer-panel-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.transfer-panel-copy {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.transfer-list {
+  display: grid;
+  gap: 8px;
+}
+
+.transfer-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.transfer-card-loading {
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+}
+
+.transfer-card-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.transfer-card-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.transfer-card-title,
+.transfer-card-stop,
+.transfer-card-meta,
+.transfer-card-time {
+  margin: 0;
+}
+
+.transfer-card-title {
+  color: var(--text-primary);
+  font-size: 0.84rem;
+}
+
+.transfer-card-stop {
+  color: color-mix(in srgb, var(--text-primary) 82%, transparent);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.transfer-card-meta {
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.transfer-system-chip {
+  margin-left: 6px;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.transfer-card-side {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.transfer-card-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border: 1px solid transparent;
+}
+
+.transfer-card-badge-hot {
+  color: #ffd166;
+  border-color: color-mix(in srgb, #ffd166 40%, var(--border-color));
+  background: color-mix(in srgb, #ffd166 10%, var(--surface-soft));
+}
+
+.transfer-card-badge-good {
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent-strong) 34%, var(--border-color));
+  background: color-mix(in srgb, var(--accent-strong) 10%, var(--surface-soft));
+}
+
+.transfer-card-badge-calm {
+  color: #9ecbff;
+  border-color: color-mix(in srgb, #9ecbff 34%, var(--border-color));
+  background: color-mix(in srgb, #9ecbff 10%, var(--surface-soft));
+}
+
+.transfer-card-time {
+  color: var(--text-primary);
+  font-size: 0.86rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 .station-alerts {
   display: grid;
   gap: 8px;
@@ -1705,6 +1845,10 @@ h1 {
 }
 
 .station-dialog.is-display-mode .dialog-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 28px;
+  row-gap: 18px;
   margin-bottom: 24px;
   padding-bottom: 20px;
   align-items: start;
@@ -1717,28 +1861,45 @@ h1 {
 
 .station-dialog.is-display-mode .dialog-meta {
   display: grid;
+  grid-area: meta;
   justify-items: end;
   gap: 0;
   margin-top: 0;
+  min-width: max-content;
 }
 
 .station-dialog.is-display-mode .dialog-actions {
   display: grid;
-  justify-items: end;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "tabs status"
+    "exit meta";
+  align-items: center;
+  justify-items: stretch;
   align-content: start;
-  gap: 12px;
+  gap: 12px 18px;
+  min-width: min(58vw, 760px);
 }
 
 .station-dialog.is-display-mode .dialog-actions-top {
-  justify-content: end;
+  display: contents;
 }
 
 .station-dialog.is-display-mode .dialog-actions-top .status-pill {
+  grid-area: status;
+  justify-self: end;
   margin: 0;
 }
 
 .station-dialog.is-display-mode .dialog-direction-tabs {
   display: inline-flex;
+  grid-area: tabs;
+  min-width: 0;
+}
+
+.station-dialog.is-display-mode .dialog-mode-button {
+  grid-area: exit;
+  justify-self: start;
 }
 
 .station-dialog.is-display-mode .dialog-meta .status-pill {
@@ -1891,6 +2052,16 @@ h1 {
     margin: auto;
   }
 
+  .transfer-panel-header,
+  .transfer-card {
+    display: grid;
+  }
+
+  .transfer-card-side {
+    justify-items: start;
+    text-align: left;
+  }
+
   .station-dialog.is-display-mode .dialog-content {
     padding:
       calc(16px + env(safe-area-inset-top))
@@ -1904,8 +2075,9 @@ h1 {
   }
 
   .station-dialog.is-display-mode .dialog-header {
-    display: grid;
     gap: 14px;
+    grid-template-columns: 1fr;
+    column-gap: 0;
   }
 
   .station-dialog.is-display-mode .dialog-header h3 {
@@ -1913,13 +2085,13 @@ h1 {
   }
 
   .station-dialog.is-display-mode .dialog-actions {
-    display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
-  }
-
-  .station-dialog.is-display-mode .dialog-actions-top {
-    display: contents;
+    grid-template-areas:
+      "tabs status"
+      "exit meta";
+    align-items: center;
+    gap: 12px 14px;
+    min-width: 0;
   }
 
   .station-dialog.is-display-mode .dialog-direction-tabs {
