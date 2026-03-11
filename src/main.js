@@ -13,7 +13,7 @@ import { createInsightsRenderers } from './renderers/insights'
 import { getDialogElements } from './dialogs/dom'
 import { createStationDialogDisplayController } from './dialogs/station-display'
 import { createOverlayDialogs } from './dialogs/overlays'
-import { bootstrapApp, loadStaticData as loadStaticDataIntoState } from './static-data'
+import { bootstrapApp, loadStaticData } from './static-data'
 
 const state = {
   fetchedAt: '',
@@ -1551,10 +1551,6 @@ async function switchSystem(systemId, { updateUrl = true, preserveDialog = false
   await refreshVehicles()
 }
 
-async function loadStaticData() {
-  await loadStaticDataIntoState({ state, getSystemIdFromUrl })
-}
-
 function parseSituation(situation) {
   const affectedRouteIds = [...new Set((situation.allAffects ?? []).map((item) => item.routeId).filter(Boolean))]
   const lineIds = state.lines
@@ -1624,7 +1620,7 @@ const init = bootstrapApp({
   getPreferredLanguage,
   getPreferredTheme,
   handleViewportResize,
-  loadStaticData,
+  loadStaticData: () => loadStaticData({ state, getSystemIdFromUrl }),
   refreshVehicles,
   render,
   refreshLiveMeta,
