@@ -17,10 +17,12 @@ const VEHICLE_REFRESH_INTERVAL_MS = IS_PUBLIC_TEST_KEY ? 45_000 : 15_000
 const DIALOG_REFRESH_INTERVAL_MS = IS_PUBLIC_TEST_KEY ? 90_000 : 30_000
 const DIALOG_DISPLAY_SCROLL_INTERVAL_MS = 4_000
 const DIALOG_DISPLAY_DIRECTION_ROTATE_MS = 15_000
+const DIALOG_DISPLAY_DIRECTION_ANIMATION_MS = 520
 const GHOST_HISTORY_LIMIT = 6
 const GHOST_MAX_AGE_MS = 4 * 60_000
 const TRANSFER_WALKING_SPEED_KMPH = 4.8
 const TRANSFER_MAX_WALK_KM = 0.35
+const TRANSFER_FETCH_DELAY_MS = 3_000
 const TRANSFER_BOARDING_BUFFER_MS = 45_000
 const MAX_TRANSFER_RECOMMENDATIONS = 4
 const THEME_STORAGE_KEY = 'link-pulse-theme'
@@ -282,6 +284,8 @@ const state = {
   dialogDisplayDirection: 'both',
   dialogDisplayAutoPhase: 'nb',
   dialogDisplayDirectionTimer: 0,
+  dialogDisplayDirectionAnimationTimer: 0,
+  dialogDisplayAnimatingDirection: '',
   dialogDisplayTimer: 0,
   dialogDisplayIndexes: { nb: 0, sb: 0 },
   insightsTickerIndex: 0,
@@ -433,8 +437,10 @@ const arrivalsTitleNb = document.querySelector('#arrivals-title-nb')
 const arrivalsTitleSb = document.querySelector('#arrivals-title-sb')
 const stationAlertsContainer = document.querySelector('#station-alerts-container')
 const transferSection = document.querySelector('#transfer-section')
+const arrivalsSectionNb = document.querySelector('[data-direction-section="nb"]')
 const arrivalsNbPinned = document.querySelector('#arrivals-nb-pinned')
 const arrivalsNb = document.querySelector('#arrivals-nb')
+const arrivalsSectionSb = document.querySelector('[data-direction-section="sb"]')
 const arrivalsSbPinned = document.querySelector('#arrivals-sb-pinned')
 const arrivalsSb = document.querySelector('#arrivals-sb')
 const trainDialog = document.querySelector('#train-dialog')
@@ -539,6 +545,41 @@ function copyForLanguage() {
 function copyValue(key, ...args) {
   const value = copyForLanguage()[key]
   return typeof value === 'function' ? value(...args) : value
+}
+
+function getDirectionBaseLabel(directionSymbol, includeSymbol = false) {
+  const symbolPrefix = includeSymbol && (directionSymbol === '▲' || directionSymbol === '▼')
+    ? `${directionSymbol} `
+    : ''
+
+  if (directionSymbol === '▲') {
+    return `${symbolPrefix}${state.language === 'zh-CN' ? '北向' : 'Northbound'}`
+  }
+
+  if (directionSymbol === '▼') {
+    return `${symbolPrefix}${state.language === 'zh-CN' ? '南向' : 'Southbound'}`
+  }
+
+  return copyValue('active')
+}
+
+function formatDirectionLabel(directionSymbol, destination = '', { includeSymbol = false } = {}) {
+  const baseLabel = getDirectionBaseLabel(directionSymbol, includeSymbol)
+  if (!destination) return baseLabel
+  return state.language === 'zh-CN'
+    ? `${baseLabel} · 开往 ${destination}`
+    : `${baseLabel} to ${destination}`
+}
+
+function getDirectionDestinationLabel(directionSymbol, layout) {
+  if (!layout?.stations?.length) return ''
+  const terminalIndex = directionSymbol === '▲' ? 0 : directionSymbol === '▼' ? layout.stations.length - 1 : -1
+  if (terminalIndex < 0) return ''
+  return layout.stations[terminalIndex]?.label ?? ''
+}
+
+function formatLayoutDirectionLabel(directionSymbol, layout, options = {}) {
+  return formatDirectionLabel(directionSymbol, getDirectionDestinationLabel(directionSymbol, layout), options)
 }
 
 function normalizeName(name) {
@@ -1480,8 +1521,8 @@ function formatPercent(value, total) {
 function getDirectionBalance(nb, sb) {
   const delta = Math.abs(nb.length - sb.length)
   if (delta <= 1) return { label: state.language === 'zh-CN' ? '均衡' : 'Balanced', tone: 'healthy' }
-  if (nb.length > sb.length) return { label: state.language === 'zh-CN' ? '▲ 偏多' : '▲ Heavier', tone: 'warn' }
-  return { label: state.language === 'zh-CN' ? '▼ 偏多' : '▼ Heavier', tone: 'warn' }
+  if (nb.length > sb.length) return { label: state.language === 'zh-CN' ? '北向偏多' : 'Northbound heavier', tone: 'warn' }
+  return { label: state.language === 'zh-CN' ? '南向偏多' : 'Southbound heavier', tone: 'warn' }
 }
 
 function renderDelayDistribution(delayBuckets, total) {
@@ -1543,23 +1584,40 @@ function renderFlowLane(label, directionVehicles, layout, lineColor) {
 
 function buildLineExceptions(line, nb, sb, lineAlerts) {
   const exceptions = []
+  const layout = state.layouts.get(line.id)
+  const nbDirectionLabel = formatLayoutDirectionLabel('▲', layout, { includeSymbol: true })
+  const sbDirectionLabel = formatLayoutDirectionLabel('▼', layout, { includeSymbol: true })
   const { stats: nbStats } = classifyHeadwayHealth(computeLineHeadways(nb, []).nbGaps, nb.length)
   const { stats: sbStats } = classifyHeadwayHealth(computeLineHeadways([], sb).sbGaps, sb.length)
   const severeLateVehicles = [...nb, ...sb].filter((vehicle) => Number(vehicle.scheduleDeviation ?? 0) > 300)
   const imbalance = Math.abs(nb.length - sb.length)
 
   if (nbStats.max != null && nbStats.max >= 12) {
-    exceptions.push({ tone: 'alert', copy: state.language === 'zh-CN' ? `▲ 方向当前有 ${nbStats.max} 分钟的服务空档。` : `Direction ▲ has a ${nbStats.max} min service hole right now.` })
+    exceptions.push({
+      tone: 'alert',
+      copy: state.language === 'zh-CN'
+        ? `${nbDirectionLabel} 当前有 ${nbStats.max} 分钟的服务空档。`
+        : `${nbDirectionLabel} has a ${nbStats.max} min service hole right now.`,
+    })
   }
   if (sbStats.max != null && sbStats.max >= 12) {
-    exceptions.push({ tone: 'alert', copy: state.language === 'zh-CN' ? `▼ 方向当前有 ${sbStats.max} 分钟的服务空档。` : `Direction ▼ has a ${sbStats.max} min service hole right now.` })
+    exceptions.push({
+      tone: 'alert',
+      copy: state.language === 'zh-CN'
+        ? `${sbDirectionLabel} 当前有 ${sbStats.max} 分钟的服务空档。`
+        : `${sbDirectionLabel} has a ${sbStats.max} min service hole right now.`,
+    })
   }
   if (imbalance >= 2) {
     exceptions.push({
       tone: 'warn',
       copy: nb.length > sb.length
-        ? state.language === 'zh-CN' ? `车辆分布向 ▲ 方向偏多 ${imbalance} 辆。` : `Vehicle distribution is tilted toward ▲ by ${imbalance}.`
-        : state.language === 'zh-CN' ? `车辆分布向 ▼ 方向偏多 ${imbalance} 辆。` : `Vehicle distribution is tilted toward ▼ by ${imbalance}.`,
+        ? state.language === 'zh-CN'
+          ? `车辆分布向 ${nbDirectionLabel} 偏多 ${imbalance} 辆。`
+          : `Vehicle distribution is tilted toward ${nbDirectionLabel} by ${imbalance}.`
+        : state.language === 'zh-CN'
+          ? `车辆分布向 ${sbDirectionLabel} 偏多 ${imbalance} 辆。`
+          : `Vehicle distribution is tilted toward ${sbDirectionLabel} by ${imbalance}.`,
     })
   }
   if (severeLateVehicles.length) {
@@ -1606,41 +1664,112 @@ function buildInsightsItems(lines) {
   })
 }
 
+function getLineAttentionReasons({ worstGap, severeLateCount, alertCount, balanceDelta }) {
+  const reasons = []
+
+  if (worstGap >= 12) {
+    reasons.push({
+      key: 'gap',
+      tone: 'alert',
+      label: state.language === 'zh-CN' ? '大间隔' : 'Large gap',
+    })
+  }
+  if (severeLateCount > 0) {
+    reasons.push({
+      key: 'late',
+      tone: 'warn',
+      label: state.language === 'zh-CN' ? '严重晚点' : 'Severe late',
+    })
+  }
+  if (alertCount > 0) {
+    reasons.push({
+      key: 'alert',
+      tone: 'info',
+      label: state.language === 'zh-CN' ? '有告警' : 'Alerted',
+    })
+  }
+  if (balanceDelta >= 2) {
+    reasons.push({
+      key: 'balance',
+      tone: 'warn',
+      label: state.language === 'zh-CN' ? '方向失衡' : 'Imbalanced',
+    })
+  }
+  if (!reasons.length) {
+    reasons.push({
+      key: 'healthy',
+      tone: 'healthy',
+      label: state.language === 'zh-CN' ? '健康' : 'Healthy',
+    })
+  }
+
+  return reasons
+}
+
+function renderAttentionReasonBadges(reasons) {
+  return `
+    <div class="attention-reason-badges">
+      ${reasons.map((reason) => `
+        <span class="attention-reason-badge attention-reason-badge-${reason.tone}">${reason.label}</span>
+      `).join('')}
+    </div>
+  `
+}
+
 function computeSystemSummaryMetrics(insightsItems) {
   const totalLines = insightsItems.length
   const totalVehicles = insightsItems.reduce((sum, item) => sum + item.vehicles.length, 0)
   const totalAlerts = insightsItems.reduce((sum, item) => sum + item.lineAlerts.length, 0)
   const impactedLines = insightsItems.filter((item) => item.lineAlerts.length > 0).length
+  const impactedStopCount = new Set(
+    insightsItems.flatMap((item) => item.lineAlerts.flatMap((alert) => alert.stopIds ?? [])),
+  ).size
   const allVehicles = insightsItems.flatMap((item) => item.vehicles)
   const delayBuckets = getDelayBuckets(allVehicles)
-  const delayedLineIds = new Set(
-    insightsItems
-      .filter((item) => item.vehicles.some((vehicle) => Number(vehicle.scheduleDeviation ?? 0) > 300))
-      .map((item) => item.line.id),
-  )
-  const unevenLineIds = new Set(
-    insightsItems
-      .filter((item) => {
-        const { nbGaps, sbGaps } = computeLineHeadways(item.nb, item.sb)
-        const nbHealth = classifyHeadwayHealth(nbGaps, item.nb.length).health
-        const sbHealth = classifyHeadwayHealth(sbGaps, item.sb.length).health
-        return [nbHealth, sbHealth].some((health) => health === 'uneven' || health === 'bunched' || health === 'sparse')
-      })
-      .map((item) => item.line.id),
-  )
-  const attentionLineCount = new Set([...delayedLineIds, ...unevenLineIds]).size
-  const healthyLineCount = Math.max(0, totalLines - attentionLineCount)
-  const onTimeRate = totalVehicles ? Math.round((delayBuckets.onTime / totalVehicles) * 100) : null
-
   const rankedLines = insightsItems
     .map((item) => {
       const { nbGaps, sbGaps } = computeLineHeadways(item.nb, item.sb)
       const worstGap = [...nbGaps, ...sbGaps].length ? Math.max(...nbGaps, ...sbGaps) : 0
       const severeLateCount = item.vehicles.filter((vehicle) => Number(vehicle.scheduleDeviation ?? 0) > 300).length
+      const delayBucketsForLine = getDelayBuckets(item.vehicles)
+      const balanceDelta = Math.abs(item.nb.length - item.sb.length)
+      const nbHealth = classifyHeadwayHealth(nbGaps, item.nb.length).health
+      const sbHealth = classifyHeadwayHealth(sbGaps, item.sb.length).health
+      const isUneven = [nbHealth, sbHealth].some((health) => health === 'uneven' || health === 'bunched' || health === 'sparse')
+      const hasSevereLate = severeLateCount > 0
       const score = item.lineAlerts.length * 5 + severeLateCount * 3 + Math.max(0, worstGap - 10)
-      return { line: item.line, score, worstGap, severeLateCount, alertCount: item.lineAlerts.length }
+      const attentionReasons = getLineAttentionReasons({
+        worstGap,
+        severeLateCount,
+        alertCount: item.lineAlerts.length,
+        balanceDelta,
+      })
+
+      return {
+        line: item.line,
+        score,
+        worstGap,
+        severeLateCount,
+        alertCount: item.lineAlerts.length,
+        impactedStopCount: new Set(item.lineAlerts.flatMap((alert) => alert.stopIds ?? [])).size,
+        balanceDelta,
+        hasSevereLate,
+        isUneven,
+        attentionReasons,
+        delayBuckets: delayBucketsForLine,
+      }
     })
     .sort((left, right) => right.score - left.score || right.worstGap - left.worstGap)
+
+  const delayedLineIds = new Set(rankedLines.filter((item) => item.hasSevereLate).map((item) => item.line.id))
+  const unevenLineIds = new Set(rankedLines.filter((item) => item.isUneven).map((item) => item.line.id))
+  const lateOnlyLineCount = rankedLines.filter((item) => item.hasSevereLate && !item.isUneven).length
+  const unevenOnlyLineCount = rankedLines.filter((item) => item.isUneven && !item.hasSevereLate).length
+  const mixedIssueLineCount = rankedLines.filter((item) => item.hasSevereLate && item.isUneven).length
+  const attentionLineCount = new Set([...delayedLineIds, ...unevenLineIds]).size
+  const healthyLineCount = Math.max(0, totalLines - attentionLineCount)
+  const onTimeRate = totalVehicles ? Math.round((delayBuckets.onTime / totalVehicles) * 100) : null
+  const priorityLines = rankedLines.filter((item) => item.score > 0).slice(0, 2)
 
   let topIssue = { tone: 'healthy', copy: state.language === 'zh-CN' ? '当前没有明显的主要问题。' : 'No major active issues right now.' }
   const topLine = rankedLines[0] ?? null
@@ -1672,12 +1801,17 @@ function computeSystemSummaryMetrics(insightsItems) {
     totalVehicles,
     totalAlerts,
     impactedLines,
+    impactedStopCount,
     delayedLineIds,
     unevenLineIds,
+    lateOnlyLineCount,
+    unevenOnlyLineCount,
+    mixedIssueLineCount,
     attentionLineCount,
     healthyLineCount,
     onTimeRate,
     rankedLines,
+    priorityLines,
     topIssue,
   }
 }
@@ -1783,6 +1917,52 @@ function renderSystemSummary(insightsItems) {
           <p class="metric-chip-label">${state.language === 'zh-CN' ? '需关注线路' : 'Lines Needing Attention'}</p>
           <p class="metric-chip-value">${metrics.attentionLineCount}</p>
         </div>
+        <div class="metric-chip">
+          <p class="metric-chip-label">${state.language === 'zh-CN' ? '影响站点' : 'Impacted Stops'}</p>
+          <p class="metric-chip-value">${metrics.impactedStopCount}</p>
+        </div>
+      </div>
+      <div class="system-composition">
+        <div class="insight-exceptions-header">
+          <p class="headway-chart-title">${state.language === 'zh-CN' ? '需关注线路构成' : 'Attention Breakdown'}</p>
+          <p class="headway-chart-copy">${state.language === 'zh-CN' ? '按晚点与间隔异常拆解' : 'Split by lateness and spacing issues'}</p>
+        </div>
+        <div class="attention-breakdown-grid">
+          <div class="metric-chip">
+            <p class="metric-chip-label">${state.language === 'zh-CN' ? '仅晚点' : 'Late Only'}</p>
+            <p class="metric-chip-value">${metrics.lateOnlyLineCount}</p>
+          </div>
+          <div class="metric-chip">
+            <p class="metric-chip-label">${state.language === 'zh-CN' ? '仅间隔不均' : 'Spacing Only'}</p>
+            <p class="metric-chip-value">${metrics.unevenOnlyLineCount}</p>
+          </div>
+          <div class="metric-chip">
+            <p class="metric-chip-label">${state.language === 'zh-CN' ? '两者都有' : 'Both'}</p>
+            <p class="metric-chip-value">${metrics.mixedIssueLineCount}</p>
+          </div>
+        </div>
+      </div>
+      <div class="system-priority">
+        <div class="insight-exceptions-header">
+          ${state.language === 'zh-CN' ? '' : '<p class="headway-chart-title">Recommended Next</p>'}
+          <p class="headway-chart-copy">${state.language === 'zh-CN' ? '基于当前快照的综合优先级' : 'Best next checks from the current snapshot'}</p>
+        </div>
+        <div class="system-priority-list">
+          ${(metrics.priorityLines.length ? metrics.priorityLines : metrics.rankedLines.slice(0, 1)).map(({ line, worstGap, severeLateCount, alertCount, attentionReasons }) => `
+            <div class="system-priority-item">
+              <div class="line-title">
+                <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
+                <div class="line-title-copy">
+                  <p class="headway-chart-title">${line.name}</p>
+                  <p class="headway-chart-copy">${state.language === 'zh-CN'
+                    ? `${worstGap ? `最大间隔 ${worstGap} 分钟` : '当前无明显间隔问题'}${severeLateCount ? ` · ${severeLateCount} 辆严重晚点` : ''}${alertCount ? ` · ${alertCount} 条告警` : ''}`
+                    : `${worstGap ? `Gap ${worstGap} min` : 'No major spacing issue'}${severeLateCount ? ` · ${severeLateCount} severe late` : ''}${alertCount ? ` · ${alertCount} alert${alertCount === 1 ? '' : 's'}` : ''}`}</p>
+                  ${renderAttentionReasonBadges(attentionReasons)}
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
       </div>
       <div class="system-ranking">
         <div class="insight-exceptions-header">
@@ -1790,13 +1970,14 @@ function renderSystemSummary(insightsItems) {
           <p class="headway-chart-copy">${state.error ? (state.language === 'zh-CN' ? '实时数据退化，使用最近一次成功快照' : 'Realtime degraded, using last successful snapshot') : (state.language === 'zh-CN' ? '仅基于当前实时快照' : 'Derived from the current live snapshot only')}</p>
         </div>
         <div class="system-ranking-list">
-          ${metrics.rankedLines.slice(0, 3).map(({ line, score, worstGap, alertCount, severeLateCount }) => `
+          ${metrics.rankedLines.slice(0, 3).map(({ line, score, worstGap, alertCount, severeLateCount, attentionReasons }) => `
             <div class="system-ranking-item">
               <div class="line-title">
                 <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
                 <div class="line-title-copy">
                   <p class="headway-chart-title">${line.name}</p>
                   <p class="headway-chart-copy">${state.language === 'zh-CN' ? `评分 ${score}${worstGap ? ` · 最大间隔 ${worstGap} 分钟` : ''}${alertCount ? ` · ${alertCount} 条告警` : ''}${severeLateCount ? ` · ${severeLateCount} 辆严重晚点` : ''}` : `Score ${score}${worstGap ? ` · gap ${worstGap} min` : ''}${alertCount ? ` · ${alertCount} alert${alertCount === 1 ? '' : 's'}` : ''}${severeLateCount ? ` · ${severeLateCount} severe late` : ''}`}</p>
+                  ${renderAttentionReasonBadges(attentionReasons)}
                 </div>
               </div>
             </div>
@@ -1902,13 +2083,27 @@ function renderLineInsights(line, layout, nb, sb, lineAlerts) {
         </div>
       </div>
       <div class="headway-health-grid">
-        ${renderHeadwaySummaryCard(state.language === 'zh-CN' ? '▲ 方向' : 'Direction ▲', nbGaps, nb.length)}
-        ${renderHeadwaySummaryCard(state.language === 'zh-CN' ? '▼ 方向' : 'Direction ▼', sbGaps, sb.length)}
+        ${renderHeadwaySummaryCard(formatLayoutDirectionLabel('▲', layout, { includeSymbol: true }), nbGaps, nb.length)}
+        ${renderHeadwaySummaryCard(formatLayoutDirectionLabel('▼', layout, { includeSymbol: true }), sbGaps, sb.length)}
       </div>
       ${renderDelayDistribution(delayBuckets, total)}
       <div class="flow-grid">
-        ${renderFlowLane(state.language === 'zh-CN' ? '▲ 方向流向' : 'Direction ▲ Flow', nb, layout, line.color)}
-        ${renderFlowLane(state.language === 'zh-CN' ? '▼ 方向流向' : 'Direction ▼ Flow', sb, layout, line.color)}
+        ${renderFlowLane(
+          state.language === 'zh-CN'
+            ? `${formatLayoutDirectionLabel('▲', layout, { includeSymbol: true })} 流向`
+            : `${formatLayoutDirectionLabel('▲', layout, { includeSymbol: true })} flow`,
+          nb,
+          layout,
+          line.color,
+        )}
+        ${renderFlowLane(
+          state.language === 'zh-CN'
+            ? `${formatLayoutDirectionLabel('▼', layout, { includeSymbol: true })} 流向`
+            : `${formatLayoutDirectionLabel('▼', layout, { includeSymbol: true })} flow`,
+          sb,
+          layout,
+          line.color,
+        )}
       </div>
       <div class="insight-exceptions">
         <div class="insight-exceptions-header">
@@ -1970,6 +2165,16 @@ function renderArrivalLists(arrivals, loading = false) {
     return
   }
 
+  const summarizeDestinations = (bucket) => {
+    const uniqueDestinations = [...new Set(bucket.map((arrival) => arrival.destination).filter(Boolean))]
+    if (!uniqueDestinations.length) return ''
+    const labels = uniqueDestinations.slice(0, 2)
+    if (uniqueDestinations.length > 2) {
+      labels.push(state.language === 'zh-CN' ? '等' : 'etc.')
+    }
+    return labels.join(' / ')
+  }
+
   const renderBucket = (bucket, pinnedElement, listElement) => {
     if (!bucket.length) {
       pinnedElement.innerHTML = ''
@@ -1990,6 +2195,8 @@ function renderArrivalLists(arrivals, loading = false) {
 
   renderBucket(arrivals.nb, arrivalsNbPinned, arrivalsNb)
   renderBucket(arrivals.sb, arrivalsSbPinned, arrivalsSb)
+  arrivalsTitleNb.textContent = formatDirectionLabel('▲', summarizeDestinations(arrivals.nb), { includeSymbol: true })
+  arrivalsTitleSb.textContent = formatDirectionLabel('▼', summarizeDestinations(arrivals.sb), { includeSymbol: true })
 
   syncDialogDisplayScroll()
 }
@@ -2117,8 +2324,40 @@ function stopDialogDirectionRotation() {
   }
 }
 
-function renderDialogDirectionView() {
+function stopDialogDirectionAnimation() {
+  if (state.dialogDisplayDirectionAnimationTimer) {
+    window.clearTimeout(state.dialogDisplayDirectionAnimationTimer)
+    state.dialogDisplayDirectionAnimationTimer = 0
+  }
+
+  state.dialogDisplayAnimatingDirection = ''
+  arrivalsSectionNb?.classList.remove('is-direction-animating')
+  arrivalsSectionSb?.classList.remove('is-direction-animating')
+}
+
+function startDialogDirectionAnimation(direction) {
+  if (!state.dialogDisplayMode || !direction || direction === 'both') return
+
+  stopDialogDirectionAnimation()
+  state.dialogDisplayAnimatingDirection = direction
+  const targetSection = direction === 'nb' ? arrivalsSectionNb : arrivalsSectionSb
+  if (!targetSection) return
+
+  // Force animation restart when auto mode rotates back to the same panel later.
+  void targetSection.offsetWidth
+  targetSection.classList.add('is-direction-animating')
+  state.dialogDisplayDirectionAnimationTimer = window.setTimeout(() => {
+    targetSection.classList.remove('is-direction-animating')
+    state.dialogDisplayDirectionAnimationTimer = 0
+    if (state.dialogDisplayAnimatingDirection === direction) {
+      state.dialogDisplayAnimatingDirection = ''
+    }
+  }, DIALOG_DISPLAY_DIRECTION_ANIMATION_MS)
+}
+
+function renderDialogDirectionView({ animate = false } = {}) {
   stopDialogDirectionRotation()
+  stopDialogDirectionAnimation()
   const requestedDirection = state.dialogDisplayDirection
   const direction = requestedDirection === 'auto' ? state.dialogDisplayAutoPhase : requestedDirection
   dialogDirectionTabs.forEach((button) => {
@@ -2128,10 +2367,14 @@ function renderDialogDirectionView() {
   dialog.classList.toggle('show-nb-only', state.dialogDisplayMode && direction === 'nb')
   dialog.classList.toggle('show-sb-only', state.dialogDisplayMode && direction === 'sb')
 
+  if (animate) {
+    startDialogDirectionAnimation(direction)
+  }
+
   if (state.dialogDisplayMode && requestedDirection === 'auto') {
     state.dialogDisplayDirectionTimer = window.setInterval(() => {
       state.dialogDisplayAutoPhase = state.dialogDisplayAutoPhase === 'nb' ? 'sb' : 'nb'
-      renderDialogDirectionView()
+      renderDialogDirectionView({ animate: true })
     }, DIALOG_DISPLAY_DIRECTION_ROTATE_MS)
   }
 }
@@ -2456,24 +2699,44 @@ async function refreshStationDialog(station) {
   const requestId = state.activeDialogRequest + 1
   state.activeDialogRequest = requestId
 
+  const isStaleDialogRequest = () => state.activeDialogRequest !== requestId || !dialog.open
+
   try {
     const dialogStations = getDialogStations(station)
-    const transferCandidates = getNearbyTransferCandidates(station)
     const sharedStopIds = dialogStations.flatMap(({ station: matchedStation, line }) => getStationStopIds(matchedStation, line))
-    const transferStopIds = transferCandidates.flatMap(({ stop, line }) => getStationStopIds(stop, line))
-    const arrivalFeed = await fetchArrivalsForStopIds([...sharedStopIds, ...transferStopIds])
+    const arrivalFeed = await fetchArrivalsForStopIds(sharedStopIds)
     const arrivalsByLine = await Promise.all(
       dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line, arrivalFeed)),
     )
-    if (state.activeDialogRequest !== requestId || !dialog.open) return
-    renderTransferRecommendations(buildTransferRecommendations(transferCandidates, arrivalFeed), false, station)
+    if (isStaleDialogRequest()) return
     renderStationAlertPills(station)
     renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
   } catch (error) {
-    if (state.activeDialogRequest !== requestId || !dialog.open) return
+    if (isStaleDialogRequest()) return
     renderTransferRecommendations([], false, station)
     arrivalsNb.innerHTML = `<div class="arrival-item muted">${error.message}</div>`
     arrivalsSb.innerHTML = `<div class="arrival-item muted">${state.language === 'zh-CN' ? '请稍后重试' : 'Retry in a moment'}</div>`
+    return
+  }
+
+  try {
+    const transferCandidates = getNearbyTransferCandidates(station)
+    if (!transferCandidates.length) {
+      if (isStaleDialogRequest()) return
+      renderTransferRecommendations([], false, station)
+      return
+    }
+
+    await sleep(TRANSFER_FETCH_DELAY_MS)
+    if (isStaleDialogRequest()) return
+
+    const transferStopIds = transferCandidates.flatMap(({ stop, line }) => getStationStopIds(stop, line))
+    const transferArrivalFeed = await fetchArrivalsForStopIds(transferStopIds)
+    if (isStaleDialogRequest()) return
+    renderTransferRecommendations(buildTransferRecommendations(transferCandidates, transferArrivalFeed), false, station)
+  } catch {
+    if (isStaleDialogRequest()) return
+    renderTransferRecommendations([], false, station)
   }
 }
 
@@ -2594,11 +2857,11 @@ function renderTrainList() {
       const queueVehicles = sortedLineVehicles.slice(1)
       const renderDirectionBadge = (vehicle) => `
         <span class="train-direction-badge">
-          ${vehicle.directionSymbol === '▲'
-            ? (state.language === 'zh-CN' ? '▲ 北向' : '▲ Northbound')
-            : vehicle.directionSymbol === '▼'
-              ? (state.language === 'zh-CN' ? '▼ 南向' : '▼ Southbound')
-              : (state.language === 'zh-CN' ? '运营中' : 'Active')}
+          ${formatDirectionLabel(
+            vehicle.directionSymbol,
+            getVehicleDestinationLabel(vehicle, state.layouts.get(vehicle.lineId)),
+            { includeSymbol: true },
+          )}
         </span>
       `
       const renderQueueItem = (vehicle) => `
@@ -2695,6 +2958,10 @@ function formatEtaClockFromNow(offsetSeconds) {
 }
 
 function getVehicleDestinationLabel(vehicle, layout) {
+  if (!layout?.stations?.length) {
+    return vehicle.upcomingLabel ?? vehicle.toLabel ?? vehicle.currentStopLabel ?? copyValue('terminalFallback')
+  }
+
   const terminalIndex = vehicle.directionSymbol === '▲' ? 0 : layout.stations.length - 1
   return layout.stations[terminalIndex]?.label ?? vehicle.upcomingLabel
 }
@@ -3097,11 +3364,7 @@ function renderTrainDialog(vehicle) {
   const timelineEntries = getTrainTimelineEntries(vehicle, layout)
   const destinationLabel = layout ? getVehicleDestinationLabel(vehicle, layout) : vehicle.upcomingLabel
   const terminalEtaSeconds = timelineEntries.at(-1)?.etaSeconds ?? Math.max(0, vehicle.nextOffset ?? 0)
-  const directionLabel = vehicle.directionSymbol === '▲'
-    ? (state.language === 'zh-CN' ? '北向' : 'Northbound')
-    : vehicle.directionSymbol === '▼'
-      ? (state.language === 'zh-CN' ? '南向' : 'Southbound')
-      : copyValue('active')
+  const directionLabel = getDirectionBaseLabel(vehicle.directionSymbol)
 
   trainDialogTitle.textContent = `${vehicle.lineName} ${getVehicleLabel()} ${vehicle.label}`
   trainDialogSubtitle.textContent = state.language === 'zh-CN' ? `${directionLabel} · ${copyValue('toDestination', destinationLabel)}` : `${directionLabel} to ${destinationLabel}`
@@ -3235,8 +3498,8 @@ function render() {
   systemBarElement.setAttribute('aria-label', copyValue('transitSystems'))
   viewBarElement.setAttribute('aria-label', copyValue('boardViews'))
   document.querySelector('#dialog-direction-tabs')?.setAttribute('aria-label', copyValue('boardDirectionView'))
-  arrivalsTitleNb.textContent = copyValue('northbound')
-  arrivalsTitleSb.textContent = copyValue('southbound')
+  arrivalsTitleNb.textContent = formatDirectionLabel('▲', '', { includeSymbol: true })
+  arrivalsTitleSb.textContent = formatDirectionLabel('▼', '', { includeSymbol: true })
   dialogDisplay.textContent = state.dialogDisplayMode ? copyValue('exit') : copyValue('board')
   dialogDisplay.setAttribute('aria-label', state.dialogDisplayMode ? copyValue('exit') : copyValue('board'))
   trainDialogClose.setAttribute('aria-label', copyValue('closeTrainDialog'))
