@@ -101,6 +101,7 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
 
       arrivals[bucket].push({
         vehicleId: (arrival.vehicleId || '').replace(/^\d+_/, '') || '--',
+        rawVehicleId: arrival.vehicleId || '',
         arrivalTime,
         destination: formatArrivalDestination(arrival, copyValue),
         scheduleDeviation: arrival.scheduleDeviation ?? 0,
@@ -118,6 +119,11 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
     arrivals.nb = arrivals.nb.slice(0, 4)
     arrivals.sb = arrivals.sb.slice(0, 4)
     return arrivals
+  }
+
+  function getCachedArrivalsForStation(station, line) {
+    const cacheKey = `${state.activeSystemId}:${line.id}:${station.id}`
+    return state.arrivalsCache.get(cacheKey)?.value ?? null
   }
 
   async function getArrivalsForStation(station, line, prefetchedFeed = null) {
@@ -151,6 +157,7 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
     buildArrivalsForLine,
     fetchArrivalsForStop,
     fetchArrivalsForStopIds,
+    getCachedArrivalsForStation,
     getArrivalsForStation,
     mergeArrivalBuckets,
     getArrivalServiceStatus: (arrivalTime, scheduleDeviation) => getArrivalServiceStatus(arrivalTime, scheduleDeviation, getLanguage()),

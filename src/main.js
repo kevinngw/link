@@ -166,6 +166,22 @@ document.querySelector('#app').innerHTML = `
       </div>
     </div>
   </dialog>
+  <dialog id="insights-detail-dialog" class="station-dialog train-dialog">
+    <div class="dialog-content">
+      <header class="dialog-header">
+        <div>
+          <h3 id="insights-detail-title">Details</h3>
+          <p id="insights-detail-subtitle" class="updated-at"></p>
+        </div>
+        <div class="dialog-actions">
+          <button id="insights-detail-close" class="dialog-close" type="button" aria-label="Close details">&times;</button>
+        </div>
+      </header>
+      <div class="train-dialog-body">
+        <div id="insights-detail-body"></div>
+      </div>
+    </div>
+  </dialog>
 `
 
 const boardElement = document.querySelector('#board')
@@ -204,11 +220,18 @@ const {
   alertDialogSubtitle,
   alertDialogLink,
   alertDialogClose,
+  insightsDetailDialog,
+  insightsDetailTitle,
+  insightsDetailSubtitle,
+  insightsDetailBody,
+  insightsDetailClose,
 } = dialogElements
 
 dialogDisplay.addEventListener('click', () => toggleDialogDisplayMode())
 trainDialogClose.addEventListener('click', () => closeTrainDialog())
 alertDialogClose.addEventListener('click', () => closeAlertDialog())
+insightsDetailClose.addEventListener('click', () => { if (insightsDetailDialog.open) insightsDetailDialog.close() })
+insightsDetailDialog.addEventListener('click', (e) => { if (e.target === insightsDetailDialog) insightsDetailDialog.close() })
 languageToggleButton.addEventListener('click', () => {
   setLanguage(state.language === 'en' ? 'zh-CN' : 'en')
   render()
@@ -289,7 +312,7 @@ function copyValue(key, ...args) {
 }
 
 const { fetchJsonWithRetry } = createObaClient(state)
-const { buildArrivalsForLine, fetchArrivalsForStopIds, getArrivalsForStation, mergeArrivalBuckets, getArrivalServiceStatus } = createArrivalsHelpers({
+const { buildArrivalsForLine, fetchArrivalsForStopIds, getCachedArrivalsForStation, getArrivalsForStation, mergeArrivalBuckets, getArrivalServiceStatus } = createArrivalsHelpers({
   state,
   fetchJsonWithRetry,
   getStationStopIds: (...args) => getStationStopIds(...args),
@@ -937,6 +960,7 @@ function getVisibleLines() {
 
 function renderArrivalLists(arrivals, loading = false) {
   const now = Date.now()
+  const navigationEnabled = isOptionalNavigationEnabled()
 
   const renderArrival = (arrival) => {
     const arrivalMs = arrival.arrivalTime
@@ -954,8 +978,16 @@ function renderArrivalLists(arrivals, loading = false) {
       precisionInfo = ` • ${distanceStr} • ${stopsStr}`
     }
 
+    const liveVehicle = navigationEnabled && arrival.rawVehicleId
+      ? getAllVehicles().find((vehicle) => vehicle.id === arrival.rawVehicleId)
+      : null
+    const wrapperTag = liveVehicle ? 'button' : 'div'
+    const interactiveAttrs = liveVehicle
+      ? ` type="button" data-arrival-vehicle-id="${liveVehicle.id}" aria-label="${arrival.lineName} ${getVehicleLabel()} ${arrival.vehicleId}"`
+      : ''
+
     return `
-      <div class="arrival-item" data-arrival-time="${arrival.arrivalTime}" data-schedule-deviation="${arrival.scheduleDeviation ?? 0}">
+      <${wrapperTag} class="arrival-item${liveVehicle ? ' arrival-item-clickable' : ''}" data-arrival-time="${arrival.arrivalTime}" data-schedule-deviation="${arrival.scheduleDeviation ?? 0}"${interactiveAttrs}>
         <span class="arrival-meta">
           <span class="arrival-line-token" style="--line-color:${arrival.lineColor};">${arrival.lineToken}</span>
           <span class="arrival-copy">
@@ -970,7 +1002,7 @@ function renderArrivalLists(arrivals, loading = false) {
             <span class="arrival-precision">${precisionInfo}</span>
           </span>
         </span>
-      </div>
+      </${wrapperTag}>
     `
   }
 
@@ -1009,6 +1041,9 @@ function renderArrivalLists(arrivals, loading = false) {
   arrivalsTitleNb.textContent = formatDirectionLabel('▲', nbSummary, { includeSymbol: true })
   arrivalsTitleSb.textContent = formatDirectionLabel('▼', sbSummary, { includeSymbol: true })
 
+  if (navigationEnabled) {
+    attachDialogArrivalClickHandlers()
+  }
   syncDialogDisplayScroll()
 }
 
@@ -1088,6 +1123,12 @@ function clearStationParam() {
   if (!url.searchParams.has('station')) return
   url.searchParams.delete('station')
   window.history.pushState({}, '', url)
+}
+
+function isOptionalNavigationEnabled() {
+  const url = new URL(window.location.href)
+  const value = (url.searchParams.get('navigate') ?? '').trim().toLowerCase()
+  return value === '1' || value === 'true' || value === 'yes'
 }
 
 function setSystemParam(systemId) {
@@ -1264,6 +1305,8 @@ function getNearbyTransferCandidates(station) {
 }
 
 function renderTransferRecommendations(recommendations, loading = false, station = state.currentDialogStation) {
+  const navigationEnabled = isOptionalNavigationEnabled()
+
   if (loading) {
     transferSection.hidden = false
     transferSection.innerHTML = `
@@ -1297,8 +1340,17 @@ function renderTransferRecommendations(recommendations, loading = false, station
       <div class="transfer-list">
         ${recommendations
           .map(
-            (recommendation) => `
-              <article class="transfer-card">
+            (recommendation) => {
+              const wrapperTag = navigationEnabled ? 'button' : 'article'
+              const interactiveAttrs = navigationEnabled
+                ? `type="button" data-transfer-system-id="${recommendation.systemId}" data-transfer-line-id="${recommendation.line.id}" data-transfer-stop-id="${recommendation.stop.id}" aria-label="${recommendation.line.name} ${copyValue('walkToStop', recommendation.walkMinutes, recommendation.stop.name)}"`
+                : ''
+
+              return `
+              <${wrapperTag}
+                class="transfer-card"
+                ${interactiveAttrs}
+              >
                 <div class="transfer-card-main">
                   <span class="arrival-line-token" style="--line-color:${recommendation.line.color};">${recommendation.line.name[0]}</span>
                   <div class="transfer-card-copy">
@@ -1311,13 +1363,17 @@ function renderTransferRecommendations(recommendations, loading = false, station
                   <span class="transfer-card-badge transfer-card-badge-${recommendation.tone}">${recommendation.badge}</span>
                   <span class="transfer-card-time">${recommendation.timeText}</span>
                 </div>
-              </article>
-            `,
+              </${wrapperTag}>
+            `
+            },
           )
           .join('')}
       </div>
     </div>
   `
+  if (navigationEnabled) {
+    attachTransferClickHandlers()
+  }
 }
 
 function buildTransferRecommendations(candidates, arrivalFeed) {
@@ -1483,8 +1539,15 @@ async function refreshStationDialog(station) {
   renderStationServiceSummary(station)
 
   const dialogStations = getDialogStations(station)
-  const arrivalsByLine = await Promise.all(dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line)))
-  renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
+
+  // Phase 1: render stale cached arrivals immediately (zero wait)
+  const cachedArrivals = dialogStations.map(({ station: s, line }) => getCachedArrivalsForStation(s, line) ?? { nb: [], sb: [] })
+  const hasAnyCache = cachedArrivals.some((a) => a.nb.length > 0 || a.sb.length > 0)
+  if (hasAnyCache) {
+    renderArrivalLists(mergeArrivalBuckets(cachedArrivals))
+    renderDialogDirectionView()
+    syncDialogTitleMarquee()
+  }
 
   const stationAlerts = getStationDialogAlerts(station)
   stationAlertsContainer.innerHTML = stationAlerts.length
@@ -1494,6 +1557,10 @@ async function refreshStationDialog(station) {
         </article>
       `).join('')
     : ''
+
+  // Phase 2: fetch fresh arrivals and re-render
+  const arrivalsByLine = await Promise.all(dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line)))
+  renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
 
   const transferCandidates = getNearbyTransferCandidates(station)
   if (!transferCandidates.length) {
@@ -1511,10 +1578,17 @@ async function refreshStationDialog(station) {
 }
 
 async function showStationDialog(station, { updateUrl = true } = {}) {
-  await refreshStationDialog(station)
+  if (!station) return
+  setDialogTitle(station.name)
+  renderStationServiceSummary(station)
   if (!dialog.open) dialog.showModal()
   if (updateUrl) setStationParam(station)
   startDialogAutoRefresh()
+  try {
+    await refreshStationDialog(station)
+  } catch (e) {
+    console.warn('Station refresh failed:', e)
+  }
 }
 
 const { renderLine } = createMapRenderer({
@@ -1641,6 +1715,214 @@ function attachAlertClickHandlers() {
   })
 }
 
+function attachDialogArrivalClickHandlers() {
+  const items = document.querySelectorAll('[data-arrival-vehicle-id]')
+  items.forEach((item) => {
+    item.addEventListener('click', () => {
+      const vehicleId = item.dataset.arrivalVehicleId
+      const vehicle = getAllVehicles().find((candidate) => candidate.id === vehicleId)
+      if (!vehicle) return
+      state.currentTrainId = vehicleId
+      renderTrainDialog(vehicle)
+    })
+  })
+}
+
+function attachTransferClickHandlers() {
+  const items = document.querySelectorAll('[data-transfer-stop-id]')
+  items.forEach((item) => {
+    item.addEventListener('click', async () => {
+      const systemId = item.dataset.transferSystemId
+      const lineId = item.dataset.transferLineId
+      const stopId = item.dataset.transferStopId
+      if (!systemId || !lineId || !stopId) return
+
+      if (systemId !== state.activeSystemId) {
+        await switchSystem(systemId, { updateUrl: true, preserveDialog: false })
+      }
+
+      const line = state.lines.find((candidate) => candidate.id === lineId)
+      const station = line?.stops?.find((candidate) => candidate.id === stopId)
+      if (station) {
+        showStationDialog(station)
+      }
+    })
+  })
+}
+
+function showInsightsDetail(title, subtitle, bodyHtml) {
+  insightsDetailTitle.textContent = title
+  insightsDetailSubtitle.textContent = subtitle
+  insightsDetailBody.innerHTML = bodyHtml
+  if (!insightsDetailDialog.open) insightsDetailDialog.showModal()
+}
+
+function buildInsightsDetailContent(lineId, type) {
+  const isZh = state.language === 'zh-CN'
+  const line = lineId ? state.lines.find((l) => l.id === lineId) : null
+  const vehicles = lineId ? (state.vehiclesByLine.get(lineId) ?? []) : []
+  const nb = vehicles.filter((v) => v.directionSymbol === '▲')
+  const sb = vehicles.filter((v) => v.directionSymbol === '▼')
+  const { nbGaps, sbGaps } = lineId ? computeLineHeadways(nb, sb) : { nbGaps: [], sbGaps: [] }
+  const layout = lineId ? state.layouts.get(lineId) : null
+  const formatVehicleRow = (v) => {
+    const delay = Number(v.scheduleDeviation ?? 0)
+    const delayText = delay > 300 ? (isZh ? `晚点 ${Math.round(delay / 60)} 分钟` : `${Math.round(delay / 60)} min late`) : delay < -60 ? (isZh ? '早点' : 'Early') : (isZh ? '准点' : 'On time')
+    const tone = delay > 300 ? 'alert' : delay < -60 ? 'info' : 'healthy'
+    return `<div class="alert-dialog-item"><p class="alert-dialog-item-meta">${v.directionSymbol === '▲' ? (isZh ? '北行' : 'Northbound') : (isZh ? '南行' : 'Southbound')} · ${isZh ? '车辆' : 'Vehicle'} ${v.label}</p><p class="alert-dialog-item-title">${v.currentStopLabel ?? '—'}</p><p class="alert-dialog-item-copy insights-detail-tone-${tone}">${delayText}</p></div>`
+  }
+  const formatGapList = (gaps, dirLabel) => {
+    if (!gaps.length) return `<p class="train-readout muted">${isZh ? `${dirLabel} 暂无间隔数据` : `No gap data for ${dirLabel}`}</p>`
+    return gaps.map((g, i) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta">${dirLabel} · Gap ${i + 1}</p><p class="alert-dialog-item-title">${g} min</p></div>`).join('')
+  }
+
+  if (type === 'inservice' && line) {
+    const allV = [...nb, ...sb]
+    return { title: isZh ? `运营中 — ${line.name}` : `In Service — ${line.name}`, subtitle: isZh ? `共 ${allV.length} 辆` : `${allV.length} vehicles total`, body: allV.length ? allV.map(formatVehicleRow).join('') : `<p class="train-readout muted">${isZh ? '暂无车辆数据' : 'No vehicle data'}</p>` }
+  }
+
+  if (type === 'ontime' && line) {
+    const delayBuckets = getDelayBuckets(vehicles)
+    const rate = vehicles.length ? Math.round((delayBuckets.onTime / vehicles.length) * 100) : null
+    return { title: isZh ? `准点率 — ${line.name}` : `On-Time Rate — ${line.name}`, subtitle: rate != null ? `${rate}%` : '—', body: `<div class="delay-distribution" style="margin-bottom:12px"><div class="delay-chip delay-chip-healthy"><p class="delay-chip-label">${isZh ? '准点' : 'On time'}</p><p class="delay-chip-value">${delayBuckets.onTime}</p><p class="delay-chip-copy">${formatPercent(delayBuckets.onTime, vehicles.length)}</p></div><div class="delay-chip delay-chip-warn"><p class="delay-chip-label">${isZh ? '晚点 2-5 分钟' : '2-5 min late'}</p><p class="delay-chip-value">${delayBuckets.minorLate}</p><p class="delay-chip-copy">${formatPercent(delayBuckets.minorLate, vehicles.length)}</p></div><div class="delay-chip delay-chip-alert"><p class="delay-chip-label">${isZh ? '晚点 5+ 分钟' : '5+ min late'}</p><p class="delay-chip-value">${delayBuckets.severeLate}</p><p class="delay-chip-copy">${formatPercent(delayBuckets.severeLate, vehicles.length)}</p></div></div>${vehicles.map(formatVehicleRow).join('')}` }
+  }
+
+  if (type === 'gap' && line) {
+    const worstGap = [...nbGaps, ...sbGaps].length ? Math.max(...nbGaps, ...sbGaps) : null
+    const nbLabel = formatLayoutDirectionLabel('▲', layout, { includeSymbol: true })
+    const sbLabel = formatLayoutDirectionLabel('▼', layout, { includeSymbol: true })
+    return { title: isZh ? `间隔详情 — ${line.name}` : `Spacing — ${line.name}`, subtitle: worstGap != null ? (isZh ? `最大间隔 ${worstGap} 分钟` : `Worst gap: ${worstGap} min`) : (isZh ? '暂无间隔数据' : 'No gap data'), body: formatGapList(nbGaps, nbLabel) + formatGapList(sbGaps, sbLabel) }
+  }
+
+  if (type === 'balance' && line) {
+    const nbLabel = formatLayoutDirectionLabel('▲', layout, { includeSymbol: true })
+    const sbLabel = formatLayoutDirectionLabel('▼', layout, { includeSymbol: true })
+    return { title: isZh ? `方向平衡 — ${line.name}` : `Direction Balance — ${line.name}`, subtitle: isZh ? `北行 ${nb.length} · 南行 ${sb.length}` : `${nbLabel}: ${nb.length} · ${sbLabel}: ${sb.length}`, body: `<div class="alert-dialog-item"><p class="alert-dialog-item-meta">${nbLabel}</p><p class="alert-dialog-item-title">${nb.length} ${isZh ? '辆' : 'vehicle' + (nb.length !== 1 ? 's' : '')}</p></div><div class="alert-dialog-item"><p class="alert-dialog-item-meta">${sbLabel}</p><p class="alert-dialog-item-title">${sb.length} ${isZh ? '辆' : 'vehicle' + (sb.length !== 1 ? 's' : '')}</p></div>` }
+  }
+
+  if ((type === 'headway-nb' || type === 'headway-sb') && line) {
+    const isNb = type === 'headway-nb'
+    const gaps = isNb ? nbGaps : sbGaps
+    const dirVehicles = isNb ? nb : sb
+    const dirLabel = formatLayoutDirectionLabel(isNb ? '▲' : '▼', layout, { includeSymbol: true })
+    const avg = gaps.length ? Math.round(gaps.reduce((s, g) => s + g, 0) / gaps.length) : null
+    return { title: isZh ? `${dirLabel} 间隔 — ${line.name}` : `${dirLabel} Spacing — ${line.name}`, subtitle: avg != null ? (isZh ? `平均 ${avg} 分钟` : `Average: ${avg} min`) : (isZh ? '暂无间隔数据' : 'No gap data'), body: gaps.length ? formatGapList(gaps, dirLabel) : `<p class="train-readout muted">${isZh ? '车辆不足，无法计算间隔' : 'Too few vehicles for a spacing read'}</p>${dirVehicles.map(formatVehicleRow).join('')}` }
+  }
+
+  if ((type === 'delay-ontime' || type === 'delay-minor' || type === 'delay-severe') && line) {
+    const bucket = type === 'delay-ontime' ? 'onTime' : type === 'delay-minor' ? 'minorLate' : 'severeLate'
+    const filtered = vehicles.filter((v) => {
+      const d = Number(v.scheduleDeviation ?? 0)
+      if (bucket === 'onTime') return d <= 120 && d >= -60
+      if (bucket === 'minorLate') return d > 120 && d <= 300
+      return d > 300
+    })
+    const label = type === 'delay-ontime' ? (isZh ? '准点' : 'On Time') : type === 'delay-minor' ? (isZh ? '晚点 2-5 分钟' : '2-5 Min Late') : (isZh ? '晚点 5+ 分钟' : '5+ Min Late')
+    return { title: `${label} — ${line.name}`, subtitle: isZh ? `${filtered.length} 辆` : `${filtered.length} vehicle${filtered.length !== 1 ? 's' : ''}`, body: filtered.length ? filtered.map(formatVehicleRow).join('') : `<p class="train-readout muted">${isZh ? '本分类暂无车辆' : 'No vehicles in this category'}</p>` }
+  }
+
+  if (type === 'ranking' && line) {
+    const { nbGaps: ng, sbGaps: sg } = computeLineHeadways(nb, sb)
+    const worstGap = [...ng, ...sg].length ? Math.max(...ng, ...sg) : 0
+    const severeLateCount = vehicles.filter((v) => Number(v.scheduleDeviation ?? 0) > 300).length
+    const alertCount = getAlertsForLine(lineId).length
+    const balanceDelta = Math.abs(nb.length - sb.length)
+    const score = alertCount * 5 + severeLateCount * 3 + Math.max(0, worstGap - 10)
+    const attentionReasons = getLineAttentionReasons({ worstGap, severeLateCount, alertCount, balanceDelta, language: state.language })
+    return {
+      title: isZh ? `关注评分 — ${line.name}` : `Attention Score — ${line.name}`,
+      subtitle: isZh ? `综合评分 ${score}` : `Score: ${score}`,
+      body: `<div class="alert-dialog-item"><p class="alert-dialog-item-meta">${isZh ? '综合评分' : 'Score'}</p><p class="alert-dialog-item-title">${score}</p></div><div class="alert-dialog-item"><p class="alert-dialog-item-meta">${isZh ? '最大间隔' : 'Worst Gap'}</p><p class="alert-dialog-item-title">${worstGap ? `${worstGap} min` : '—'}</p></div><div class="alert-dialog-item"><p class="alert-dialog-item-meta">${isZh ? '严重晚点' : 'Severe Late'}</p><p class="alert-dialog-item-title">${severeLateCount}</p></div><div class="alert-dialog-item"><p class="alert-dialog-item-meta">${isZh ? '活跃告警' : 'Active Alerts'}</p><p class="alert-dialog-item-title">${alertCount}</p></div>${attentionReasons.map((r) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta">${isZh ? '关注原因' : 'Reason'}</p><p class="alert-dialog-item-title insights-detail-tone-${r.tone}">${r.label}</p></div>`).join('')}`
+    }
+  }
+
+  // System-level types
+  const allInsightsItems = state.lines.map((l) => {
+    const lVehicles = state.vehiclesByLine.get(l.id) ?? []
+    const lNb = lVehicles.filter((v) => v.directionSymbol === '▲')
+    const lSb = lVehicles.filter((v) => v.directionSymbol === '▼')
+    const lAlerts = getAlertsForLine(l.id)
+    const { nbGaps: lng, sbGaps: lsg } = computeLineHeadways(lNb, lSb)
+    const lWorstGap = [...lng, ...lsg].length ? Math.max(...lng, ...lsg) : 0
+    const lSevereLate = lVehicles.filter((v) => Number(v.scheduleDeviation ?? 0) > 300).length
+    const lNbHealth = classifyHeadwayHealth(lng, lNb.length).health
+    const lSbHealth = classifyHeadwayHealth(lsg, lSb.length).health
+    const lIsUneven = [lNbHealth, lSbHealth].some((h) => h === 'uneven' || h === 'bunched' || h === 'sparse')
+    const lHasSevereLate = lSevereLate > 0
+    return { line: l, vehicles: lVehicles, nb: lNb, sb: lSb, alerts: lAlerts, worstGap: lWorstGap, severeLate: lSevereLate, isUneven: lIsUneven, hasSevereLate: lHasSevereLate }
+  })
+
+  if (type === 'sys-healthy') {
+    const healthy = allInsightsItems.filter((item) => !item.isUneven && !item.hasSevereLate)
+    return { title: isZh ? '健康线路' : 'Healthy Lines', subtitle: isZh ? `${healthy.length} 条线路运行稳定` : `${healthy.length} line${healthy.length !== 1 ? 's' : ''} running smoothly`, body: healthy.length ? healthy.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title">${item.vehicles.length} ${isZh ? '辆运营中' : 'in service'}</p><p class="alert-dialog-item-copy insights-detail-tone-healthy">${isZh ? '间隔和准点性均正常' : 'Spacing and punctuality normal'}</p></div>`).join('') : `<p class="train-readout muted">${isZh ? '当前没有完全健康的线路' : 'No fully healthy lines right now'}</p>` }
+  }
+
+  if (type === 'sys-vehicles') {
+    return { title: isZh ? `实时${getVehicleLabelPlural()}` : `Live ${getVehicleLabelPlural()}`, subtitle: isZh ? `全系统共 ${allInsightsItems.reduce((s, i) => s + i.vehicles.length, 0)} 辆` : `${allInsightsItems.reduce((s, i) => s + i.vehicles.length, 0)} total`, body: allInsightsItems.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title">${item.vehicles.length} ${isZh ? '辆' : 'vehicle' + (item.vehicles.length !== 1 ? 's' : '')}</p><p class="alert-dialog-item-copy">${isZh ? `北行 ${item.nb.length} · 南行 ${item.sb.length}` : `NB: ${item.nb.length} · SB: ${item.sb.length}`}</p></div>`).join('') }
+  }
+
+  if (type === 'sys-alerts') {
+    const linesWithAlerts = allInsightsItems.filter((item) => item.alerts.length > 0)
+    return { title: isZh ? '活跃告警' : 'Active Alerts', subtitle: isZh ? `${linesWithAlerts.reduce((s, i) => s + i.alerts.length, 0)} 条告警影响 ${linesWithAlerts.length} 条线路` : `${linesWithAlerts.reduce((s, i) => s + i.alerts.length, 0)} alerts across ${linesWithAlerts.length} line${linesWithAlerts.length !== 1 ? 's' : ''}`, body: linesWithAlerts.length ? linesWithAlerts.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title">${item.alerts.length} ${isZh ? '条活跃告警' : `active alert${item.alerts.length !== 1 ? 's' : ''}`}</p>${item.alerts.map((a) => `<p class="alert-dialog-item-copy">${a.title || (isZh ? '服务告警' : 'Service alert')}</p>`).join('')}</div>`).join('') : `<p class="train-readout muted">${isZh ? '当前没有活跃告警' : 'No active alerts right now'}</p>` }
+  }
+
+  if (type === 'sys-attention') {
+    const attention = allInsightsItems.filter((item) => item.isUneven || item.hasSevereLate)
+    return { title: isZh ? '需关注线路' : 'Lines Needing Attention', subtitle: isZh ? `${attention.length} 条线路` : `${attention.length} line${attention.length !== 1 ? 's' : ''}`, body: attention.length ? attention.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title">${item.worstGap ? (isZh ? `最大间隔 ${item.worstGap} 分钟` : `Gap ${item.worstGap} min`) : ''}</p><p class="alert-dialog-item-copy">${[item.hasSevereLate ? (isZh ? `${item.severeLate} 辆严重晚点` : `${item.severeLate} severely late`) : '', item.isUneven ? (isZh ? '间隔不均' : 'Uneven spacing') : ''].filter(Boolean).join(' · ')}</p></div>`).join('') : `<p class="train-readout muted">${isZh ? '当前没有需关注的线路' : 'No lines needing attention right now'}</p>` }
+  }
+
+  if (type === 'sys-stops') {
+    const allAlerts = allInsightsItems.flatMap((item) => item.alerts)
+    const stopIds = [...new Set(allAlerts.flatMap((a) => a.stopIds ?? []))]
+    return { title: isZh ? '受影响站点' : 'Impacted Stops', subtitle: isZh ? `${stopIds.length} 个站点受告警影响` : `${stopIds.length} stop${stopIds.length !== 1 ? 's' : ''} affected`, body: stopIds.length ? stopIds.map((id) => `<div class="alert-dialog-item"><p class="alert-dialog-item-title">${id}</p></div>`).join('') : `<p class="train-readout muted">${isZh ? '当前没有受影响的站点' : 'No impacted stops right now'}</p>` }
+  }
+
+  if (type === 'sys-late-only') {
+    const filtered = allInsightsItems.filter((item) => item.hasSevereLate && !item.isUneven)
+    return { title: isZh ? '仅晚点线路' : 'Late Only Lines', subtitle: isZh ? `${filtered.length} 条线路` : `${filtered.length} line${filtered.length !== 1 ? 's' : ''}`, body: filtered.length ? filtered.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title insights-detail-tone-warn">${item.severeLate} ${isZh ? '辆严重晚点' : `severely late vehicle${item.severeLate !== 1 ? 's' : ''}`}</p></div>`).join('') : `<p class="train-readout muted">${isZh ? '当前没有仅晚点的线路' : 'No late-only lines right now'}</p>` }
+  }
+
+  if (type === 'sys-spacing-only') {
+    const filtered = allInsightsItems.filter((item) => item.isUneven && !item.hasSevereLate)
+    return { title: isZh ? '仅间隔不均线路' : 'Spacing Only Lines', subtitle: isZh ? `${filtered.length} 条线路` : `${filtered.length} line${filtered.length !== 1 ? 's' : ''}`, body: filtered.length ? filtered.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title insights-detail-tone-alert">${isZh ? `最大间隔 ${item.worstGap} 分钟` : `Gap ${item.worstGap} min`}</p></div>`).join('') : `<p class="train-readout muted">${isZh ? '当前没有仅间隔不均的线路' : 'No spacing-only lines right now'}</p>` }
+  }
+
+  if (type === 'sys-both') {
+    const filtered = allInsightsItems.filter((item) => item.hasSevereLate && item.isUneven)
+    return { title: isZh ? '晚点且间隔不均' : 'Both Issues', subtitle: isZh ? `${filtered.length} 条线路` : `${filtered.length} line${filtered.length !== 1 ? 's' : ''}`, body: filtered.length ? filtered.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title">${isZh ? `最大间隔 ${item.worstGap} 分钟 · ${item.severeLate} 辆严重晚点` : `Gap ${item.worstGap} min · ${item.severeLate} severely late`}</p></div>`).join('') : `<p class="train-readout muted">${isZh ? '当前没有两者都有问题的线路' : 'No lines with both issues right now'}</p>` }
+  }
+
+  return null
+}
+
+function attachInsightsClickHandlers() {
+  const elements = document.querySelectorAll('[data-insights-type]')
+  elements.forEach((el) => {
+    el.addEventListener('click', () => {
+      const lineId = el.dataset.insightsLineId ?? null
+      const type = el.dataset.insightsType
+      const content = buildInsightsDetailContent(lineId, type)
+      if (!content) return
+      showInsightsDetail(content.title, content.subtitle, content.body)
+    })
+  })
+}
+
+function attachInsightsStationClickHandlers() {
+  const elements = document.querySelectorAll('[data-terminal-line-id]')
+  elements.forEach((el) => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-train-id]')) return
+      const lineId = el.dataset.terminalLineId
+      const direction = el.dataset.terminalDirection
+      const layout = state.layouts.get(lineId)
+      if (!layout) return
+      const station = direction === 'nb' ? layout.stations[0] : layout.stations.at(-1)
+      if (station) showStationDialog(station)
+    })
+  })
+}
+
 function attachStationClickHandlers() {
   state.lines.forEach((line) => {
     const layout = state.layouts.get(line.id)
@@ -1730,6 +2012,10 @@ function render() {
     const visibleLines = getVisibleLines()
     boardElement.innerHTML = `${renderLineSwitcher()}${renderInsightsBoard(visibleLines)}`
     attachLineSwitcherHandlers()
+    attachAlertClickHandlers()
+    attachTrainClickHandlers()
+    attachInsightsClickHandlers()
+    attachInsightsStationClickHandlers()
   }
 }
 

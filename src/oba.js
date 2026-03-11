@@ -7,6 +7,8 @@ import {
 import { sleep } from './utils'
 
 export function createObaClient(state) {
+  const inFlight = new Map()
+
   function getGlobalCooldownMs() {
     const exponent = Math.max(0, state.obaRateLimitStreak - 1)
     const baseDelayMs = Math.min(OBA_COOLDOWN_MAX_MS, OBA_COOLDOWN_BASE_MS * 2 ** exponent)
@@ -25,7 +27,7 @@ export function createObaClient(state) {
     return payload?.code === 429 || /rate limit/i.test(payload?.text ?? '')
   }
 
-  async function fetchJsonWithRetry(url, label) {
+  async function _fetchJsonWithRetry(url, label) {
     for (let attempt = 0; attempt <= OBA_MAX_RETRIES; attempt += 1) {
       await waitForObaCooldown()
 
@@ -76,6 +78,13 @@ export function createObaClient(state) {
     }
 
     throw new Error(`${label} request failed`)
+  }
+
+  async function fetchJsonWithRetry(url, label) {
+    if (inFlight.has(url)) return inFlight.get(url)
+    const promise = _fetchJsonWithRetry(url, label).finally(() => inFlight.delete(url))
+    inFlight.set(url, promise)
+    return promise
   }
 
   return {

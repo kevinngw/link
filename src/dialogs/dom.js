@@ -33,5 +33,10 @@ export function getDialogElements() {
     alertDialogBody: document.querySelector('#alert-dialog-body'),
     alertDialogLink: document.querySelector('#alert-dialog-link'),
     alertDialogClose: document.querySelector('#alert-dialog-close'),
+    insightsDetailDialog: document.querySelector('#insights-detail-dialog'),
+    insightsDetailTitle: document.querySelector('#insights-detail-title'),
+    insightsDetailSubtitle: document.querySelector('#insights-detail-subtitle'),
+    insightsDetailBody: document.querySelector('#insights-detail-body'),
+    insightsDetailClose: document.querySelector('#insights-detail-close'),
   }
 }
