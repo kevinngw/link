@@ -2,6 +2,10 @@
   font-family: "SF Mono", "Roboto Mono", "IBM Plex Mono", monospace;
   color: #e8f6ff;
   background: #05070b;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
   --bg-top-glow: rgba(0, 179, 255, 0.08);
   --bg-start: #05070b;
   --bg-end: #090d13;
@@ -76,12 +80,16 @@ body {
 
 #app {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .screen {
-  width: min(1360px, calc(100vw - 32px));
+  width: min(1360px, calc(100vw - 32px - var(--safe-area-left) - var(--safe-area-right)));
   margin: 0 auto;
-  padding: 22px 0 32px;
+  padding:
+    calc(22px + var(--safe-area-top))
+    0
+    calc(32px + var(--safe-area-bottom));
 }
 
 .screen-header {
@@ -2820,13 +2828,60 @@ h1 {
     grid-template-columns: 1fr;
   }
 
+  .screen {
+    width: min(100vw - 20px - var(--safe-area-left) - var(--safe-area-right), 100%);
+    padding-top: calc(14px + var(--safe-area-top));
+    padding-bottom: calc(22px + var(--safe-area-bottom));
+  }
+
   .screen-header {
-    display: block;
+    display: grid;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .screen-kicker {
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+  }
+
+  h1 {
+    font-size: clamp(1.6rem, 8vw, 2.3rem);
+    line-height: 1.02;
   }
 
   .screen-meta {
-    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, max-content));
+    gap: 8px;
+    margin-top: 0;
     text-align: left;
+    justify-content: start;
+  }
+
+  .theme-toggle,
+  .screen-meta .status-pill,
+  .screen-meta .updated-at {
+    margin: 0;
+  }
+
+  .screen-meta .updated-at {
+    font-size: 0.78rem;
+  }
+
+  .switcher-stack {
+    position: sticky;
+    top: max(8px, var(--safe-area-top));
+    z-index: 20;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 2px 0 0;
+  }
+
+  .tab-bar {
+    margin-bottom: 0;
+    border-radius: 16px;
+    backdrop-filter: blur(14px);
   }
 
   .line-readout-grid {
@@ -2866,7 +2921,69 @@ h1 {
   .tab-button {
     min-width: 0;
   }
-  
+
+  .line-card,
+  .panel-card {
+    padding: 16px 14px 14px;
+    border-radius: 18px;
+  }
+
+  .line-card-header {
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+
+  .line-title {
+    gap: 10px;
+  }
+
+  .line-title h2 {
+    font-size: 1.05rem;
+  }
+
+  .line-title p {
+    font-size: 0.82rem;
+  }
+
+  .service-reminder {
+    display: none;
+  }
+
+  .line-marquee {
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  .line-marquee-track {
+    gap: 8px;
+  }
+
+  .line-marquee-item {
+    padding: 6px 10px;
+    font-size: 0.72rem;
+  }
+
+  .line-marquee-token {
+    width: 18px;
+    height: 18px;
+    font-size: 0.62rem;
+  }
+
+  .line-diagram {
+    display: block;
+    height: clamp(480px, 64dvh, 820px);
+    min-height: 480px;
+    margin-top: 6px;
+  }
+
+  .station-label {
+    font-size: 14px;
+  }
+
+  .segment-time {
+    font-size: 11px;
+  }
+
   .times-item-main {
     flex-direction: column;
   }
