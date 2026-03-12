@@ -1329,26 +1329,45 @@ function renderSystemSwitcher() {
     .join('')
 }
 
+function getLineSwitcherLabel(line) {
+  const name = line.name?.trim() ?? ''
+  const parts = name.split(/\s+/).filter(Boolean)
+  if (parts.length <= 1) return name
+
+  const compactPrefixes = ['rapidride', 'swift']
+  if (compactPrefixes.includes(parts[0].toLowerCase())) {
+    return parts.slice(1).join(' ')
+  }
+
+  return name
+}
+
 function renderLineSwitcher() {
   if (!state.compactLayout || state.lines.length < 2) return ''
 
   const buttons = state.lines
-    .map(
-      (line) => `
+    .map((line) => {
+      const compactLabel = getLineSwitcherLabel(line)
+      return `
         <button
           class="line-switcher-button ${line.id === state.activeLineId ? 'is-active' : ''}"
           data-line-switch="${line.id}"
           type="button"
+          aria-pressed="${line.id === state.activeLineId ? 'true' : 'false'}"
+          aria-label="${line.name}"
           style="--line-color:${line.color};"
         >
           <span class="line-token line-switcher-token" style="--line-color:${line.color};">${line.name[0]}</span>
-          <span>${line.name}</span>
+          <span class="line-switcher-label-group">
+            <span class="line-switcher-label-compact">${compactLabel}</span>
+            <span class="line-switcher-label-full">${line.name}</span>
+          </span>
         </button>
-      `,
-    )
+      `
+    })
     .join('')
 
-  return `<section class="line-switcher">${buttons}</section>`
+  return `<section class="line-switcher" aria-label="Lines">${buttons}</section>`
 }
 
 function getVisibleLines() {

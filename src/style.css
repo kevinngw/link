@@ -359,17 +359,42 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--border-color);
   border-radius: 14px;
   background: var(--surface-strong);
   color: var(--text-secondary);
   font: inherit;
+  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.line-switcher-button:hover {
+  border-color: color-mix(in srgb, var(--line-color) 24%, var(--border-color));
+  color: var(--text-primary);
 }
 
 .line-switcher-button.is-active {
   color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--line-color) 40%, var(--border-color));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line-color) 35%, transparent);
+}
+
+.line-switcher-label-group {
+  display: grid;
+  min-width: 0;
+}
+
+.line-switcher-label-compact,
+.line-switcher-label-full {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.line-switcher-label-compact {
+  display: none;
 }
 
 .line-switcher-token {
@@ -2939,6 +2964,77 @@ button.arrival-item {
     margin-bottom: 0;
     border-radius: 16px;
     backdrop-filter: blur(14px);
+  }
+
+  .line-switcher {
+    display: flex;
+    grid-column: 1 / -1;
+    gap: 8px;
+    margin: -2px 0 8px;
+    padding: 0 1px 2px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .line-switcher::-webkit-scrollbar {
+    display: none;
+  }
+
+  .line-switcher-button {
+    position: relative;
+    flex: 0 0 auto;
+    gap: 8px;
+    min-height: 0;
+    padding: 7px 11px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--surface-card) 58%, transparent);
+    box-shadow: none;
+    scroll-snap-align: start;
+  }
+
+  .line-switcher-button::after {
+    content: "";
+    position: absolute;
+    inset: auto 10px -1px;
+    height: 2px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--line-color) 82%, white 18%);
+    opacity: 0;
+    transform: scaleX(0.65);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+
+  .line-switcher-button.is-active {
+    background: color-mix(in srgb, var(--line-color) 10%, var(--surface-card));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line-color) 40%, var(--border-color));
+  }
+
+  .line-switcher-button.is-active::after {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+
+  .line-switcher-token {
+    width: 20px;
+    height: 20px;
+    font-size: 0.68rem;
+  }
+
+  .line-switcher-label-full {
+    display: none;
+  }
+
+  .line-switcher-label-compact {
+    display: block;
+    font-size: 0.76rem;
+    letter-spacing: 0.02em;
+  }
+
+  .board {
+    gap: 14px;
   }
 
   .line-readout-grid {
