@@ -352,6 +352,9 @@ h1 {
   grid-column: 1 / -1;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   margin-bottom: 2px;
 }
 
@@ -2970,6 +2973,9 @@ button.arrival-item {
     display: flex;
     grid-column: 1 / -1;
     gap: 8px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     margin: -2px 0 8px;
     padding: 0 1px 2px;
     overflow-x: auto;
