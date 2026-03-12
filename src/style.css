@@ -92,6 +92,34 @@ body {
     calc(32px + var(--safe-area-bottom));
 }
 
+.toast-region {
+  position: fixed;
+  right: calc(16px + var(--safe-area-right));
+  bottom: calc(16px + var(--safe-area-bottom));
+  z-index: 60;
+  display: grid;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast {
+  min-width: min(320px, calc(100vw - 32px));
+  max-width: min(420px, calc(100vw - 32px - var(--safe-area-left) - var(--safe-area-right)));
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, #ff9a6a 42%, var(--border-color));
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #ff9a6a 8%, transparent), transparent),
+    color-mix(in srgb, var(--surface-card) 96%, #081018 4%);
+  box-shadow:
+    inset 0 0 0 1px var(--card-inset),
+    0 16px 34px rgba(0, 0, 0, 0.34);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  pointer-events: auto;
+}
+
 .screen-header {
   display: flex;
   align-items: end;
@@ -2921,6 +2949,17 @@ button.arrival-item {
     width: min(100vw - 20px - var(--safe-area-left) - var(--safe-area-right), 100%);
     padding-top: calc(14px + var(--safe-area-top));
     padding-bottom: calc(22px + var(--safe-area-bottom));
+  }
+
+  .toast-region {
+    right: calc(10px + var(--safe-area-right));
+    left: calc(10px + var(--safe-area-left));
+    bottom: calc(10px + var(--safe-area-bottom));
+  }
+
+  .toast {
+    min-width: 0;
+    max-width: none;
   }
 
   .screen-header {

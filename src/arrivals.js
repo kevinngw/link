@@ -77,6 +77,10 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
       arrivals.push(...result.value)
     }
 
+    if (results.length > 0 && results.every((result) => result.status !== 'fulfilled')) {
+      throw results[0].reason ?? new Error('Arrivals request failed')
+    }
+
     return arrivals
   }
 

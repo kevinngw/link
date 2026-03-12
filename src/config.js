@@ -155,6 +155,9 @@ export const UI_COPY = {
     noAdditionalAlertDetails: 'No additional alert details available.',
     affectedLineAlerts: (lineName, count) => `${lineName} Alerts`,
     realtimeOffline: 'Realtime offline',
+    realtimeRequestFailed: 'Realtime request failed. Using last successful snapshot.',
+    stationRequestFailed: 'Station arrivals request failed.',
+    startupRequestFailed: 'Initial data request failed.',
   },
   'zh-CN': {
     languageToggle: 'EN',
@@ -254,5 +257,8 @@ export const UI_COPY = {
     noAdditionalAlertDetails: '暂无更多告警详情。',
     affectedLineAlerts: (lineName) => `${lineName} 告警`,
     realtimeOffline: '实时数据离线',
+    realtimeRequestFailed: '实时请求失败，正在使用最近一次成功快照。',
+    stationRequestFailed: '站点到站请求失败。',
+    startupRequestFailed: '初始数据请求失败。',
   },
 }
