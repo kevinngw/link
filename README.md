@@ -46,6 +46,8 @@ npm run dev
 ```
 
 The `predev` script automatically fetches the latest Sound Transit GTFS data and regenerates `public/pulse-data.json`.
+That file is now treated as a local build artifact (gitignored), so routine dev/build runs do not dirty the working tree.
+The generator also skips rewriting it when the meaningful payload is unchanged.
 
 ```bash
 # Production build
@@ -69,7 +71,8 @@ public/
 scripts/
   build-link-data.mjs   GTFS processor — fetches and transforms Sound Transit data
 src/
-  main.js               Application logic (~800 lines)
+  main.js               App orchestration / wiring
+  static-data.js        Static data + bootstrap helpers
   style.css             Styles (~620 lines)
 .github/workflows/
   deploy.yml            GitHub Pages CI/CD

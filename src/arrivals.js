@@ -1,0 +1,173 @@
+import {
+  ARRIVALS_CACHE_TTL_MS,
+  OBA_ARRIVALS_CONCURRENCY,
+  OBA_BASE_URL,
+  OBA_INTER_REQUEST_DELAY_MS,
+  OBA_KEY,
+} from './config'
+import { normalizeName, sleep } from './utils'
+
+const ARRIVALS_LOOKAHEAD_MINUTES = 60
+const ARRIVALS_LOOKAHEAD_MS = ARRIVALS_LOOKAHEAD_MINUTES * 60 * 1000
+
+export function classifyArrivalDirection(arrival, line) {
+  const lookedUpDirection = line.directionLookup?.[arrival.tripId ?? '']
+  if (lookedUpDirection === '1') return 'nb'
+  if (lookedUpDirection === '0') return 'sb'
+
+  const headsign = arrival.tripHeadsign ?? ''
+  const headsignLower = headsign.toLowerCase()
+
+  if (line.nbTerminusPrefix && headsignLower.startsWith(line.nbTerminusPrefix)) return 'nb'
+  if (line.sbTerminusPrefix && headsignLower.startsWith(line.sbTerminusPrefix)) return 'sb'
+
+  if (/Lynnwood|Downtown Redmond/i.test(headsign)) return 'nb'
+  if (/Federal Way|South Bellevue/i.test(headsign)) return 'sb'
+  return ''
+}
+
+export function getLineRouteId(line) {
+  return line.routeKey ?? `${line.agencyId}_${line.id}`
+}
+
+export function formatArrivalDestination(arrival, copyValue) {
+  const headsign = arrival.tripHeadsign?.trim()
+  if (headsign) return normalizeName(headsign.replace(/^to\s+/i, ''))
+  return copyValue('terminalFallback')
+}
+
+export function getArrivalServiceStatus(arrivalTime, scheduleDeviation, language) {
+  const secondsUntilArrival = Math.floor((arrivalTime - Date.now()) / 1000)
+
+  if (secondsUntilArrival <= 90) return 'ARR'
+  if (scheduleDeviation >= 120) return 'DELAY'
+  return language === 'zh-CN' ? '准点' : 'ON TIME'
+}
+
+export function getStatusTone(status) {
+  if (status === 'DELAY') return 'delay'
+  if (status === 'ARR') return 'arr'
+  return 'ok'
+}
+
+export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationStopIds, copyValue, getLanguage }) {
+  async function fetchArrivalsForStop(stopId) {
+    const url = `${OBA_BASE_URL}/arrivals-and-departures-for-stop/${stopId}.json?key=${OBA_KEY}&minutesAfter=${ARRIVALS_LOOKAHEAD_MINUTES}`
+    const payload = await fetchJsonWithRetry(url, 'Arrivals')
+    if (payload.code !== 200) {
+      throw new Error(payload.text || `Arrivals request failed for ${stopId}`)
+    }
+    return payload.data?.entry?.arrivalsAndDepartures ?? []
+  }
+
+  async function fetchArrivalsForStopIds(stopIds) {
+    const dedupedStopIds = [...new Set(stopIds)]
+    const results = []
+    const arrivals = []
+
+    for (let index = 0; index < dedupedStopIds.length; index += OBA_ARRIVALS_CONCURRENCY) {
+      const batch = dedupedStopIds.slice(index, index + OBA_ARRIVALS_CONCURRENCY)
+      const batchResults = await Promise.allSettled(batch.map((stopId) => fetchArrivalsForStop(stopId)))
+      results.push(...batchResults)
+
+      if (OBA_INTER_REQUEST_DELAY_MS > 0 && index + OBA_ARRIVALS_CONCURRENCY < dedupedStopIds.length) {
+        await sleep(OBA_INTER_REQUEST_DELAY_MS)
+      }
+    }
+
+    for (const result of results) {
+      if (result.status !== 'fulfilled') continue
+      arrivals.push(...result.value)
+    }
+
+    if (results.length > 0 && results.every((result) => result.status !== 'fulfilled')) {
+      throw results[0].reason ?? new Error('Arrivals request failed')
+    }
+
+    return arrivals
+  }
+
+  function buildArrivalsForLine(arrivalFeed, line, allowedStopIds = null) {
+    const now = Date.now()
+    const cutoff = now + ARRIVALS_LOOKAHEAD_MS
+    const seen = new Set()
+    const arrivals = { nb: [], sb: [] }
+    const stopIdFilter = allowedStopIds ? new Set(allowedStopIds) : null
+
+    for (const arrival of arrivalFeed) {
+      if (arrival.routeId !== getLineRouteId(line)) continue
+      if (stopIdFilter && !stopIdFilter.has(arrival.stopId)) continue
+      const arrivalTime = arrival.predictedArrivalTime || arrival.scheduledArrivalTime
+      if (!arrivalTime || arrivalTime <= now || arrivalTime > cutoff) continue
+
+      const bucket = classifyArrivalDirection(arrival, line)
+      if (!bucket) continue
+
+      const dedupeKey = `${arrival.tripId}:${arrival.stopId}:${arrivalTime}`
+      if (seen.has(dedupeKey)) continue
+      seen.add(dedupeKey)
+
+      arrivals[bucket].push({
+        vehicleId: (arrival.vehicleId || '').replace(/^\d+_/, '') || '--',
+        rawVehicleId: arrival.vehicleId || '',
+        arrivalTime,
+        destination: formatArrivalDestination(arrival, copyValue),
+        scheduleDeviation: arrival.scheduleDeviation ?? 0,
+        tripId: arrival.tripId,
+        lineColor: line.color,
+        lineName: line.name,
+        lineToken: line.name[0],
+        distanceFromStop: arrival.distanceFromStop ?? 0,
+        numberOfStopsAway: arrival.numberOfStopsAway ?? 0,
+      })
+    }
+
+    arrivals.nb.sort((left, right) => left.arrivalTime - right.arrivalTime)
+    arrivals.sb.sort((left, right) => left.arrivalTime - right.arrivalTime)
+    arrivals.nb = arrivals.nb.slice(0, 4)
+    arrivals.sb = arrivals.sb.slice(0, 4)
+    return arrivals
+  }
+
+  function getCachedArrivalsForStation(station, line) {
+    const cacheKey = `${state.activeSystemId}:${line.id}:${station.id}`
+    return state.arrivalsCache.get(cacheKey)?.value ?? null
+  }
+
+  async function getArrivalsForStation(station, line, prefetchedFeed = null) {
+    const cacheKey = `${state.activeSystemId}:${line.id}:${station.id}`
+    const cached = state.arrivalsCache.get(cacheKey)
+    if (cached && Date.now() - cached.fetchedAt < ARRIVALS_CACHE_TTL_MS) {
+      return cached.value
+    }
+
+    const stopIds = getStationStopIds(station, line)
+    const arrivalFeed = prefetchedFeed ?? (await fetchArrivalsForStopIds(stopIds))
+    const arrivals = buildArrivalsForLine(arrivalFeed, line, stopIds)
+    state.arrivalsCache.set(cacheKey, { fetchedAt: Date.now(), value: arrivals })
+    return arrivals
+  }
+
+  function mergeArrivalBuckets(collections) {
+    const merged = { nb: [], sb: [] }
+
+    for (const arrivals of collections) {
+      merged.nb.push(...arrivals.nb)
+      merged.sb.push(...arrivals.sb)
+    }
+
+    merged.nb.sort((left, right) => left.arrivalTime - right.arrivalTime)
+    merged.sb.sort((left, right) => left.arrivalTime - right.arrivalTime)
+    return merged
+  }
+
+  return {
+    buildArrivalsForLine,
+    fetchArrivalsForStop,
+    fetchArrivalsForStopIds,
+    getCachedArrivalsForStation,
+    getArrivalsForStation,
+    mergeArrivalBuckets,
+    getArrivalServiceStatus: (arrivalTime, scheduleDeviation) => getArrivalServiceStatus(arrivalTime, scheduleDeviation, getLanguage()),
+  }
+}
