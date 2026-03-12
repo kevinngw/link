@@ -54,6 +54,9 @@ const state = {
   systemSnapshots: new Map(),
   vehicleGhosts: new Map(),
   language: 'en',
+  stationSearchQuery: '',
+  stationSearchResults: [],
+  highlightedStationSearchIndex: 0,
 }
 
 const updateSW = registerSW({
@@ -71,6 +74,7 @@ document.querySelector('#app').innerHTML = `
         <h1 id="screen-title">LINK PULSE</h1>
       </div>
       <div class="screen-meta">
+        <button id="station-search-toggle" class="theme-toggle station-search-toggle" type="button" aria-label="Open station search">Search</button>
         <button id="language-toggle" class="theme-toggle" type="button" aria-label="Switch to Chinese">中文</button>
         <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">Light</button>
         <p id="status-pill" class="status-pill">SYNC</p>
@@ -168,6 +172,25 @@ document.querySelector('#app').innerHTML = `
       </div>
     </div>
   </dialog>
+  <dialog id="station-search-dialog" class="station-dialog station-search-dialog">
+    <div class="dialog-content">
+      <header class="dialog-header">
+        <div>
+          <h3 id="station-search-title">Station search</h3>
+          <p id="station-search-summary" class="dialog-service-summary">Jump straight to any station across loaded systems.</p>
+        </div>
+        <div class="dialog-actions">
+          <button id="station-search-close" class="dialog-close" type="button" aria-label="Close station search">&times;</button>
+        </div>
+      </header>
+      <div class="station-search-shell">
+        <label class="sr-only" for="station-search-input">Station search</label>
+        <input id="station-search-input" class="station-search-input" type="search" placeholder="Search stations, lines, or systems" autocomplete="off" spellcheck="false" />
+        <p id="station-search-meta" class="updated-at">Press / to search</p>
+        <div id="station-search-results" class="station-search-results"></div>
+      </div>
+    </div>
+  </dialog>
   <dialog id="insights-detail-dialog" class="station-dialog train-dialog">
     <div class="dialog-content">
       <header class="dialog-header">
@@ -192,12 +215,20 @@ const screenTitleElement = document.querySelector('#screen-title')
 const systemBarElement = document.querySelector('#system-bar')
 const viewBarElement = document.querySelector('#view-bar')
 const tabButtons = [...document.querySelectorAll('.tab-button')]
+const stationSearchToggleButton = document.querySelector('#station-search-toggle')
 const languageToggleButton = document.querySelector('#language-toggle')
 const themeToggleButton = document.querySelector('#theme-toggle')
 const statusPillElement = document.querySelector('#status-pill')
 const currentTimeElement = document.querySelector('#current-time')
 const updatedAtElement = document.querySelector('#updated-at')
 const toastRegionElement = document.querySelector('#toast-region')
+const stationSearchDialog = document.querySelector('#station-search-dialog')
+const stationSearchTitleElement = document.querySelector('#station-search-title')
+const stationSearchSummaryElement = document.querySelector('#station-search-summary')
+const stationSearchInput = document.querySelector('#station-search-input')
+const stationSearchMetaElement = document.querySelector('#station-search-meta')
+const stationSearchResultsElement = document.querySelector('#station-search-results')
+const stationSearchCloseButton = document.querySelector('#station-search-close')
 const dialogElements = getDialogElements()
 const {
   dialog,
@@ -278,10 +309,184 @@ themeToggleButton.addEventListener('click', () => {
   setTheme(state.theme === 'dark' ? 'light' : 'dark')
   render()
 })
+stationSearchToggleButton.addEventListener('click', () => {
+  openStationSearch()
+})
+stationSearchCloseButton.addEventListener('click', () => closeStationSearch())
+stationSearchDialog.addEventListener('click', (e) => {
+  if (e.target === stationSearchDialog) closeStationSearch()
+})
+stationSearchInput.addEventListener('input', () => {
+  state.stationSearchQuery = stationSearchInput.value
+  state.highlightedStationSearchIndex = 0
+  renderStationSearchResults()
+})
+stationSearchInput.addEventListener('keydown', async (event) => {
+  const results = getStationSearchResults()
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    state.highlightedStationSearchIndex = Math.min(results.length - 1, state.highlightedStationSearchIndex + 1)
+    renderStationSearchResults()
+    return
+  }
+  if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    state.highlightedStationSearchIndex = Math.max(0, state.highlightedStationSearchIndex - 1)
+    renderStationSearchResults()
+    return
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    const selected = results[state.highlightedStationSearchIndex] ?? results[0]
+    if (selected) await handleStationSearchSelection(selected)
+  }
+})
+document.addEventListener('keydown', (event) => {
+  const target = event.target
+  const isTypingTarget = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+  if (event.key === '/' && !isTypingTarget && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    event.preventDefault()
+    openStationSearch()
+    return
+  }
+  if (event.key === 'Escape' && stationSearchDialog.open) {
+    closeStationSearch()
+  }
+})
 
 let toastHideTimer = 0
 let lastToastMessage = ''
 let lastToastAt = 0
+
+function getStationSearchEntries() {
+  const entries = []
+
+  for (const system of state.systemsById.values()) {
+    for (const line of system.lines ?? []) {
+      for (const station of line.stops ?? []) {
+        entries.push({
+          key: `${system.id}:${line.id}:${station.id}`,
+          systemId: system.id,
+          systemName: system.name,
+          lineId: line.id,
+          lineName: line.name,
+          lineColor: line.color,
+          stationId: station.id,
+          stationName: station.name,
+          normalizedStationName: normalizeName(station.name),
+          aliases: line.stationAliases?.[station.id] ?? [],
+        })
+      }
+    }
+  }
+
+  return entries
+}
+
+function getStationSearchResults() {
+  const query = state.stationSearchQuery.trim().toLowerCase()
+  const entries = getStationSearchEntries()
+
+  const scored = entries.map((entry) => {
+    const searchHaystack = [
+      entry.stationName,
+      entry.normalizedStationName,
+      entry.lineName,
+      entry.systemName,
+      ...entry.aliases,
+    ].join(' | ').toLowerCase()
+
+    let score = query ? 0 : 1
+    if (query) {
+      const stationLower = entry.stationName.toLowerCase()
+      const normalizedLower = entry.normalizedStationName.toLowerCase()
+      const lineLower = entry.lineName.toLowerCase()
+      const systemLower = entry.systemName.toLowerCase()
+      const aliasHit = entry.aliases.some((alias) => alias.toLowerCase().includes(query))
+
+      if (stationLower === query || normalizedLower === query) score += 120
+      if (stationLower.startsWith(query) || normalizedLower.startsWith(query)) score += 90
+      if (stationLower.includes(query) || normalizedLower.includes(query)) score += 70
+      if (lineLower.includes(query)) score += 20
+      if (systemLower.includes(query)) score += 12
+      if (aliasHit) score += 18
+      if (!searchHaystack.includes(query)) return null
+    }
+
+    return { ...entry, score }
+  }).filter(Boolean)
+
+  return scored
+    .sort((left, right) => right.score - left.score || left.stationName.localeCompare(right.stationName) || left.lineName.localeCompare(right.lineName))
+    .slice(0, 12)
+}
+
+function renderStationSearchResults() {
+  const results = getStationSearchResults()
+  state.stationSearchResults = results
+  state.highlightedStationSearchIndex = Math.min(state.highlightedStationSearchIndex, Math.max(0, results.length - 1))
+
+  stationSearchMetaElement.textContent = results.length
+    ? copyValue('stationSearchResults', results.length)
+    : copyValue('noStationSearchResults')
+
+  stationSearchResultsElement.innerHTML = results.length
+    ? results.map((result, index) => `
+        <button
+          type="button"
+          class="station-search-result${index === state.highlightedStationSearchIndex ? ' is-active' : ''}"
+          data-station-search-index="${index}"
+        >
+          <span class="station-search-result-main">
+            <span class="arrival-line-token station-search-result-token" style="--line-color:${result.lineColor};">${result.lineName[0]}</span>
+            <span class="station-search-result-copy">
+              <span class="station-search-result-title">${normalizeName(result.stationName)}</span>
+              <span class="station-search-result-meta">${result.lineName} · ${result.systemName}</span>
+            </span>
+          </span>
+        </button>
+      `).join('')
+    : `<div class="arrival-item muted">${copyValue('noStationSearchResults')}</div>`
+
+  const buttons = stationSearchResultsElement.querySelectorAll('[data-station-search-index]')
+  buttons.forEach((button) => {
+    button.addEventListener('click', async () => {
+      const selected = state.stationSearchResults[Number(button.dataset.stationSearchIndex)]
+      if (selected) await handleStationSearchSelection(selected)
+    })
+  })
+}
+
+function openStationSearch(prefill = '') {
+  state.stationSearchQuery = prefill
+  state.highlightedStationSearchIndex = 0
+  if (!stationSearchDialog.open) stationSearchDialog.showModal()
+  stationSearchInput.value = prefill
+  renderStationSearchResults()
+  requestAnimationFrame(() => {
+    stationSearchInput.focus()
+    stationSearchInput.select()
+  })
+}
+
+function closeStationSearch() {
+  state.stationSearchQuery = ''
+  state.stationSearchResults = []
+  state.highlightedStationSearchIndex = 0
+  if (stationSearchDialog.open) stationSearchDialog.close()
+}
+
+async function handleStationSearchSelection(result) {
+  closeStationSearch()
+  if (result.systemId !== state.activeSystemId) {
+    await switchSystem(result.systemId, { updateUrl: true, preserveDialog: false })
+  }
+  const line = state.lines.find((candidate) => candidate.id === result.lineId)
+  const station = line?.stops?.find((candidate) => candidate.id === result.stationId)
+  if (station) {
+    await showStationDialog(station)
+  }
+}
 
 function hideToast() {
   window.clearTimeout(toastHideTimer)
@@ -1687,6 +1892,12 @@ function attachStationClickHandlers() {
 function render() {
   const systemMeta = getActiveSystemMeta()
   document.documentElement.lang = state.language
+  stationSearchToggleButton.textContent = copyValue('openStationSearch')
+  stationSearchToggleButton.setAttribute('aria-label', copyValue('openStationSearch'))
+  stationSearchTitleElement.textContent = copyValue('openStationSearch')
+  stationSearchSummaryElement.textContent = copyValue('stationSearchHint')
+  stationSearchInput.setAttribute('placeholder', copyValue('stationSearchPlaceholder'))
+  if (!stationSearchDialog.open) stationSearchMetaElement.textContent = copyValue('searchShortcut')
   languageToggleButton.textContent = copyValue('languageToggle')
   languageToggleButton.setAttribute('aria-label', copyValue('languageToggleAria'))
   themeToggleButton.textContent = state.theme === 'dark' ? copyValue('themeLight') : copyValue('themeDark')
