@@ -2,10 +2,9 @@ import {
   ARRIVALS_CACHE_TTL_MS,
   OBA_ARRIVALS_CONCURRENCY,
   OBA_BASE_URL,
-  OBA_INTER_REQUEST_DELAY_MS,
   OBA_KEY,
 } from './config'
-import { normalizeName, sleep } from './utils'
+import { normalizeName } from './utils'
 
 const ARRIVALS_LOOKAHEAD_MINUTES = 60
 const ARRIVALS_LOOKAHEAD_MS = ARRIVALS_LOOKAHEAD_MINUTES * 60 * 1000
@@ -69,10 +68,6 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
       const batch = dedupedStopIds.slice(index, index + OBA_ARRIVALS_CONCURRENCY)
       const batchResults = await Promise.allSettled(batch.map((stopId) => fetchArrivalsForStop(stopId)))
       results.push(...batchResults)
-
-      if (OBA_INTER_REQUEST_DELAY_MS > 0 && index + OBA_ARRIVALS_CONCURRENCY < dedupedStopIds.length) {
-        await sleep(OBA_INTER_REQUEST_DELAY_MS)
-      }
     }
 
     for (const result of results) {

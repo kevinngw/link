@@ -3,11 +3,10 @@ export const OBA_BASE_URL = 'https://api.pugetsound.onebusaway.org/api/where'
 export const OBA_KEY = (import.meta.env.VITE_OBA_KEY || 'TEST').trim() || 'TEST'
 export const IS_PUBLIC_TEST_KEY = OBA_KEY === 'TEST'
 export const ARRIVALS_CACHE_TTL_MS = IS_PUBLIC_TEST_KEY ? 60_000 : 20_000
+export const OBA_CACHE_TTL_MS = IS_PUBLIC_TEST_KEY ? 60_000 : 20_000
 export const OBA_MAX_RETRIES = 3
-export const OBA_RETRY_BASE_DELAY_MS = 800
 export const OBA_COOLDOWN_BASE_MS = IS_PUBLIC_TEST_KEY ? 20_000 : 5_000
 export const OBA_COOLDOWN_MAX_MS = IS_PUBLIC_TEST_KEY ? 120_000 : 30_000
-export const OBA_INTER_REQUEST_DELAY_MS = IS_PUBLIC_TEST_KEY ? 1_200 : 0
 export const OBA_ARRIVALS_CONCURRENCY = IS_PUBLIC_TEST_KEY ? 1 : 3
 export const COMPACT_LAYOUT_BREAKPOINT = 1100
 export const VEHICLE_REFRESH_INTERVAL_MS = IS_PUBLIC_TEST_KEY ? 45_000 : 15_000

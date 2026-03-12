@@ -1,6 +1,6 @@
 import './style.css'
 import { registerSW } from 'virtual:pwa-register'
-import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_ARRIVALS_CONCURRENCY, OBA_BASE_URL, OBA_COOLDOWN_BASE_MS, OBA_COOLDOWN_MAX_MS, OBA_INTER_REQUEST_DELAY_MS, OBA_KEY, OBA_MAX_RETRIES, OBA_RETRY_BASE_DELAY_MS, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
+import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
 import { clamp, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
@@ -383,6 +383,12 @@ document.addEventListener('keydown', (event) => {
     closeStationSearch()
   }
 })
+document.addEventListener('visibilitychange', () => {
+  refreshVisibleRealtime().catch(console.error)
+})
+window.addEventListener('focus', () => {
+  refreshVisibleRealtime().catch(console.error)
+})
 
 let toastHideTimer = 0
 let lastToastMessage = ''
@@ -588,6 +594,10 @@ function copyForLanguage() {
 function copyValue(key, ...args) {
   const value = copyForLanguage()[key]
   return typeof value === 'function' ? value(...args) : value
+}
+
+function isPageRequestContextActive() {
+  return document.visibilityState === 'visible' && document.hasFocus()
 }
 
 const { fetchJsonWithRetry } = createObaClient(state)
@@ -1832,17 +1842,12 @@ function isActiveStationDialogRequest(station, requestId) {
   )
 }
 
+function canRefreshStationDialog(station, requestId = state.activeDialogRequest) {
+  return isPageRequestContextActive() && isActiveStationDialogRequest(station, requestId)
+}
+
 async function refreshStationDialog(station, { requestId = state.activeDialogRequest } = {}) {
   if (!station) return
-
-  state.currentDialogStation = station
-  state.currentDialogStationId = station.id
-  setDialogTitle(station.name)
-  renderStationServiceSummary(station)
-  clearStationDialogContent()
-  renderArrivalLists({ nb: [], sb: [] }, true)
-  renderDialogDirectionView()
-  syncDialogTitleMarquee()
 
   const dialogStations = getDialogStations(station)
 
@@ -1863,6 +1868,8 @@ async function refreshStationDialog(station, { requestId = state.activeDialogReq
         </article>
       `).join('')
     : ''
+
+  if (!canRefreshStationDialog(station, requestId)) return
 
   // Phase 2: fetch fresh arrivals and re-render
   const arrivalsByLine = await Promise.all(dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line)))
@@ -2264,6 +2271,16 @@ function startLiveRefreshLoop() {
   scheduleNextRefresh()
 }
 
+async function refreshVisibleRealtime() {
+  if (!isPageRequestContextActive()) return
+
+  await refreshVehicles()
+
+  if (dialog.open && state.currentDialogStation) {
+    await refreshStationDialog(state.currentDialogStation).catch(console.error)
+  }
+}
+
 function applySystem(systemId) {
   const resolvedSystemId = state.systemsById.has(systemId) ? systemId : DEFAULT_SYSTEM_ID
   const system = state.systemsById.get(resolvedSystemId)
@@ -2321,6 +2338,8 @@ function parseSituation(situation) {
 }
 
 async function refreshVehicles() {
+  if (!isPageRequestContextActive()) return
+
   try {
     const payload = await fetchJsonWithRetry(getVehicleUrl(), 'Realtime')
     state.error = ''
