@@ -17,11 +17,6 @@ export const DIALOG_DISPLAY_DIRECTION_ROTATE_MS = 15_000
 export const DIALOG_DISPLAY_DIRECTION_ANIMATION_MS = 520
 export const GHOST_HISTORY_LIMIT = 6
 export const GHOST_MAX_AGE_MS = 4 * 60_000
-export const TRANSFER_WALKING_SPEED_KMPH = 4.8
-export const TRANSFER_MAX_WALK_KM = 0.35
-export const TRANSFER_FETCH_DELAY_MS = 3_000
-export const TRANSFER_BOARDING_BUFFER_MS = 45_000
-export const MAX_TRANSFER_RECOMMENDATIONS = 4
 export const THEME_STORAGE_KEY = 'link-pulse-theme'
 export const LANGUAGE_STORAGE_KEY = 'link-pulse-language'
 export const DEFAULT_SYSTEM_ID = 'link'
@@ -146,16 +141,6 @@ export const UI_COPY = {
     noAdditionalVehicles: (label) => `No additional ${label}`,
     stopAway: (count) => `${count} stop${count === 1 ? '' : 's'} away`,
     toDestination: (name) => `To ${name}`,
-    transfers: 'Transfers',
-    checkingNearbyConnections: 'Checking nearby connections...',
-    loadingTransferRecommendations: 'Loading transfer recommendations...',
-    closestBoardableConnections: 'Closest boardable connections from this station',
-    walkToStop: (minutes, stopName) => `Walk ${minutes} min to ${stopName}`,
-    walkKm: (distanceKm) => `${distanceKm.toFixed(1)} km walk`,
-    walkMeters: (meters) => `${meters} m walk`,
-    leaveNow: 'Leave now',
-    boardInOneMinute: 'Board in ~1 min',
-    boardInMinutes: (minutes) => `Board in ~${minutes} min`,
     activeAlerts: (count) => `${count} active ${count === 1 ? 'alert' : 'alerts'}`,
     noActiveAlerts: 'No active alerts.',
     noAdditionalAlertDetails: 'No additional alert details available.',
@@ -254,16 +239,6 @@ export const UI_COPY = {
     noAdditionalVehicles: (label) => `暂无更多${label}`,
     stopAway: (count) => `还有 ${count} 站`,
     toDestination: (name) => `开往 ${name}`,
-    transfers: '换乘',
-    checkingNearbyConnections: '正在检查附近可换乘线路...',
-    loadingTransferRecommendations: '正在加载换乘建议...',
-    closestBoardableConnections: '从本站步行可达的最近可上车连接',
-    walkToStop: (minutes, stopName) => `步行 ${minutes} 分钟到 ${stopName}`,
-    walkKm: (distanceKm) => `步行 ${distanceKm.toFixed(1)} 公里`,
-    walkMeters: (meters) => `步行 ${meters} 米`,
-    leaveNow: '现在出发',
-    boardInOneMinute: '约 1 分钟后上车',
-    boardInMinutes: (minutes) => `约 ${minutes} 分钟后上车`,
     activeAlerts: (count) => `${count} 条生效告警`,
     noActiveAlerts: '当前没有生效告警。',
     noAdditionalAlertDetails: '暂无更多告警详情。',

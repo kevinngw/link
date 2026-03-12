@@ -1,9 +1,9 @@
 import './style.css'
 import { registerSW } from 'virtual:pwa-register'
-import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, MAX_TRANSFER_RECOMMENDATIONS, OBA_ARRIVALS_CONCURRENCY, OBA_BASE_URL, OBA_COOLDOWN_BASE_MS, OBA_COOLDOWN_MAX_MS, OBA_INTER_REQUEST_DELAY_MS, OBA_KEY, OBA_MAX_RETRIES, OBA_RETRY_BASE_DELAY_MS, SYSTEM_META, THEME_STORAGE_KEY, TRANSFER_BOARDING_BUFFER_MS, TRANSFER_FETCH_DELAY_MS, TRANSFER_MAX_WALK_KM, TRANSFER_WALKING_SPEED_KMPH, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
-import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, formatWalkDistance as formatWalkDistanceValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
+import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_ARRIVALS_CONCURRENCY, OBA_BASE_URL, OBA_COOLDOWN_BASE_MS, OBA_COOLDOWN_MAX_MS, OBA_INTER_REQUEST_DELAY_MS, OBA_KEY, OBA_MAX_RETRIES, OBA_RETRY_BASE_DELAY_MS, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
+import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
-import { clamp, getBearingDegrees, haversineKm, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
+import { clamp, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
 import { createObaClient } from './oba'
 import { createArrivalsHelpers, getLineRouteId, getStatusTone } from './arrivals'
 import { parseVehicle } from './vehicles'
@@ -57,6 +57,9 @@ const state = {
   stationSearchQuery: '',
   stationSearchResults: [],
   highlightedStationSearchIndex: 0,
+  activeDialogType: '',
+  currentInsightsDetailType: '',
+  currentInsightsLineId: '',
 }
 
 const updateSW = registerSW({
@@ -123,7 +126,6 @@ document.querySelector('#app').innerHTML = `
       </header>
       <div id="station-alerts-container"></div>
       <div class="dialog-body">
-        <section id="transfer-section" class="transfer-section" hidden></section>
         <div class="arrivals-section" data-direction-section="nb">
           <h4 id="arrivals-title-nb" class="arrivals-title">Northbound (▲)</h4>
           <div id="arrivals-nb-pinned" class="arrivals-pinned"></div>
@@ -240,7 +242,6 @@ const {
   arrivalsTitleNb,
   arrivalsTitleSb,
   stationAlertsContainer,
-  transferSection,
   arrivalsNbPinned,
   arrivalsNb,
   arrivalsSbPinned,
@@ -264,8 +265,8 @@ const {
 dialogDisplay.addEventListener('click', () => toggleDialogDisplayMode())
 trainDialogClose.addEventListener('click', () => closeTrainDialog())
 alertDialogClose.addEventListener('click', () => closeAlertDialog())
-insightsDetailClose.addEventListener('click', () => { if (insightsDetailDialog.open) insightsDetailDialog.close() })
-insightsDetailDialog.addEventListener('click', (e) => { if (e.target === insightsDetailDialog) insightsDetailDialog.close() })
+insightsDetailClose.addEventListener('click', () => closeInsightsDetailDialog())
+insightsDetailDialog.addEventListener('click', (e) => { if (e.target === insightsDetailDialog) closeInsightsDetailDialog() })
 languageToggleButton.addEventListener('click', () => {
   setLanguage(state.language === 'en' ? 'zh-CN' : 'en')
   render()
@@ -288,10 +289,32 @@ trainDialog.addEventListener('click', (e) => {
 alertDialog.addEventListener('click', (e) => {
   if (e.target === alertDialog) closeAlertDialog()
 })
+trainDialog.addEventListener('close', () => {
+  state.currentTrainId = ''
+  if (!state.isSyncingFromUrl) {
+    clearDialogParams({ keepPage: true, keepSystem: true, keepStation: true })
+  }
+})
+alertDialog.addEventListener('close', () => {
+  if (!state.isSyncingFromUrl) {
+    clearDialogParams({ keepPage: true, keepSystem: true, keepStation: true })
+  }
+})
+stationSearchDialog.addEventListener('close', () => {
+  if (!state.isSyncingFromUrl) {
+    clearDialogParams({ keepPage: true, keepSystem: true, keepStation: true })
+  }
+})
+insightsDetailDialog.addEventListener('close', () => {
+  if (!state.isSyncingFromUrl) {
+    clearDialogParams({ keepPage: true, keepSystem: true, keepStation: true })
+  }
+})
 dialog.addEventListener('close', () => {
   state.activeDialogRequest += 1
   state.currentDialogStationId = ''
   state.currentDialogStation = null
+  state.activeDialogType = ''
   stopDialogAutoRefresh()
   stopDialogDisplayScroll()
   stopDialogDirectionRotation()
@@ -299,12 +322,13 @@ dialog.addEventListener('close', () => {
   clearStationDialogContent()
   setDialogTitle(copyValue('station'))
   if (!state.isSyncingFromUrl) {
-    clearStationParam()
+    clearDialogParams({ keepPage: true, keepSystem: true })
   }
 })
 tabButtons.forEach((button) => {
   button.addEventListener('click', () => {
     state.activeTab = button.dataset.tab
+    setPageParam(state.activeTab)
     render()
   })
 })
@@ -322,6 +346,9 @@ stationSearchDialog.addEventListener('click', (e) => {
 stationSearchInput.addEventListener('input', () => {
   state.stationSearchQuery = stationSearchInput.value
   state.highlightedStationSearchIndex = 0
+  if (stationSearchDialog.open && !state.isSyncingFromUrl) {
+    setStationSearchParams(state.stationSearchQuery)
+  }
   renderStationSearchResults()
 })
 stationSearchInput.addEventListener('keydown', async (event) => {
@@ -460,12 +487,14 @@ function renderStationSearchResults() {
   })
 }
 
-function openStationSearch(prefill = '') {
+function openStationSearch(prefill = '', { updateUrl = true } = {}) {
   state.stationSearchQuery = prefill
   state.highlightedStationSearchIndex = 0
+  state.activeDialogType = 'search'
   if (!stationSearchDialog.open) stationSearchDialog.showModal()
   stationSearchInput.value = prefill
   renderStationSearchResults()
+  if (updateUrl) setStationSearchParams(prefill)
   requestAnimationFrame(() => {
     stationSearchInput.focus()
     stationSearchInput.select()
@@ -476,6 +505,7 @@ function closeStationSearch() {
   state.stationSearchQuery = ''
   state.stationSearchResults = []
   state.highlightedStationSearchIndex = 0
+  if (state.activeDialogType === 'search') state.activeDialogType = ''
   if (stationSearchDialog.open) stationSearchDialog.close()
 }
 
@@ -514,8 +544,6 @@ function showToast(message, { tone = 'error', dedupeMs = 15_000 } = {}) {
 
 function clearStationDialogContent() {
   stationAlertsContainer.innerHTML = ''
-  transferSection.hidden = true
-  transferSection.innerHTML = ''
   arrivalsNbPinned.innerHTML = ''
   arrivalsSbPinned.innerHTML = ''
   arrivalsNb.innerHTML = ''
@@ -597,10 +625,6 @@ function formatClockTime(timestamp) {
 
 function formatEtaClockFromNow(offsetSeconds) {
   return formatEtaClockFromNowValue(offsetSeconds, state.language)
-}
-
-function formatWalkDistance(distanceKm) {
-  return formatWalkDistanceValue(distanceKm, copyValue)
 }
 
 function getDirectionBaseLabel(directionSymbol, includeSymbol = false) {
@@ -827,23 +851,96 @@ function getTimelineHour(date) {
   return date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600
 }
 
-function getServiceTimelineData(line) {
-  const todayKey = getDateKeyWithOffset(0)
-  const span = line.serviceSpansByDate?.[todayKey]
-  if (!span) return null
+function getLosAngelesDateParts(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+  const parts = Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]))
+  const hours = Number(parts.hour ?? '0')
+  const minutes = Number(parts.minute ?? '0')
+  const seconds = Number(parts.second ?? '0')
+  return {
+    hours,
+    minutes,
+    seconds,
+    hourValue: hours + minutes / 60 + seconds / 3600,
+  }
+}
 
-  const startHours = parseClockToSeconds(span.start) / 3600
-  const endHours = parseClockToSeconds(span.end) / 3600
-  const nowHours = getTimelineHour(new Date())
-  const axisMax = Math.max(24, endHours, nowHours, 1)
+function getTimelineBoundaryLabel(boundary) {
+  if (boundary === 'start') {
+    return state.language === 'zh-CN' ? '00:00' : '12:00 AM'
+  }
+  return state.language === 'zh-CN' ? '24:00' : '12:00 AM'
+}
+
+function getServiceTimelineData(line) {
+  const now = new Date()
+  const yesterdayKey = getDateKeyWithOffset(-1)
+  const todayKey = getDateKeyWithOffset(0)
+  const tomorrowKey = getDateKeyWithOffset(1)
+  const yesterdaySpan = line.serviceSpansByDate?.[yesterdayKey]
+  const todaySpan = line.serviceSpansByDate?.[todayKey]
+  const tomorrowSpan = line.serviceSpansByDate?.[tomorrowKey]
+
+  const windows = [
+    yesterdaySpan && {
+      kind: 'yesterday',
+      dateKey: yesterdayKey,
+      span: yesterdaySpan,
+      start: getServiceDateTime(yesterdayKey, yesterdaySpan.start),
+      end: getServiceDateTime(yesterdayKey, yesterdaySpan.end),
+    },
+    todaySpan && {
+      kind: 'today',
+      dateKey: todayKey,
+      span: todaySpan,
+      start: getServiceDateTime(todayKey, todaySpan.start),
+      end: getServiceDateTime(todayKey, todaySpan.end),
+    },
+    tomorrowSpan && {
+      kind: 'tomorrow',
+      dateKey: tomorrowKey,
+      span: tomorrowSpan,
+      start: getServiceDateTime(tomorrowKey, tomorrowSpan.start),
+      end: getServiceDateTime(tomorrowKey, tomorrowSpan.end),
+    },
+  ].filter(Boolean)
+
+  if (!windows.length) return null
+
+  const activeWindow = windows.find((window) => now >= window.start && now <= window.end)
+  const selectedWindow = activeWindow
+    ?? windows.find((window) => window.kind === 'today')
+    ?? windows.find((window) => window.start > now)
+    ?? windows.at(-1)
+
+  if (!selectedWindow?.span) return null
+
+  const todayStart = getServiceDateTime(todayKey, '00:00:00')
+  const todayEnd = getServiceDateTime(tomorrowKey, '00:00:00')
+  const visibleStart = new Date(Math.max(selectedWindow.start.getTime(), todayStart.getTime()))
+  const visibleEnd = new Date(Math.min(selectedWindow.end.getTime(), todayEnd.getTime()))
+  const visibleStartHours = Math.max(0, (visibleStart.getTime() - todayStart.getTime()) / 3_600_000)
+  const visibleEndHours = Math.max(0, (visibleEnd.getTime() - todayStart.getTime()) / 3_600_000)
+  const { hourValue: nowHourValue } = getLosAngelesDateParts(now)
+  const isLive = now >= selectedWindow.start && now <= selectedWindow.end
+  const continuesPastMidnight = selectedWindow.end.getTime() > todayEnd.getTime()
+  const startedBeforeToday = selectedWindow.start.getTime() < todayStart.getTime()
 
   return {
-    startHours,
-    endHours,
-    nowHours,
-    axisMax,
-    startLabel: formatServiceClock(span.start),
-    endLabel: formatServiceClock(span.end),
+    startHours: visibleStartHours,
+    endHours: visibleEndHours,
+    nowHours: nowHourValue,
+    axisMax: 24,
+    isLive,
+    startLabel: startedBeforeToday ? getTimelineBoundaryLabel('start') : formatServiceClock(selectedWindow.span.start),
+    endLabel: continuesPastMidnight ? getTimelineBoundaryLabel('end') : formatServiceClock(selectedWindow.span.end),
+    overflowLabel: continuesPastMidnight ? formatServiceClock(selectedWindow.span.end) : '',
   }
 }
 
@@ -854,22 +951,23 @@ function renderServiceTimeline(line) {
   const startPercent = clamp((timeline.startHours / timeline.axisMax) * 100, 0, 100)
   const endPercent = clamp((timeline.endHours / timeline.axisMax) * 100, startPercent, 100)
   const nowPercent = clamp((timeline.nowHours / timeline.axisMax) * 100, 0, 100)
-  const isLive = timeline.nowHours >= timeline.startHours && timeline.nowHours <= timeline.endHours
 
   return `
     <section class="service-timeline-card">
       <div class="service-timeline-header">
         <div>
           <p class="headway-chart-title">${state.language === 'zh-CN' ? '今日运营时间带' : 'Today Service Window'}</p>
-          <p class="headway-chart-copy">${state.language === 'zh-CN' ? '首末班与当前时刻' : 'First trip, last trip, and current time'}</p>
+          <p class="headway-chart-copy">${timeline.overflowLabel
+            ? (state.language === 'zh-CN' ? `今日覆盖到午夜，继续运营至 ${timeline.overflowLabel}` : `Covers today through midnight, then continues to ${timeline.overflowLabel}`)
+            : (state.language === 'zh-CN' ? '首末班与当前时刻' : 'First trip, last trip, and current time')}</p>
         </div>
-        <span class="service-timeline-badge ${isLive ? 'is-live' : 'is-off'}">${isLive ? (state.language === 'zh-CN' ? '运营中' : 'In service') : (state.language === 'zh-CN' ? '未运营' : 'Off hours')}</span>
+        <span class="service-timeline-badge ${timeline.isLive ? 'is-live' : 'is-off'}">${timeline.isLive ? (state.language === 'zh-CN' ? '运营中' : 'In service') : (state.language === 'zh-CN' ? '未运营' : 'Off hours')}</span>
       </div>
       <div class="service-timeline-track">
         <div class="service-timeline-band" style="left:${startPercent}%; width:${Math.max(2, endPercent - startPercent)}%;"></div>
-        <div class="service-timeline-now" style="left:${nowPercent}%;">
+        <div class="service-timeline-now" style="left:${nowPercent}%;" aria-label="${state.language === 'zh-CN' ? '当前时间' : 'Current time'}">
+          <span class="service-timeline-now-line"></span>
           <span class="service-timeline-now-dot"></span>
-          <span class="service-timeline-now-label">${state.language === 'zh-CN' ? '当前' : 'Now'}</span>
         </div>
       </div>
       <div class="service-timeline-labels">
@@ -1062,6 +1160,44 @@ function refreshVehicleStatusMessages() {
   })
 }
 
+function refreshVehicleCountdownDisplays() {
+  const vehiclesById = new Map(getAllVehicles().map((vehicle) => [vehicle.id, vehicle]))
+
+  document.querySelectorAll('[data-vehicle-next-countdown]').forEach((element) => {
+    const vehicle = vehiclesById.get(element.dataset.vehicleNextCountdown ?? '')
+    if (!vehicle) return
+    element.textContent = formatArrivalTime(getRealtimeOffset(vehicle.nextOffset ?? 0))
+  })
+
+  document.querySelectorAll('[data-vehicle-next-clock]').forEach((element) => {
+    const vehicle = vehiclesById.get(element.dataset.vehicleNextClock ?? '')
+    if (!vehicle) return
+    element.textContent = formatEtaClockFromNow(getRealtimeOffset(vehicle.nextOffset ?? 0))
+  })
+
+  document.querySelectorAll('[data-vehicle-terminal-countdown]').forEach((element) => {
+    const vehicle = vehiclesById.get(element.dataset.vehicleTerminalCountdown ?? '')
+    if (!vehicle) return
+    const layout = state.layouts.get(vehicle.lineId)
+    const terminalEta = Math.max(0, (getTrainTimelineEntries(vehicle, layout).at(-1)?.etaSeconds) ?? (vehicle.nextOffset ?? 0))
+    element.textContent = formatArrivalTime(getRealtimeOffset(terminalEta))
+  })
+
+  document.querySelectorAll('[data-train-timeline-entry]').forEach((element) => {
+    const baseEtaSeconds = Number(element.dataset.baseEtaSeconds)
+    const renderedAt = Number(element.dataset.renderedAt)
+    if (!Number.isFinite(baseEtaSeconds) || !Number.isFinite(renderedAt)) return
+
+    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - renderedAt) / 1000))
+    const liveEtaSeconds = Math.max(0, baseEtaSeconds - elapsedSeconds)
+    const countdownElement = element.querySelector('[data-train-timeline-countdown]')
+    const clockElement = element.querySelector('[data-train-timeline-clock]')
+
+    if (countdownElement) countdownElement.textContent = formatArrivalTime(liveEtaSeconds)
+    if (clockElement) clockElement.textContent = formatEtaClockFromNow(liveEtaSeconds)
+  })
+}
+
 function refreshArrivalCountdowns() {
   const arrivalElements = document.querySelectorAll('.arrival-item[data-arrival-time]')
   arrivalElements.forEach((element) => {
@@ -1143,12 +1279,12 @@ function renderFocusMetrics(vehicle) {
       <div class="train-focus-metric">
         <p class="train-focus-metric-label">${state.language === 'zh-CN' ? '下一站' : 'Next stop'}</p>
         <p class="train-focus-metric-value">${nextStopName}</p>
-        <p class="train-focus-metric-copy">${formatArrivalTime(getRealtimeOffset(vehicle.nextOffset ?? 0))}</p>
+        <p class="train-focus-metric-copy" data-vehicle-next-countdown="${vehicle.id}">${formatArrivalTime(getRealtimeOffset(vehicle.nextOffset ?? 0))}</p>
       </div>
       <div class="train-focus-metric">
         <p class="train-focus-metric-label">${state.language === 'zh-CN' ? '终点' : 'Terminal'}</p>
         <p class="train-focus-metric-value">${getVehicleDestinationLabel(vehicle, layout)}</p>
-        <p class="train-focus-metric-copy">${formatArrivalTime(getRealtimeOffset(terminalEta))}</p>
+        <p class="train-focus-metric-copy" data-vehicle-terminal-countdown="${vehicle.id}">${formatArrivalTime(getRealtimeOffset(terminalEta))}</p>
       </div>
     </div>
   `
@@ -1275,33 +1411,116 @@ function findStationByParam(stationParam) {
   return null
 }
 
-function setStationParam(station) {
+function updateUrlParams(mutator) {
   const url = new URL(window.location.href)
-  url.searchParams.set('station', slugifyStation(station.name))
+  const before = url.search
+  mutator(url.searchParams, url)
+  if (url.search === before) return
   window.history.pushState({}, '', url)
 }
 
-function clearStationParam() {
+function setPageParam(page) {
+  const nextPage = ['map', 'trains', 'insights'].includes(page) ? page : 'map'
+  updateUrlParams((params) => {
+    if (nextPage === 'map') params.delete('page')
+    else params.set('page', nextPage)
+  })
+}
+
+function getPageFromUrl() {
   const url = new URL(window.location.href)
-  if (!url.searchParams.has('station')) return
-  url.searchParams.delete('station')
-  window.history.pushState({}, '', url)
+  const requestedPage = (url.searchParams.get('page') ?? '').trim().toLowerCase()
+  return ['map', 'trains', 'insights'].includes(requestedPage) ? requestedPage : 'map'
+}
+
+function setSystemParam(systemId) {
+  updateUrlParams((params) => {
+    if (systemId === DEFAULT_SYSTEM_ID) {
+      params.delete('system')
+    } else {
+      params.set('system', systemId)
+    }
+  })
+}
+
+function setStationParam(station) {
+  updateUrlParams((params) => {
+    params.set('dialog', 'station')
+    params.set('station', slugifyStation(station.name))
+    params.delete('train')
+    params.delete('line')
+    params.delete('detail')
+    params.delete('q')
+  })
+}
+
+function setTrainDialogParams(trainId) {
+  updateUrlParams((params) => {
+    params.set('dialog', 'train')
+    params.set('train', trainId)
+    params.delete('station')
+    params.delete('line')
+    params.delete('detail')
+    params.delete('q')
+  })
+}
+
+function setAlertDialogParams(lineId) {
+  updateUrlParams((params) => {
+    params.set('dialog', 'alerts')
+    params.set('line', lineId)
+    params.delete('station')
+    params.delete('train')
+    params.delete('detail')
+    params.delete('q')
+  })
+}
+
+function setStationSearchParams(prefill = '') {
+  updateUrlParams((params) => {
+    params.set('dialog', 'search')
+    params.delete('station')
+    params.delete('train')
+    params.delete('line')
+    params.delete('detail')
+    if (prefill) params.set('q', prefill)
+    else params.delete('q')
+  })
+}
+
+function setInsightsDialogParams(type, lineId = '') {
+  updateUrlParams((params) => {
+    params.set('dialog', 'insights')
+    params.set('detail', type)
+    params.delete('station')
+    params.delete('train')
+    params.delete('q')
+    if (lineId) params.set('line', lineId)
+    else params.delete('line')
+  })
+}
+
+function clearDialogParams({ keepPage = true, keepSystem = true, keepStation = false } = {}) {
+  updateUrlParams((params) => {
+    params.delete('dialog')
+    params.delete('train')
+    params.delete('line')
+    params.delete('detail')
+    params.delete('q')
+    if (!keepStation) params.delete('station')
+    if (!keepPage) params.delete('page')
+    if (!keepSystem) params.delete('system')
+  })
+}
+
+function clearStationParam() {
+  clearDialogParams({ keepPage: true, keepSystem: true })
 }
 
 function isOptionalNavigationEnabled() {
   const url = new URL(window.location.href)
   const value = (url.searchParams.get('navigate') ?? '').trim().toLowerCase()
   return value === '1' || value === 'true' || value === 'yes'
-}
-
-function setSystemParam(systemId) {
-  const url = new URL(window.location.href)
-  if (systemId === DEFAULT_SYSTEM_ID) {
-    url.searchParams.delete('system')
-  } else {
-    url.searchParams.set('system', systemId)
-  }
-  window.history.pushState({}, '', url)
 }
 
 function getSystemIdFromUrl() {
@@ -1313,25 +1532,111 @@ function getSystemIdFromUrl() {
 
 async function syncDialogFromUrl() {
   const url = new URL(window.location.href)
-  const requestedSystemId = url.searchParams.get('system')
-  if (requestedSystemId && state.systemsById.has(requestedSystemId) && requestedSystemId !== state.activeSystemId) {
-    await switchSystem(requestedSystemId, { updateUrl: false, preserveDialog: false })
-  }
+  state.isSyncingFromUrl = true
+  try {
+    state.activeTab = getPageFromUrl()
 
-  const requestedStation = url.searchParams.get('station')
-  if (!requestedStation) {
-    closeStationDialog()
-    return
-  }
+    const requestedSystemId = url.searchParams.get('system')
+    if (requestedSystemId && state.systemsById.has(requestedSystemId) && requestedSystemId !== state.activeSystemId) {
+      await switchSystem(requestedSystemId, { updateUrl: false, preserveDialog: false })
+    }
 
-  const station = findStationByParam(requestedStation)
-  if (!station) {
-    closeStationDialog()
-    return
-  }
+    render()
 
-  if (state.currentDialogStationId === station.id && dialog.open) return
-  await showStationDialog(station, { updateUrl: false })
+    const requestedDialog = (url.searchParams.get('dialog') ?? '').trim().toLowerCase()
+    const requestedStation = url.searchParams.get('station')
+    const requestedTrainId = url.searchParams.get('train')
+    const requestedLineId = url.searchParams.get('line')
+    const requestedDetailType = url.searchParams.get('detail')
+    const requestedSearchQuery = url.searchParams.get('q') ?? ''
+    const effectiveDialog = requestedDialog || (requestedStation ? 'station' : '')
+
+    if (effectiveDialog !== 'station' && dialog.open) closeStationDialog()
+    if (effectiveDialog !== 'train' && trainDialog.open) closeTrainDialog()
+    if (effectiveDialog !== 'alerts' && alertDialog.open) closeAlertDialog()
+    if (effectiveDialog !== 'search' && stationSearchDialog.open) closeStationSearch()
+    if (effectiveDialog !== 'insights' && insightsDetailDialog.open) closeInsightsDetailDialog()
+
+    if (!effectiveDialog) return
+
+    if (effectiveDialog === 'station') {
+      if (!requestedStation) {
+        closeStationDialog()
+        return
+      }
+
+      const station = findStationByParam(requestedStation)
+      if (!station) {
+        closeStationDialog()
+        return
+      }
+
+      if (state.currentDialogStationId === station.id && dialog.open) return
+      await showStationDialog(station, { updateUrl: false })
+      return
+    }
+
+    if (effectiveDialog === 'train') {
+      if (!requestedTrainId) {
+        closeTrainDialog()
+        return
+      }
+      const vehicle = getAllVehicles().find((candidate) => candidate.id === requestedTrainId)
+      if (!vehicle) {
+        closeTrainDialog()
+        return
+      }
+      state.currentTrainId = requestedTrainId
+      state.activeDialogType = 'train'
+      renderTrainDialog(vehicle, { updateUrl: false })
+      return
+    }
+
+    if (effectiveDialog === 'alerts') {
+      if (!requestedLineId) {
+        closeAlertDialog()
+        return
+      }
+      const line = state.lines.find((candidate) => candidate.id === requestedLineId)
+      if (!line) {
+        closeAlertDialog()
+        return
+      }
+      state.activeDialogType = 'alerts'
+      renderAlertListDialog(line, { updateUrl: false })
+      return
+    }
+
+    if (effectiveDialog === 'search') {
+      state.activeDialogType = 'search'
+      openStationSearch(requestedSearchQuery, { updateUrl: false })
+      return
+    }
+
+    if (effectiveDialog === 'insights') {
+      if (state.activeTab !== 'insights') {
+        state.activeTab = 'insights'
+        render()
+      }
+      if (!requestedDetailType) {
+        closeInsightsDetailDialog()
+        return
+      }
+      const content = buildInsightsDetailContent(requestedLineId || null, requestedDetailType)
+      if (!content) {
+        closeInsightsDetailDialog()
+        return
+      }
+      state.activeDialogType = 'insights'
+      showInsightsDetail(content.title, content.subtitle, content.body, {
+        updateUrl: false,
+        lineId: requestedLineId || '',
+        type: requestedDetailType,
+      })
+    }
+  } finally {
+    state.isSyncingFromUrl = false
+  }
 }
 
 const stationDialogDisplay = createStationDialogDisplayController({
@@ -1364,10 +1669,6 @@ const {
   setDialogTitle,
   syncDialogTitleMarquee,
 } = stationDialogDisplay
-
-function getWalkMinutes(distanceKm) {
-  return Math.max(1, Math.round((distanceKm / TRANSFER_WALKING_SPEED_KMPH) * 60))
-}
 
 function recordVehicleGhosts(lineId, vehicles) {
   const now = Date.now()
@@ -1402,78 +1703,6 @@ function getVehicleGhostTrail(lineId, vehicleId) {
   return history.slice(0, -1)
 }
 
-
-function getNearbyTransferCandidates(station) {
-  if (!station) return []
-
-  const dialogStations = getDialogStations(station)
-  const excludedStops = new Set(dialogStations.map(({ line, station: matchedStation }) => `${line.agencyId}:${line.id}:${matchedStation.id}`))
-  const candidatesByLine = new Map()
-
-  for (const system of state.systemsById.values()) {
-    for (const line of system.lines ?? []) {
-      for (const stop of line.stops ?? []) {
-        if (excludedStops.has(`${line.agencyId}:${line.id}:${stop.id}`)) continue
-
-        const distanceKm = haversineKm(station.lat, station.lon, stop.lat, stop.lon)
-        if (distanceKm > TRANSFER_MAX_WALK_KM) continue
-
-        const key = `${system.id}:${line.id}`
-        const existing = candidatesByLine.get(key)
-        if (!existing || distanceKm < existing.distanceKm) {
-          candidatesByLine.set(key, {
-            systemId: system.id,
-            systemName: system.name,
-            line,
-            stop,
-            distanceKm,
-            walkMinutes: getWalkMinutes(distanceKm),
-          })
-        }
-      }
-    }
-  }
-
-  return [...candidatesByLine.values()]
-    .sort((left, right) => left.distanceKm - right.distanceKm || left.line.name.localeCompare(right.line.name))
-    .slice(0, MAX_TRANSFER_RECOMMENDATIONS * 2)
-}
-
-
-function buildTransferRecommendations(candidates, arrivalFeed) {
-  const now = Date.now()
-  const recommendations = []
-
-  for (const candidate of candidates) {
-    const stopIds = getStationStopIds(candidate.stop, candidate.line)
-    const arrivals = buildArrivalsForLine(arrivalFeed, candidate.line, stopIds)
-    const merged = [...arrivals.nb, ...arrivals.sb].sort((left, right) => left.arrivalTime - right.arrivalTime)
-    if (!merged.length) continue
-
-    const readyAt = now + candidate.walkMinutes * 60_000 + TRANSFER_BOARDING_BUFFER_MS
-    const boardableArrival = merged.find((arrival) => arrival.arrivalTime >= readyAt) ?? merged[0]
-    const rawWaitMs = boardableArrival.arrivalTime - now - candidate.walkMinutes * 60_000
-    const waitMinutes = Math.max(0, Math.round(rawWaitMs / 60_000))
-
-    recommendations.push({
-      ...candidate,
-      arrival: boardableArrival,
-      boardAt: boardableArrival.arrivalTime,
-      badge:
-        rawWaitMs <= 0
-          ? copyValue('leaveNow')
-          : waitMinutes <= 1
-            ? copyValue('boardInOneMinute')
-            : copyValue('boardInMinutes', waitMinutes),
-      tone: waitMinutes <= 2 ? 'hot' : waitMinutes <= 8 ? 'good' : 'calm',
-      timeText: formatClockTime(boardableArrival.arrivalTime),
-    })
-  }
-
-  return recommendations
-    .sort((left, right) => left.boardAt - right.boardAt || left.distanceKm - right.distanceKm)
-    .slice(0, MAX_TRANSFER_RECOMMENDATIONS)
-}
 
 function buildInsightsItems(lines) {
   return lines.map((line) => {
@@ -1639,23 +1868,6 @@ async function refreshStationDialog(station, { requestId = state.activeDialogReq
   const arrivalsByLine = await Promise.all(dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line)))
   if (!isActiveStationDialogRequest(station, requestId)) return
   renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
-
-  await sleep(5000)
-
-  if (!isActiveStationDialogRequest(station, requestId)) return
-
-  const transferCandidates = getNearbyTransferCandidates(station)
-  if (!transferCandidates.length) {
-    renderTransferRecommendations([], false, station)
-    renderDialogDirectionView()
-    syncDialogTitleMarquee()
-    return
-  }
-
-  renderTransferRecommendations([], true, station)
-  const transferFeed = await fetchArrivalsForStopIds(transferCandidates.flatMap((candidate) => getStationStopIds(candidate.stop, candidate.line)))
-  if (!isActiveStationDialogRequest(station, requestId)) return
-  renderTransferRecommendations(buildTransferRecommendations(transferCandidates, transferFeed), false, station)
   renderDialogDirectionView()
   syncDialogTitleMarquee()
 }
@@ -1718,7 +1930,7 @@ const { renderTrainList } = createTrainRenderers({
   formatVehicleStatus,
 })
 
-const { renderInsightsBoard, buildInsightsDetailContent, showInsightsDetail } = createInsightsRenderers({
+const { renderInsightsBoard, buildInsightsDetailContent, showInsightsDetail: showInsightsDetailBase } = createInsightsRenderers({
   state,
   classifyHeadwayHealth,
   computeLineHeadways,
@@ -1740,23 +1952,20 @@ const { renderInsightsBoard, buildInsightsDetailContent, showInsightsDetail } = 
   renderServiceTimeline,
 })
 
-const { renderArrivalLists, renderTransferRecommendations } = createStationDialogRenderers({
+const { renderArrivalLists } = createStationDialogRenderers({
   state,
   elements: dialogElements,
   copyValue,
   formatArrivalTime,
   formatDirectionLabel,
-  formatWalkDistance,
   getDialogDirectionSummary,
   getVehicleLabel,
   getVehicleLabelPlural,
   getStatusTone,
   getArrivalServiceStatus,
-  isOptionalNavigationEnabled,
   getAllVehicles,
   syncDialogDisplayScroll,
   attachDialogArrivalClickHandlers: () => attachDialogArrivalClickHandlers(),
-  attachTransferClickHandlers: () => attachTransferClickHandlers(),
 })
 
 function attachSystemSwitcherHandlers() {
@@ -1793,14 +2002,55 @@ const overlayDialogs = createOverlayDialogs({
   getVehicleStatusPills,
   renderStatusPills,
   formatArrivalTime,
+  formatEtaClockFromNow,
 })
 
 const {
-  closeTrainDialog,
-  closeAlertDialog,
-  renderAlertListDialog,
-  renderTrainDialog,
+  closeTrainDialog: closeTrainDialogBase,
+  closeAlertDialog: closeAlertDialogBase,
+  renderAlertListDialog: renderAlertListDialogBase,
+  renderTrainDialog: renderTrainDialogBase,
 } = overlayDialogs
+
+function closeTrainDialog() {
+  if (state.activeDialogType === 'train') state.activeDialogType = ''
+  closeTrainDialogBase()
+}
+
+function closeAlertDialog() {
+  if (state.activeDialogType === 'alerts') state.activeDialogType = ''
+  closeAlertDialogBase()
+}
+
+function renderTrainDialog(vehicle, { updateUrl = true } = {}) {
+  if (!vehicle) return
+  state.currentTrainId = vehicle.id
+  state.activeDialogType = 'train'
+  renderTrainDialogBase(vehicle)
+  if (updateUrl) setTrainDialogParams(vehicle.id)
+}
+
+function renderAlertListDialog(line, { updateUrl = true } = {}) {
+  if (!line) return
+  state.activeDialogType = 'alerts'
+  renderAlertListDialogBase(line)
+  if (updateUrl) setAlertDialogParams(line.id)
+}
+
+function closeInsightsDetailDialog() {
+  if (state.activeDialogType === 'insights') state.activeDialogType = ''
+  state.currentInsightsDetailType = ''
+  state.currentInsightsLineId = ''
+  if (insightsDetailDialog.open) insightsDetailDialog.close()
+}
+
+function showInsightsDetail(title, subtitle, body, { updateUrl = true, lineId = '', type = '' } = {}) {
+  state.activeDialogType = 'insights'
+  state.currentInsightsDetailType = type
+  state.currentInsightsLineId = lineId
+  showInsightsDetailBase(title, subtitle, body)
+  if (updateUrl && type) setInsightsDialogParams(type, lineId)
+}
 
 function attachTrainClickHandlers() {
   const trainItems = document.querySelectorAll('[data-train-id]')
@@ -1839,28 +2089,6 @@ function attachDialogArrivalClickHandlers() {
   })
 }
 
-function attachTransferClickHandlers() {
-  const items = document.querySelectorAll('[data-transfer-stop-id]')
-  items.forEach((item) => {
-    item.addEventListener('click', async () => {
-      const systemId = item.dataset.transferSystemId
-      const lineId = item.dataset.transferLineId
-      const stopId = item.dataset.transferStopId
-      if (!systemId || !lineId || !stopId) return
-
-      if (systemId !== state.activeSystemId) {
-        await switchSystem(systemId, { updateUrl: true, preserveDialog: false })
-      }
-
-      const line = state.lines.find((candidate) => candidate.id === lineId)
-      const station = line?.stops?.find((candidate) => candidate.id === stopId)
-      if (station) {
-        showStationDialog(station)
-      }
-    })
-  })
-}
-
 function attachInsightsClickHandlers() {
   const elements = document.querySelectorAll('[data-insights-type]')
   elements.forEach((el) => {
@@ -1869,7 +2097,7 @@ function attachInsightsClickHandlers() {
       const type = el.dataset.insightsType
       const content = buildInsightsDetailContent(lineId, type)
       if (!content) return
-      showInsightsDetail(content.title, content.subtitle, content.body)
+      showInsightsDetail(content.title, content.subtitle, content.body, { type, lineId: lineId ?? '' })
     })
   })
 }
@@ -2124,6 +2352,11 @@ async function refreshVehicles() {
   }
 
   render()
+
+  if (state.activeDialogType === 'train' && state.currentTrainId) {
+    const currentVehicle = getAllVehicles().find((vehicle) => vehicle.id === state.currentTrainId)
+    if (currentVehicle) renderTrainDialog(currentVehicle, { updateUrl: false })
+  }
 }
 
 const handleViewportResize = () => {
@@ -2138,6 +2371,8 @@ const handleViewportResize = () => {
   syncCompactLayoutFromBoard()
 }
 
+state.activeTab = getPageFromUrl()
+
 const init = bootstrapApp({
   getPreferredLanguage,
   getPreferredTheme,
@@ -2148,6 +2383,7 @@ const init = bootstrapApp({
   refreshLiveMeta,
   refreshArrivalCountdowns,
   refreshVehicleStatusMessages,
+  refreshVehicleCountdownDisplays,
   startInsightsTickerRotation,
   startLiveRefreshLoop,
   syncCompactLayoutFromBoard,

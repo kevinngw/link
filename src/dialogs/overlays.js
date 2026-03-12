@@ -13,6 +13,7 @@ export function createOverlayDialogs({
   getVehicleStatusPills,
   renderStatusPills,
   formatArrivalTime,
+  formatEtaClockFromNow,
 }) {
   const {
     trainDialog,
@@ -134,7 +135,7 @@ export function createOverlayDialogs({
             </div>
             <div class="metric-chip">
               <p class="metric-chip-label">${copyValue('etaToTerminal')}</p>
-              <p class="metric-chip-value">${formatArrivalTime(terminalEtaSeconds)}</p>
+              <p class="metric-chip-value" data-vehicle-terminal-countdown="${vehicle.id}">${formatArrivalTime(terminalEtaSeconds)}</p>
             </div>
           </div>
           <div class="train-eta-timeline">
@@ -146,14 +147,19 @@ export function createOverlayDialogs({
               ? timelineEntries
                 .map(
                   (entry) => `
-                    <article class="train-eta-stop${entry.isNext ? ' is-next' : ''}${entry.isTerminal ? ' is-terminal' : ''}">
+                    <article
+                      class="train-eta-stop${entry.isNext ? ' is-next' : ''}${entry.isTerminal ? ' is-terminal' : ''}"
+                      data-train-timeline-entry
+                      data-base-eta-seconds="${entry.etaSeconds}"
+                      data-rendered-at="${Date.now()}"
+                    >
                       <div>
                         <p class="train-eta-stop-label">${entry.isNext ? copyValue('nextStop') : entry.isTerminal ? copyValue('terminal') : copyValue('upcoming')}</p>
                         <p class="train-eta-stop-name">${entry.label}</p>
                       </div>
                       <div class="train-eta-stop-side">
-                        <p class="train-eta-stop-countdown">${formatArrivalTime(entry.etaSeconds)}</p>
-                        <p class="train-eta-stop-clock">${entry.clockTime}</p>
+                        <p class="train-eta-stop-countdown" data-train-timeline-countdown>${formatArrivalTime(entry.etaSeconds)}</p>
+                        <p class="train-eta-stop-clock" data-train-timeline-clock>${formatEtaClockFromNow(entry.etaSeconds)}</p>
                       </div>
                     </article>
                   `,

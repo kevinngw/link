@@ -7,6 +7,9 @@ import {
 } from './config'
 import { normalizeName, sleep } from './utils'
 
+const ARRIVALS_LOOKAHEAD_MINUTES = 60
+const ARRIVALS_LOOKAHEAD_MS = ARRIVALS_LOOKAHEAD_MINUTES * 60 * 1000
+
 export function classifyArrivalDirection(arrival, line) {
   const lookedUpDirection = line.directionLookup?.[arrival.tripId ?? '']
   if (lookedUpDirection === '1') return 'nb'
@@ -49,7 +52,7 @@ export function getStatusTone(status) {
 
 export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationStopIds, copyValue, getLanguage }) {
   async function fetchArrivalsForStop(stopId) {
-    const url = `${OBA_BASE_URL}/arrivals-and-departures-for-stop/${stopId}.json?key=${OBA_KEY}&minutesAfter=120`
+    const url = `${OBA_BASE_URL}/arrivals-and-departures-for-stop/${stopId}.json?key=${OBA_KEY}&minutesAfter=${ARRIVALS_LOOKAHEAD_MINUTES}`
     const payload = await fetchJsonWithRetry(url, 'Arrivals')
     if (payload.code !== 200) {
       throw new Error(payload.text || `Arrivals request failed for ${stopId}`)
@@ -86,6 +89,7 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
 
   function buildArrivalsForLine(arrivalFeed, line, allowedStopIds = null) {
     const now = Date.now()
+    const cutoff = now + ARRIVALS_LOOKAHEAD_MS
     const seen = new Set()
     const arrivals = { nb: [], sb: [] }
     const stopIdFilter = allowedStopIds ? new Set(allowedStopIds) : null
@@ -94,7 +98,7 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
       if (arrival.routeId !== getLineRouteId(line)) continue
       if (stopIdFilter && !stopIdFilter.has(arrival.stopId)) continue
       const arrivalTime = arrival.predictedArrivalTime || arrival.scheduledArrivalTime
-      if (!arrivalTime || arrivalTime <= now) continue
+      if (!arrivalTime || arrivalTime <= now || arrivalTime > cutoff) continue
 
       const bucket = classifyArrivalDirection(arrival, line)
       if (!bucket) continue

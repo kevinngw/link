@@ -111,6 +111,7 @@ export function bootstrapApp({
   refreshLiveMeta,
   refreshArrivalCountdowns,
   refreshVehicleStatusMessages,
+  refreshVehicleCountdownDisplays,
   startInsightsTickerRotation,
   startLiveRefreshLoop,
   syncCompactLayoutFromBoard,
@@ -147,6 +148,7 @@ export function bootstrapApp({
       refreshLiveMeta()
       refreshArrivalCountdowns()
       refreshVehicleStatusMessages()
+      refreshVehicleCountdownDisplays()
     }, 1000)
   }
 }

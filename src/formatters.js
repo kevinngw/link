@@ -84,12 +84,20 @@ export function formatServiceClock(clockValue, language) {
   const hours24 = Number(rawHours)
   const minutes = Number(rawMinutes)
   const normalizedHours = ((hours24 % 24) + 24) % 24
+  const dayOffset = hours24 >= 24 ? Math.floor(hours24 / 24) : 0
+
+  const daySuffix = dayOffset > 0
+    ? language === 'zh-CN'
+      ? `（次日${dayOffset > 1 ? `+${dayOffset - 1}` : ''}）`
+      : ` (+${dayOffset}d)`
+    : ''
+
   if (language === 'zh-CN') {
-    return `${String(normalizedHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+    return `${String(normalizedHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}${daySuffix}`
   }
   const period = normalizedHours >= 12 ? 'PM' : 'AM'
   const hours12 = normalizedHours % 12 || 12
-  return `${hours12}:${String(minutes).padStart(2, '0')} ${period}`
+  return `${hours12}:${String(minutes).padStart(2, '0')} ${period}${daySuffix}`
 }
 
 export function formatClockTime(timestamp, language) {

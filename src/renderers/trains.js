@@ -58,7 +58,7 @@ export function createTrainRenderers(deps) {
           </span>
         `
         const renderQueueItem = (vehicle) => `
-          <article class="train-list-item train-queue-item" data-train-id="${vehicle.id}">
+          <button class="train-list-item train-queue-item" data-train-id="${vehicle.id}" type="button" aria-label="${vehicle.lineName} ${vehicleLabel} ${vehicle.label}">
             <div class="train-list-main">
               <span class="line-token train-list-token" style="--line-color:${vehicle.lineColor};">${vehicle.lineToken}</span>
               <div>
@@ -71,10 +71,10 @@ export function createTrainRenderers(deps) {
               </div>
             </div>
             <div class="train-queue-side">
-              <p class="train-queue-time">${formatArrivalTime(getRealtimeOffset(vehicle.nextOffset ?? 0))}</p>
-              <p class="train-queue-clock">${formatEtaClockFromNow(getRealtimeOffset(vehicle.nextOffset ?? 0))}</p>
+              <p class="train-queue-time" data-vehicle-next-countdown="${vehicle.id}">${formatArrivalTime(getRealtimeOffset(vehicle.nextOffset ?? 0))}</p>
+              <p class="train-queue-clock" data-vehicle-next-clock="${vehicle.id}">${formatEtaClockFromNow(getRealtimeOffset(vehicle.nextOffset ?? 0))}</p>
             </div>
-          </article>
+          </button>
         `
 
         return `
@@ -97,7 +97,7 @@ export function createTrainRenderers(deps) {
               ${
                 focusVehicle
                   ? `
-                    <article class="train-focus-card train-list-item" data-train-id="${focusVehicle.id}">
+                    <button class="train-focus-card train-list-item" data-train-id="${focusVehicle.id}" type="button" aria-label="${focusVehicle.lineName} ${vehicleLabel} ${focusVehicle.label}">
                       <div class="train-focus-header">
                         <div>
                           <p class="train-focus-kicker">${state.language === 'zh-CN' ? '最近一班' : 'Next up'}</p>
@@ -107,15 +107,15 @@ export function createTrainRenderers(deps) {
                           </div>
                         </div>
                         <div class="train-focus-side">
-                          <p class="train-focus-time">${formatArrivalTime(getRealtimeOffset(focusVehicle.nextOffset ?? 0))}</p>
-                          <p class="train-focus-clock">${formatEtaClockFromNow(getRealtimeOffset(focusVehicle.nextOffset ?? 0))}</p>
+                          <p class="train-focus-time" data-vehicle-next-countdown="${focusVehicle.id}">${formatArrivalTime(getRealtimeOffset(focusVehicle.nextOffset ?? 0))}</p>
+                          <p class="train-focus-clock" data-vehicle-next-clock="${focusVehicle.id}">${formatEtaClockFromNow(getRealtimeOffset(focusVehicle.nextOffset ?? 0))}</p>
                         </div>
                       </div>
                       <p class="train-focus-destination">${copyValue('toDestination', getVehicleDestinationLabel(focusVehicle, state.layouts.get(focusVehicle.lineId)))}</p>
                       <p class="train-focus-segment">${formatVehicleLocationSummary(focusVehicle)}</p>
                       ${renderFocusMetrics(focusVehicle)}
                       <p class="train-list-status ${getVehicleStatusClass(focusVehicle, getRealtimeOffset(focusVehicle.nextOffset ?? 0))}" data-vehicle-status="${focusVehicle.id}">${formatVehicleStatus(focusVehicle)}</p>
-                    </article>
+                    </button>
                   `
                   : `<p class="train-readout muted">${copyValue('noLiveVehicles', getVehicleLabelPlural().toLowerCase())}</p>`
               }
