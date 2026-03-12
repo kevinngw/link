@@ -289,6 +289,9 @@ alertDialog.addEventListener('click', (e) => {
   if (e.target === alertDialog) closeAlertDialog()
 })
 dialog.addEventListener('close', () => {
+  state.activeDialogRequest += 1
+  state.currentDialogStationId = ''
+  state.currentDialogStation = null
   stopDialogAutoRefresh()
   stopDialogDisplayScroll()
   stopDialogDirectionRotation()
@@ -1591,7 +1594,16 @@ function computeSystemSummaryMetrics(insightsItems) {
   }
 }
 
-async function refreshStationDialog(station) {
+function isActiveStationDialogRequest(station, requestId) {
+  return Boolean(
+    dialog.open &&
+    station &&
+    state.currentDialogStationId === station.id &&
+    state.activeDialogRequest === requestId,
+  )
+}
+
+async function refreshStationDialog(station, { requestId = state.activeDialogRequest } = {}) {
   if (!station) return
 
   state.currentDialogStation = station
@@ -1625,11 +1637,12 @@ async function refreshStationDialog(station) {
 
   // Phase 2: fetch fresh arrivals and re-render
   const arrivalsByLine = await Promise.all(dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line)))
+  if (!isActiveStationDialogRequest(station, requestId)) return
   renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
 
   await sleep(5000)
 
-  if (state.currentDialogStationId !== station.id) return
+  if (!isActiveStationDialogRequest(station, requestId)) return
 
   const transferCandidates = getNearbyTransferCandidates(station)
   if (!transferCandidates.length) {
@@ -1641,6 +1654,7 @@ async function refreshStationDialog(station) {
 
   renderTransferRecommendations([], true, station)
   const transferFeed = await fetchArrivalsForStopIds(transferCandidates.flatMap((candidate) => getStationStopIds(candidate.stop, candidate.line)))
+  if (!isActiveStationDialogRequest(station, requestId)) return
   renderTransferRecommendations(buildTransferRecommendations(transferCandidates, transferFeed), false, station)
   renderDialogDirectionView()
   syncDialogTitleMarquee()
@@ -1648,6 +1662,10 @@ async function refreshStationDialog(station) {
 
 async function showStationDialog(station, { updateUrl = true } = {}) {
   if (!station) return
+  const requestId = state.activeDialogRequest + 1
+  state.activeDialogRequest = requestId
+  state.currentDialogStation = station
+  state.currentDialogStationId = station.id
   setDialogTitle(station.name)
   renderStationServiceSummary(station)
   clearStationDialogContent()
@@ -1656,8 +1674,9 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
   if (updateUrl) setStationParam(station)
   startDialogAutoRefresh()
   try {
-    await refreshStationDialog(station)
+    await refreshStationDialog(station, { requestId })
   } catch (e) {
+    if (state.activeDialogRequest !== requestId) return
     showToast(copyValue('stationRequestFailed'))
     console.warn('Station refresh failed:', e)
   }

@@ -184,7 +184,7 @@ body {
 }
 
 .screen {
-  width: min(1360px, calc(100vw - 32px - var(--safe-area-left) - var(--safe-area-right)));
+  width: min(1560px, calc(100vw - 32px - var(--safe-area-left) - var(--safe-area-right)));
   margin: 0 auto;
   padding:
     calc(22px + var(--safe-area-top))
@@ -722,7 +722,7 @@ h1 {
 .line-diagram {
   display: block;
   width: 100%;
-  max-width: 460px;
+  max-width: none;
   height: auto;
   margin: 6px auto 0;
   overflow: visible;

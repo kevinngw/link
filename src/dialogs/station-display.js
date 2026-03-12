@@ -171,6 +171,7 @@ export function createStationDialogDisplayController({
   }
 
   function closeStationDialog() {
+    state.activeDialogRequest += 1
     state.currentDialogStationId = ''
     state.currentDialogStation = null
     if (dialog.open) {
