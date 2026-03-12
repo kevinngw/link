@@ -2216,6 +2216,14 @@ button.train-list-item {
   min-width: 0;
 }
 
+.dialog-actions-top .dialog-meta {
+  margin-top: 0;
+}
+
+.dialog-actions-top .updated-at {
+  margin-top: 0;
+}
+
 .dialog-direction-tabs {
   display: none;
   gap: 6px;
@@ -2244,6 +2252,8 @@ button.train-list-item {
 
 .dialog-meta {
   display: none;
+  align-items: center;
+  gap: 8px;
   margin-top: 12px;
 }
 
@@ -2348,7 +2358,7 @@ button.train-list-item {
 
   .dialog-actions-top {
     display: grid;
-    grid-template-columns: repeat(2, max-content);
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
     justify-content: start;
     gap: 8px;
@@ -2380,20 +2390,41 @@ button.train-list-item {
   }
 
   .dialog-meta {
-    margin-top: 0;
+    display: inline-grid;
+    justify-items: start;
+    gap: 4px;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+  }
+
+  .dialog-meta .status-pill {
+    padding: 6px 10px;
+    font-size: 0.72rem;
   }
 
   .dialog-meta .updated-at {
     margin-top: 0;
-    font-size: 0.8rem;
+    font-size: 0.76rem;
+    line-height: 1.3;
   }
 
   .dialog-body {
-    gap: 14px;
+    gap: 10px;
   }
 
   .arrivals-section {
     padding: 14px;
+  }
+
+  .arrivals-title {
+    margin-bottom: 8px;
+  }
+
+  .arrivals-pinned {
+    margin-bottom: 6px;
   }
 
   .arrivals-title {
@@ -2720,36 +2751,33 @@ button.arrival-item {
 }
 
 .station-dialog.is-display-mode .dialog-meta {
-  display: grid;
-  grid-area: meta;
-  justify-items: end;
-  gap: 0;
+  display: inline-grid;
+  justify-items: start;
+  gap: 6px;
   margin-top: 0;
   min-width: max-content;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-strong) 90%, transparent);
 }
 
 .station-dialog.is-display-mode .dialog-actions {
   display: grid;
-  grid-template-columns: minmax(320px, 42vw) auto;
-  grid-template-areas:
-    "tabs status"
-    "tabs meta";
   align-items: start;
   justify-items: end;
   align-content: start;
-  gap: 10px 14px;
+  gap: 10px;
   min-width: min(46vw, 620px);
   padding-right: 100px;
 }
 
 .station-dialog.is-display-mode .dialog-actions-top {
-  display: contents;
-}
-
-.station-dialog.is-display-mode .dialog-actions-top .status-pill {
-  grid-area: status;
-  justify-self: end;
-  margin: 0;
+  display: inline-grid;
+  grid-template-columns: minmax(320px, 42vw) auto auto;
+  align-items: start;
+  justify-content: end;
+  gap: 10px 14px;
 }
 
 .station-dialog.is-display-mode .dialog-direction-tabs {
@@ -3179,22 +3207,20 @@ button.arrival-item {
   }
 
   .station-dialog.is-display-mode .dialog-actions {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "tabs status"
-      "tabs meta";
-    align-items: start;
-    gap: 10px 12px;
+    gap: 8px;
     min-width: 0;
     padding-right: 84px;
   }
 
-  .station-dialog.is-display-mode .dialog-direction-tabs {
-    width: 100%;
+  .station-dialog.is-display-mode .dialog-actions-top {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 8px 10px;
   }
 
-  .station-dialog.is-display-mode .dialog-actions-top .status-pill {
-    justify-self: end;
+  .station-dialog.is-display-mode .dialog-direction-tabs {
+    width: 100%;
+    grid-column: 1 / -1;
   }
 
   .dialog-direction-tab {
@@ -3211,8 +3237,17 @@ button.arrival-item {
     font-size: 0.92rem;
   }
 
+  .station-dialog.is-display-mode .dialog-body {
+    gap: 14px;
+  }
+
   .station-dialog.is-display-mode .arrivals-title {
+    margin-bottom: 10px;
     font-size: 1.1rem;
+  }
+
+  .station-dialog.is-display-mode .arrivals-pinned {
+    margin-bottom: 8px;
   }
 
   .station-dialog.is-display-mode .arrival-vehicle {

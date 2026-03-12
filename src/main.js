@@ -116,11 +116,11 @@ document.querySelector('#app').innerHTML = `
               <button class="dialog-direction-tab" data-dialog-direction="sb" type="button">SB</button>
               <button class="dialog-direction-tab" data-dialog-direction="auto" type="button">Auto</button>
             </div>
-            <p id="dialog-status-pill" class="status-pill">SYNC</p>
+            <div id="dialog-meta" class="dialog-meta">
+              <p id="dialog-status-pill" class="status-pill">SYNC</p>
+              <p id="dialog-updated-at" class="updated-at">Waiting for snapshot</p>
+            </div>
             <button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
-          </div>
-          <div id="dialog-meta" class="dialog-meta">
-            <p id="dialog-updated-at" class="updated-at">Waiting for snapshot</p>
           </div>
         </div>
       </header>
