@@ -8,6 +8,28 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
+      includeAssets: [
+        'apple-touch-icon.png',
+        'apple-touch-icon-120.png',
+        'apple-touch-icon-152.png',
+        'apple-touch-icon-167.png',
+        'apple-touch-icon-180.png',
+        'apple-splash-iphone-se-640x1136.png',
+        'apple-splash-iphone-8-750x1334.png',
+        'apple-splash-iphone-8-plus-1242x2208.png',
+        'apple-splash-iphone-x-xs-11pro-1125x2436.png',
+        'apple-splash-iphone-xr-828x1792.png',
+        'apple-splash-iphone-xs-max-11pro-max-1242x2688.png',
+        'apple-splash-iphone-12-13-14-1170x2532.png',
+        'apple-splash-iphone-12-13-14-pro-max-1284x2778.png',
+        'apple-splash-iphone-15-16-pro-1179x2556.png',
+        'apple-splash-iphone-15-plus-16-plus-1290x2796.png',
+        'apple-splash-ipad-9-10-1536x2048.png',
+        'apple-splash-ipad-mini-air-1640x2360.png',
+        'apple-splash-ipad-pro-10_5-1668x2224.png',
+        'apple-splash-ipad-pro-11-1668x2388.png',
+        'apple-splash-ipad-pro-12_9-2048x2732.png',
+      ],
       workbox: {
         cleanupOutdatedCaches: true,
         clientsClaim: true,
