@@ -3,11 +3,10 @@ export const OBA_BASE_URL = 'https://api.pugetsound.onebusaway.org/api/where'
 export const OBA_KEY = (import.meta.env.VITE_OBA_KEY || 'TEST').trim() || 'TEST'
 export const IS_PUBLIC_TEST_KEY = OBA_KEY === 'TEST'
 export const ARRIVALS_CACHE_TTL_MS = IS_PUBLIC_TEST_KEY ? 60_000 : 20_000
+export const OBA_CACHE_TTL_MS = IS_PUBLIC_TEST_KEY ? 60_000 : 20_000
 export const OBA_MAX_RETRIES = 3
-export const OBA_RETRY_BASE_DELAY_MS = 800
 export const OBA_COOLDOWN_BASE_MS = IS_PUBLIC_TEST_KEY ? 20_000 : 5_000
 export const OBA_COOLDOWN_MAX_MS = IS_PUBLIC_TEST_KEY ? 120_000 : 30_000
-export const OBA_INTER_REQUEST_DELAY_MS = IS_PUBLIC_TEST_KEY ? 1_200 : 0
 export const OBA_ARRIVALS_CONCURRENCY = IS_PUBLIC_TEST_KEY ? 1 : 3
 export const COMPACT_LAYOUT_BREAKPOINT = 1100
 export const VEHICLE_REFRESH_INTERVAL_MS = IS_PUBLIC_TEST_KEY ? 45_000 : 15_000
@@ -19,6 +18,7 @@ export const GHOST_HISTORY_LIMIT = 6
 export const GHOST_MAX_AGE_MS = 4 * 60_000
 export const THEME_STORAGE_KEY = 'link-pulse-theme'
 export const LANGUAGE_STORAGE_KEY = 'link-pulse-language'
+export const FAVORITES_STORAGE_KEY = 'link-pulse-favorite-stations'
 export const DEFAULT_SYSTEM_ID = 'link'
 
 export const SYSTEM_META = {
@@ -61,8 +61,28 @@ export const UI_COPY = {
     transitSystems: 'Transit systems',
     boardViews: 'Board views',
     openStationSearch: 'Station search',
+    stationFavorites: 'Favorites',
+    favoriteStation: 'Save station',
+    unfavoriteStation: 'Saved station',
+    favoritesEmpty: 'Save stations for one-tap access here.',
+    favoritesCount: (count) => `${count} favorite${count === 1 ? '' : 's'}`,
+    addedFavorite: (name) => `Saved ${name}`,
+    removedFavorite: (name) => `Removed ${name}`,
     stationSearchPlaceholder: 'Search stations, lines, or systems',
     stationSearchHint: 'Jump straight to any station across loaded systems.',
+    useMyLocation: 'Use my location',
+    locationFindingButton: 'Locating…',
+    locationFinding: 'Requesting your location…',
+    locationFoundNearby: (count) => `Showing ${count} nearest station${count === 1 ? '' : 's'}`,
+    locationNoNearby: 'No nearby stations found in loaded data.',
+    locationPermissionDenied: 'Location permission was denied.',
+    locationUnavailable: 'Current location is unavailable.',
+    locationTimedOut: 'Location request timed out.',
+    locationFailed: 'Could not get your location.',
+    locationUnsupported: 'This browser does not support geolocation.',
+    nearbyStationsHint: 'Use your location to find the nearest stations.',
+    nearbyStationsFound: (count) => `${count} nearby station${count === 1 ? '' : 's'}`,
+    nearbyStationBadge: 'Nearby',
     searchShortcut: 'Press / to search',
     noStationSearchResults: 'No stations matched that search.',
     stationSearchResults: (count) => `${count} station${count === 1 ? '' : 's'} found`,
@@ -159,8 +179,28 @@ export const UI_COPY = {
     transitSystems: '交通系统',
     boardViews: '视图切换',
     openStationSearch: '站点搜索',
+    stationFavorites: '收藏',
+    favoriteStation: '收藏站点',
+    unfavoriteStation: '已收藏站点',
+    favoritesEmpty: '收藏常用站点后，可在这里一键打开。',
+    favoritesCount: (count) => `${count} 个收藏站点`,
+    addedFavorite: (name) => `已收藏 ${name}`,
+    removedFavorite: (name) => `已移除 ${name}`,
     stationSearchPlaceholder: '搜索站点、线路或系统',
     stationSearchHint: '可直接跳转到任意已加载系统中的站点。',
+    useMyLocation: '用我的位置',
+    locationFindingButton: '定位中…',
+    locationFinding: '正在请求你的位置…',
+    locationFoundNearby: (count) => `显示最近的 ${count} 个站点`,
+    locationNoNearby: '在当前已加载数据里没有找到附近站点。',
+    locationPermissionDenied: '定位权限被拒绝。',
+    locationUnavailable: '当前位置暂时不可用。',
+    locationTimedOut: '定位请求超时。',
+    locationFailed: '无法获取当前位置。',
+    locationUnsupported: '当前浏览器不支持定位。',
+    nearbyStationsHint: '点击“用我的位置”即可查找最近站点。',
+    nearbyStationsFound: (count) => `${count} 个附近站点`,
+    nearbyStationBadge: '附近',
     searchShortcut: '按 / 键搜索',
     noStationSearchResults: '没有匹配的站点。',
     stationSearchResults: (count) => `找到 ${count} 个站点`,

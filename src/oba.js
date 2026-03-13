@@ -1,13 +1,15 @@
 import {
+  OBA_CACHE_TTL_MS,
   OBA_COOLDOWN_BASE_MS,
   OBA_COOLDOWN_MAX_MS,
   OBA_MAX_RETRIES,
-  OBA_RETRY_BASE_DELAY_MS,
 } from './config'
 import { sleep } from './utils'
 
 export function createObaClient(state) {
-  const inFlight = new Map()
+  const cache = new Map()
+  const queue = []
+  let processing = false
 
   function getGlobalCooldownMs() {
     const exponent = Math.max(0, state.obaRateLimitStreak - 1)
@@ -27,9 +29,15 @@ export function createObaClient(state) {
     return payload?.code === 429 || /rate limit/i.test(payload?.text ?? '')
   }
 
-  async function _fetchJsonWithRetry(url, label) {
-    for (let attempt = 0; attempt <= OBA_MAX_RETRIES; attempt += 1) {
+  async function processQueue() {
+    if (processing) return
+    processing = true
+
+    while (queue.length > 0) {
       await waitForObaCooldown()
+
+      const item = queue.shift()
+      const { url, label, attempt, resolve, reject } = item
 
       let response = null
       let payload = null
@@ -53,38 +61,40 @@ export function createObaClient(state) {
       if (response?.ok && !isRateLimitedResponse) {
         state.obaRateLimitStreak = 0
         state.obaCooldownUntil = 0
-        return payload
+        cache.set(url, { payload, expiresAt: Date.now() + OBA_CACHE_TTL_MS })
+        resolve(payload)
+        continue
       }
 
       const isTransientError = networkError != null ||
         (response != null && (response.status === 429 || (response.status >= 500 && response.status < 600)))
 
-      if (attempt === OBA_MAX_RETRIES || !isTransientError) {
-        if (networkError) throw networkError
-        if (payload?.text) throw new Error(payload.text)
-        throw new Error(`${label} request failed with ${response?.status ?? 'network error'}`)
+      if (attempt >= OBA_MAX_RETRIES || !isTransientError) {
+        if (networkError) reject(networkError)
+        else if (payload?.text) reject(new Error(payload.text))
+        else reject(new Error(`${label} request failed with ${response?.status ?? 'network error'}`))
+        continue
       }
 
       if (isRateLimitedResponse) {
         state.obaRateLimitStreak += 1
-        const retryDelayMs = OBA_RETRY_BASE_DELAY_MS * 2 ** attempt
-        const cooldownMs = Math.max(retryDelayMs, getGlobalCooldownMs())
-        state.obaCooldownUntil = Date.now() + cooldownMs
-        await sleep(cooldownMs)
-      } else {
-        const retryDelayMs = OBA_RETRY_BASE_DELAY_MS * 2 ** attempt
-        await sleep(retryDelayMs)
+        state.obaCooldownUntil = Date.now() + getGlobalCooldownMs()
       }
+
+      queue.push({ url, label, attempt: attempt + 1, resolve, reject })
     }
 
-    throw new Error(`${label} request failed`)
+    processing = false
   }
 
   async function fetchJsonWithRetry(url, label) {
-    if (inFlight.has(url)) return inFlight.get(url)
-    const promise = _fetchJsonWithRetry(url, label).finally(() => inFlight.delete(url))
-    inFlight.set(url, promise)
-    return promise
+    const cached = cache.get(url)
+    if (cached && Date.now() < cached.expiresAt) return cached.payload
+
+    return new Promise((resolve, reject) => {
+      queue.push({ url, label, attempt: 0, resolve, reject })
+      processQueue()
+    })
   }
 
   return {

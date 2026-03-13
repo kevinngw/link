@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "WebFetch(domain:www.communitytransit.org)",
+      "WebFetch(domain:api.pugetsound.onebusaway.org)",
+      "WebFetch(domain:commtrans-gtfs.azurewebsites.net)",
+      "WebFetch(domain:transitfeeds.com)",
+      "WebFetch(domain:www.transit.land)",
+      "Bash(curl -sI \"https://commtrans-gtfs.azurewebsites.net/api/Download\" 2>&1 | grep -i \"http/\\\\|content-type\\\\|location\"\ncurl -sI \"https://commtrans-gtfs.azurewebsites.net/api/gtfsfeed\" 2>&1 | grep -i \"http/\\\\|content-type\\\\|location\"\ncurl -sI \"https://commtrans-gtfs.azurewebsites.net/api/zip\" 2>&1 | grep -i \"http/\\\\|content-type\\\\|location\")",
+      "Bash(curl -s \"https://commtrans-gtfs.azurewebsites.net/api/routes\" 2>&1 | head -200)",
+      "WebFetch(domain:api.mobilitydata.org)",
+      "Bash(node scripts/build-link-data.mjs 2>&1)",
+      "Bash(node -e \"\nconst data = JSON.parse\\(require\\('fs'\\).readFileSync\\('public/link-data.json', 'utf8'\\)\\);\nfor \\(const sys of data.systems\\) {\n  console.log\\('System:', sys.id, '|', sys.lines.length, 'lines'\\);\n  for \\(const line of sys.lines\\) {\n    console.log\\('  ', line.name, '| stops:', line.stops.length, '| shape:', line.shapePoints.length, '| nbTerminus:', line.nbTerminus || '\\(n/a\\)', '| sbTerminus:', line.sbTerminus || '\\(n/a\\)'\\);\n  }\n}\n\")",
+      "Bash(node scripts/build-link-data.mjs 2>&1 && node -e \"\nconst data = JSON.parse\\(require\\('fs'\\).readFileSync\\('public/link-data.json', 'utf8'\\)\\);\nfor \\(const sys of data.systems\\) {\n  console.log\\('System:', sys.id, '| lines:', sys.lines.length\\);\n  for \\(const line of sys.lines\\) {\n    console.log\\('  ', line.name, '| stops:', line.stops.length, '| nbPrefix:', line.nbTerminusPrefix || '\\(n/a\\)'\\);\n  }\n}\n\")",
+      "Bash(node -e \"const d = JSON.parse\\(require\\('fs'\\).readFileSync\\('public/pulse-data.json','utf8'\\)\\); const s = d.systems?.find\\(s => s.id?.includes\\('swift'\\) || s.title?.includes\\('Swift'\\) || s.kicker?.includes\\('Swift'\\)\\); console.log\\(JSON.stringify\\(s?.lines?.map\\(l => \\({id:l.id, name:l.name}\\)\\), null, 2\\)\\)\")",
+      "Bash(jobs -l 2>&1)",
+      "Bash(pkill -f \"vite\" 2>/dev/null; sleep 1; echo \"killed old servers\")",
+      "Bash(npx vite:*)",
+      "Bash(git add:*)",
+      "Bash(git push:*)"
+    ]
+  }
+}

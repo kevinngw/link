@@ -87,9 +87,16 @@
   max-width: 640px;
 }
 
+.station-search-dialog .dialog-content {
+  min-height: 0;
+  overflow: hidden;
+}
+
 .station-search-shell {
   display: grid;
   gap: 12px;
+  flex: 1;
+  min-height: 0;
 }
 
 .station-search-input {
@@ -107,10 +114,50 @@
   outline: 2px solid color-mix(in srgb, var(--accent-strong) 72%, white);
   outline-offset: 2px;
 }
+.station-search-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.station-location-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.station-location-button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.station-location-status {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.station-location-status.is-error {
+  color: var(--status-error);
+}
+
 
 .station-search-results {
   display: grid;
   gap: 8px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+  overscroll-behavior: contain;
 }
 
 .station-search-result {
@@ -170,6 +217,45 @@
   flex: 0 0 auto;
 }
 
+.station-search-result-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.station-search-result-badge {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.station-favorite-toggle,
+.dialog-favorite-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  background: var(--surface-soft);
+  color: var(--text-primary);
+}
+
+.station-favorite-toggle {
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.station-favorite-toggle.is-active,
+.dialog-favorite-button.is-active {
+  border-color: color-mix(in srgb, #ffd36a 55%, var(--border-color));
+  background: color-mix(in srgb, #ffd36a 14%, var(--surface-soft));
+  color: color-mix(in srgb, #ffd36a 78%, var(--text-primary));
+}
 
 body {
   margin: 0;
@@ -352,6 +438,9 @@ h1 {
   grid-column: 1 / -1;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   margin-bottom: 2px;
 }
 
@@ -359,17 +448,42 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--border-color);
   border-radius: 14px;
   background: var(--surface-strong);
   color: var(--text-secondary);
   font: inherit;
+  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.line-switcher-button:hover {
+  border-color: color-mix(in srgb, var(--line-color) 24%, var(--border-color));
+  color: var(--text-primary);
 }
 
 .line-switcher-button.is-active {
   color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--line-color) 40%, var(--border-color));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line-color) 35%, transparent);
+}
+
+.line-switcher-label-group {
+  display: grid;
+  min-width: 0;
+}
+
+.line-switcher-label-compact,
+.line-switcher-label-full {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.line-switcher-label-compact {
+  display: none;
 }
 
 .line-switcher-token {
@@ -2188,6 +2302,14 @@ button.train-list-item {
   min-width: 0;
 }
 
+.dialog-actions-top .dialog-meta {
+  margin-top: 0;
+}
+
+.dialog-actions-top .updated-at {
+  margin-top: 0;
+}
+
 .dialog-direction-tabs {
   display: none;
   gap: 6px;
@@ -2216,6 +2338,8 @@ button.train-list-item {
 
 .dialog-meta {
   display: none;
+  align-items: center;
+  gap: 8px;
   margin-top: 12px;
 }
 
@@ -2320,7 +2444,7 @@ button.train-list-item {
 
   .dialog-actions-top {
     display: grid;
-    grid-template-columns: repeat(2, max-content);
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
     justify-content: start;
     gap: 8px;
@@ -2352,20 +2476,41 @@ button.train-list-item {
   }
 
   .dialog-meta {
-    margin-top: 0;
+    display: inline-grid;
+    justify-items: start;
+    gap: 4px;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+  }
+
+  .dialog-meta .status-pill {
+    padding: 6px 10px;
+    font-size: 0.72rem;
   }
 
   .dialog-meta .updated-at {
     margin-top: 0;
-    font-size: 0.8rem;
+    font-size: 0.76rem;
+    line-height: 1.3;
   }
 
   .dialog-body {
-    gap: 14px;
+    gap: 10px;
   }
 
   .arrivals-section {
     padding: 14px;
+  }
+
+  .arrivals-title {
+    margin-bottom: 8px;
+  }
+
+  .arrivals-pinned {
+    margin-bottom: 6px;
   }
 
   .arrivals-title {
@@ -2692,36 +2837,33 @@ button.arrival-item {
 }
 
 .station-dialog.is-display-mode .dialog-meta {
-  display: grid;
-  grid-area: meta;
-  justify-items: end;
-  gap: 0;
+  display: inline-grid;
+  justify-items: start;
+  gap: 6px;
   margin-top: 0;
   min-width: max-content;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-strong) 90%, transparent);
 }
 
 .station-dialog.is-display-mode .dialog-actions {
   display: grid;
-  grid-template-columns: minmax(320px, 42vw) auto;
-  grid-template-areas:
-    "tabs status"
-    "tabs meta";
   align-items: start;
   justify-items: end;
   align-content: start;
-  gap: 10px 14px;
+  gap: 10px;
   min-width: min(46vw, 620px);
   padding-right: 100px;
 }
 
 .station-dialog.is-display-mode .dialog-actions-top {
-  display: contents;
-}
-
-.station-dialog.is-display-mode .dialog-actions-top .status-pill {
-  grid-area: status;
-  justify-self: end;
-  margin: 0;
+  display: inline-grid;
+  grid-template-columns: minmax(320px, 42vw) auto auto;
+  align-items: start;
+  justify-content: end;
+  gap: 10px 14px;
 }
 
 .station-dialog.is-display-mode .dialog-direction-tabs {
@@ -2941,6 +3083,80 @@ button.arrival-item {
     backdrop-filter: blur(14px);
   }
 
+  .line-switcher {
+    display: flex;
+    grid-column: 1 / -1;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    margin: -2px 0 8px;
+    padding: 0 1px 2px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .line-switcher::-webkit-scrollbar {
+    display: none;
+  }
+
+  .line-switcher-button {
+    position: relative;
+    flex: 0 0 auto;
+    gap: 8px;
+    min-height: 0;
+    padding: 7px 11px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--surface-card) 58%, transparent);
+    box-shadow: none;
+    scroll-snap-align: start;
+  }
+
+  .line-switcher-button::after {
+    content: "";
+    position: absolute;
+    inset: auto 10px -1px;
+    height: 2px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--line-color) 82%, white 18%);
+    opacity: 0;
+    transform: scaleX(0.65);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+
+  .line-switcher-button.is-active {
+    background: color-mix(in srgb, var(--line-color) 10%, var(--surface-card));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line-color) 40%, var(--border-color));
+  }
+
+  .line-switcher-button.is-active::after {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+
+  .line-switcher-token {
+    width: 20px;
+    height: 20px;
+    font-size: 0.68rem;
+  }
+
+  .line-switcher-label-full {
+    display: none;
+  }
+
+  .line-switcher-label-compact {
+    display: block;
+    font-size: 0.76rem;
+    letter-spacing: 0.02em;
+  }
+
+  .board {
+    gap: 14px;
+  }
+
   .line-readout-grid {
     grid-template-columns: 1fr;
   }
@@ -3077,22 +3293,20 @@ button.arrival-item {
   }
 
   .station-dialog.is-display-mode .dialog-actions {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "tabs status"
-      "tabs meta";
-    align-items: start;
-    gap: 10px 12px;
+    gap: 8px;
     min-width: 0;
     padding-right: 84px;
   }
 
-  .station-dialog.is-display-mode .dialog-direction-tabs {
-    width: 100%;
+  .station-dialog.is-display-mode .dialog-actions-top {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 8px 10px;
   }
 
-  .station-dialog.is-display-mode .dialog-actions-top .status-pill {
-    justify-self: end;
+  .station-dialog.is-display-mode .dialog-direction-tabs {
+    width: 100%;
+    grid-column: 1 / -1;
   }
 
   .dialog-direction-tab {
@@ -3109,8 +3323,17 @@ button.arrival-item {
     font-size: 0.92rem;
   }
 
+  .station-dialog.is-display-mode .dialog-body {
+    gap: 14px;
+  }
+
   .station-dialog.is-display-mode .arrivals-title {
+    margin-bottom: 10px;
     font-size: 1.1rem;
+  }
+
+  .station-dialog.is-display-mode .arrivals-pinned {
+    margin-bottom: 8px;
   }
 
   .station-dialog.is-display-mode .arrival-vehicle {

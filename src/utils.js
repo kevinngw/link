@@ -35,3 +35,24 @@ export function parseClockToSeconds(value) {
   const [hours = '0', minutes = '0', seconds = '0'] = String(value).split(':')
   return Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds)
 }
+
+
+export function getDistanceMeters(lat1, lon1, lat2, lon2) {
+  const toRadians = (value) => (value * Math.PI) / 180
+  const earthRadiusMeters = 6371000
+  const deltaLat = toRadians(lat2 - lat1)
+  const deltaLon = toRadians(lon2 - lon1)
+  const startLat = toRadians(lat1)
+  const endLat = toRadians(lat2)
+
+  const a = Math.sin(deltaLat / 2) ** 2
+    + Math.cos(startLat) * Math.cos(endLat) * Math.sin(deltaLon / 2) ** 2
+
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+export function formatDistanceMeters(distanceMeters) {
+  if (!Number.isFinite(distanceMeters)) return ''
+  if (distanceMeters < 1000) return `${Math.round(distanceMeters)} m`
+  return `${(distanceMeters / 1000).toFixed(distanceMeters >= 10000 ? 0 : 1)} km`
+}
