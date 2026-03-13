@@ -107,6 +107,42 @@
   outline: 2px solid color-mix(in srgb, var(--accent-strong) 72%, white);
   outline-offset: 2px;
 }
+.station-search-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.station-location-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.station-location-button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.station-location-status {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.station-location-status.is-error {
+  color: var(--status-error);
+}
+
 
 .station-search-results {
   display: grid;

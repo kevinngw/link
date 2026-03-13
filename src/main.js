@@ -3,7 +3,7 @@ import { registerSW } from 'virtual:pwa-register'
 import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, FAVORITES_STORAGE_KEY, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
-import { clamp, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
+import { clamp, formatDistanceMeters, getDistanceMeters, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
 import { createObaClient } from './oba'
 import { createArrivalsHelpers, getLineRouteId, getStatusTone } from './arrivals'
 import { parseVehicle } from './vehicles'
@@ -61,6 +61,12 @@ const state = {
   currentInsightsDetailType: '',
   currentInsightsLineId: '',
   favoriteStations: new Set(),
+  nearbyStations: [],
+  highlightedNearbyStationIndex: 0,
+  geolocationStatus: '',
+  geolocationError: '',
+  isLocating: false,
+  userLocation: null,
 }
 
 const updateSW = registerSW({
@@ -190,6 +196,10 @@ document.querySelector('#app').innerHTML = `
       <div class="station-search-shell">
         <label class="sr-only" for="station-search-input">Station search</label>
         <input id="station-search-input" class="station-search-input" type="search" placeholder="Search stations, lines, or systems" autocomplete="off" spellcheck="false" />
+        <div class="station-search-actions">
+          <button id="station-location-button" class="station-location-button" type="button">Use my location</button>
+          <p id="station-location-status" class="station-location-status updated-at"></p>
+        </div>
         <p id="station-search-meta" class="updated-at">Press / to search</p>
         <div id="station-search-results" class="station-search-results"></div>
       </div>
@@ -233,6 +243,8 @@ const stationSearchInput = document.querySelector('#station-search-input')
 const stationSearchMetaElement = document.querySelector('#station-search-meta')
 const stationSearchResultsElement = document.querySelector('#station-search-results')
 const stationSearchCloseButton = document.querySelector('#station-search-close')
+const stationLocationButton = document.querySelector('#station-location-button')
+const stationLocationStatusElement = document.querySelector('#station-location-status')
 const dialogFavoriteButton = document.querySelector('#dialog-favorite')
 const dialogElements = getDialogElements()
 const {
@@ -346,6 +358,9 @@ themeToggleButton.addEventListener('click', () => {
 stationSearchToggleButton.addEventListener('click', () => {
   openStationSearch()
 })
+stationLocationButton?.addEventListener('click', async () => {
+  await findNearbyStations()
+})
 stationSearchCloseButton.addEventListener('click', () => closeStationSearch())
 stationSearchDialog.addEventListener('click', (e) => {
   if (e.target === stationSearchDialog) closeStationSearch()
@@ -353,28 +368,44 @@ stationSearchDialog.addEventListener('click', (e) => {
 stationSearchInput.addEventListener('input', () => {
   state.stationSearchQuery = stationSearchInput.value
   state.highlightedStationSearchIndex = 0
+  state.highlightedNearbyStationIndex = 0
+  if (state.stationSearchQuery.trim()) {
+    state.nearbyStations = []
+    state.geolocationStatus = ''
+    state.geolocationError = ''
+  }
   if (stationSearchDialog.open && !state.isSyncingFromUrl) {
     setStationSearchParams(state.stationSearchQuery)
   }
   renderStationSearchResults()
 })
 stationSearchInput.addEventListener('keydown', async (event) => {
-  const results = getStationSearchResults()
+  const results = getActiveStationSearchResults()
   if (event.key === 'ArrowDown') {
     event.preventDefault()
-    state.highlightedStationSearchIndex = Math.min(results.length - 1, state.highlightedStationSearchIndex + 1)
+    if (state.stationSearchQuery.trim()) {
+      state.highlightedStationSearchIndex = Math.min(Math.max(0, results.length - 1), state.highlightedStationSearchIndex + 1)
+    } else {
+      state.highlightedNearbyStationIndex = Math.min(Math.max(0, results.length - 1), state.highlightedNearbyStationIndex + 1)
+    }
     renderStationSearchResults()
     return
   }
   if (event.key === 'ArrowUp') {
     event.preventDefault()
-    state.highlightedStationSearchIndex = Math.max(0, state.highlightedStationSearchIndex - 1)
+    if (state.stationSearchQuery.trim()) {
+      state.highlightedStationSearchIndex = Math.max(0, state.highlightedStationSearchIndex - 1)
+    } else {
+      state.highlightedNearbyStationIndex = Math.max(0, state.highlightedNearbyStationIndex - 1)
+    }
     renderStationSearchResults()
     return
   }
   if (event.key === 'Enter') {
     event.preventDefault()
-    const selected = results[state.highlightedStationSearchIndex] ?? results[0]
+    const selected = state.stationSearchQuery.trim()
+      ? (results[state.highlightedStationSearchIndex] ?? results[0])
+      : (results[state.highlightedNearbyStationIndex] ?? results[0])
     if (selected) await handleStationSearchSelection(selected)
   }
 })
@@ -472,12 +503,98 @@ function getStationSearchEntries() {
           stationName: station.name,
           normalizedStationName: normalizeName(station.name),
           aliases: line.stationAliases?.[station.id] ?? [],
+          lat: station.lat,
+          lon: station.lon,
         })
       }
     }
   }
 
   return entries
+}
+
+
+function getActiveStationSearchResults() {
+  return state.stationSearchQuery.trim() ? getStationSearchResults() : getNearbyStationResults()
+}
+
+function getNearbyStationResults() {
+  return state.nearbyStations.slice(0, 8)
+}
+
+function getNearbyStationSearchEntries(latitude, longitude) {
+  const deduped = new Map()
+
+  for (const entry of getStationSearchEntries()) {
+    const lat = Number(entry.lat)
+    const lon = Number(entry.lon)
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue
+    const distanceMeters = getDistanceMeters(latitude, longitude, lat, lon)
+    const dedupeKey = `${entry.systemId}:${entry.normalizedStationName}`
+    const existing = deduped.get(dedupeKey)
+    const candidate = { ...entry, distanceMeters, isFavorite: isFavoriteStation({ id: entry.stationId, name: entry.stationName }) }
+    if (!existing || candidate.distanceMeters < existing.distanceMeters) {
+      deduped.set(dedupeKey, candidate)
+    }
+  }
+
+  return [...deduped.values()]
+    .sort((left, right) => left.distanceMeters - right.distanceMeters || left.stationName.localeCompare(right.stationName))
+    .slice(0, 8)
+}
+
+async function findNearbyStations() {
+  if (!navigator.geolocation) {
+    state.geolocationError = copyValue('locationUnsupported')
+    state.geolocationStatus = ''
+    state.nearbyStations = []
+    renderStationSearchResults()
+    return
+  }
+
+  state.isLocating = true
+  state.geolocationError = ''
+  state.geolocationStatus = copyValue('locationFinding')
+  state.stationSearchQuery = ''
+  state.highlightedNearbyStationIndex = 0
+  renderStationSearchResults()
+
+  try {
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 120000,
+      })
+    })
+
+    const latitude = position.coords?.latitude
+    const longitude = position.coords?.longitude
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw new Error('invalid-location')
+    }
+
+    state.userLocation = { latitude, longitude }
+    state.nearbyStations = getNearbyStationSearchEntries(latitude, longitude)
+    state.geolocationStatus = state.nearbyStations.length
+      ? copyValue('locationFoundNearby', state.nearbyStations.length)
+      : copyValue('locationNoNearby')
+    state.geolocationError = ''
+  } catch (error) {
+    const code = error?.code
+    state.nearbyStations = []
+    state.geolocationStatus = ''
+    state.geolocationError = code === 1
+      ? copyValue('locationPermissionDenied')
+      : code === 2
+        ? copyValue('locationUnavailable')
+        : code === 3
+          ? copyValue('locationTimedOut')
+          : copyValue('locationFailed')
+  } finally {
+    state.isLocating = false
+    renderStationSearchResults()
+  }
 }
 
 function getStationSearchResults() {
@@ -520,42 +637,63 @@ function getStationSearchResults() {
 }
 
 function renderStationSearchResults() {
-  const results = getStationSearchResults()
-  state.stationSearchResults = results
-  state.highlightedStationSearchIndex = Math.min(state.highlightedStationSearchIndex, Math.max(0, results.length - 1))
-
   const hasQuery = Boolean(state.stationSearchQuery.trim())
+  const results = hasQuery ? getStationSearchResults() : getNearbyStationResults()
+
+  state.stationSearchResults = hasQuery ? results : []
+  state.highlightedStationSearchIndex = Math.min(state.highlightedStationSearchIndex, Math.max(0, (hasQuery ? results.length : 0) - 1))
+  state.highlightedNearbyStationIndex = Math.min(state.highlightedNearbyStationIndex, Math.max(0, (hasQuery ? 0 : results.length) - 1))
+
+  stationLocationButton.textContent = state.isLocating ? copyValue('locationFindingButton') : copyValue('useMyLocation')
+  stationLocationButton.disabled = state.isLocating
+  stationLocationStatusElement.textContent = state.geolocationError || state.geolocationStatus
+  stationLocationStatusElement.classList.toggle('is-error', Boolean(state.geolocationError))
+
   stationSearchMetaElement.textContent = results.length
-    ? (hasQuery ? copyValue('stationSearchResults', results.length) : copyValue('favoritesCount', results.filter((result) => result.isFavorite).length))
-    : (hasQuery ? copyValue('noStationSearchResults') : copyValue('favoritesEmpty'))
+    ? (hasQuery
+      ? copyValue('stationSearchResults', results.length)
+      : copyValue('nearbyStationsFound', results.length))
+    : (hasQuery
+      ? copyValue('noStationSearchResults')
+      : (state.geolocationError || state.geolocationStatus || copyValue('nearbyStationsHint')))
 
   stationSearchResultsElement.innerHTML = results.length
-    ? results.map((result, index) => `
-        <div
-          class="station-search-result${index === state.highlightedStationSearchIndex ? ' is-active' : ''}"
-          data-station-search-index="${index}"
-          role="button"
-          tabindex="0"
-        >
-          <span class="station-search-result-main">
-            <span class="arrival-line-token station-search-result-token" style="--line-color:${result.lineColor};">${result.lineName[0]}</span>
-            <span class="station-search-result-copy">
-              <span class="station-search-result-title">${result.isFavorite ? '★ ' : ''}${normalizeName(result.stationName)}</span>
-              <span class="station-search-result-meta">${result.lineName} · ${result.systemName}</span>
+    ? results.map((result, index) => {
+        const isNearby = !hasQuery
+        const isActive = hasQuery
+          ? index === state.highlightedStationSearchIndex
+          : index === state.highlightedNearbyStationIndex
+        const meta = isNearby
+          ? `${formatDistanceMeters(result.distanceMeters)} · ${result.lineName} · ${result.systemName}`
+          : `${result.lineName} · ${result.systemName}`
+        return `
+          <div
+            class="station-search-result${isActive ? ' is-active' : ''}"
+            data-station-search-index="${index}"
+            role="button"
+            tabindex="0"
+          >
+            <span class="station-search-result-main">
+              <span class="arrival-line-token station-search-result-token" style="--line-color:${result.lineColor};">${result.lineName[0]}</span>
+              <span class="station-search-result-copy">
+                <span class="station-search-result-title">${result.isFavorite ? '★ ' : ''}${normalizeName(result.stationName)}</span>
+                <span class="station-search-result-meta">${meta}</span>
+              </span>
             </span>
-          </span>
-          <span class="station-search-result-actions">
-            <span class="station-search-result-badge">${result.isFavorite ? copyValue('stationFavorites') : ''}</span>
-            <button type="button" class="station-favorite-toggle${result.isFavorite ? ' is-active' : ''}" data-station-favorite-index="${index}" aria-label="${result.isFavorite ? copyValue('unfavoriteStation') : copyValue('favoriteStation')}">${result.isFavorite ? '★' : '☆'}</button>
-          </span>
-        </div>
-      `).join('')
-    : `<div class="arrival-item muted">${hasQuery ? copyValue('noStationSearchResults') : copyValue('favoritesEmpty')}</div>`
+            <span class="station-search-result-actions">
+              <span class="station-search-result-badge">${isNearby ? copyValue('nearbyStationBadge') : (result.isFavorite ? copyValue('stationFavorites') : '')}</span>
+              <button type="button" class="station-favorite-toggle${result.isFavorite ? ' is-active' : ''}" data-station-favorite-index="${index}" aria-label="${result.isFavorite ? copyValue('unfavoriteStation') : copyValue('favoriteStation')}">${result.isFavorite ? '★' : '☆'}</button>
+            </span>
+          </div>
+        `
+      }).join('')
+    : `<div class="arrival-item muted">${hasQuery ? copyValue('noStationSearchResults') : (state.geolocationError || state.geolocationStatus || copyValue('nearbyStationsHint'))}</div>`
 
   const buttons = stationSearchResultsElement.querySelectorAll('[data-station-search-index]')
   buttons.forEach((button) => {
     const selectResult = async () => {
-      const selected = state.stationSearchResults[Number(button.dataset.stationSearchIndex)]
+      const source = hasQuery ? state.stationSearchResults : state.nearbyStations
+      const selected = source[Number(button.dataset.stationSearchIndex)]
       if (selected) await handleStationSearchSelection(selected)
     }
     button.addEventListener('click', selectResult)
@@ -571,7 +709,8 @@ function renderStationSearchResults() {
     button.addEventListener('click', (event) => {
       event.preventDefault()
       event.stopPropagation()
-      const selected = state.stationSearchResults[Number(button.dataset.stationFavoriteIndex)]
+      const source = hasQuery ? state.stationSearchResults : state.nearbyStations
+      const selected = source[Number(button.dataset.stationFavoriteIndex)]
       if (!selected) return
       toggleFavoriteStation({ id: selected.stationId, name: selected.stationName })
     })
@@ -581,6 +720,12 @@ function renderStationSearchResults() {
 function openStationSearch(prefill = '', { updateUrl = true } = {}) {
   state.stationSearchQuery = prefill
   state.highlightedStationSearchIndex = 0
+  state.highlightedNearbyStationIndex = 0
+  if (prefill.trim()) {
+    state.nearbyStations = []
+    state.geolocationStatus = ''
+    state.geolocationError = ''
+  }
   state.activeDialogType = 'search'
   if (!stationSearchDialog.open) stationSearchDialog.showModal()
   stationSearchInput.value = prefill
@@ -596,6 +741,11 @@ function closeStationSearch() {
   state.stationSearchQuery = ''
   state.stationSearchResults = []
   state.highlightedStationSearchIndex = 0
+  state.highlightedNearbyStationIndex = 0
+  state.nearbyStations = []
+  state.geolocationStatus = ''
+  state.geolocationError = ''
+  state.isLocating = false
   if (state.activeDialogType === 'search') state.activeDialogType = ''
   if (stationSearchDialog.open) stationSearchDialog.close()
 }
@@ -2256,7 +2406,8 @@ function render() {
   stationSearchTitleElement.textContent = copyValue('openStationSearch')
   stationSearchSummaryElement.textContent = copyValue('stationSearchHint')
   stationSearchInput.setAttribute('placeholder', copyValue('stationSearchPlaceholder'))
-  if (!stationSearchDialog.open) stationSearchMetaElement.textContent = copyValue('searchShortcut')
+  if (stationSearchDialog.open) renderStationSearchResults()
+  else stationSearchMetaElement.textContent = copyValue('searchShortcut')
   syncDialogFavoriteButton()
   languageToggleButton.textContent = copyValue('languageToggle')
   languageToggleButton.setAttribute('aria-label', copyValue('languageToggleAria'))
