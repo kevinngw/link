@@ -170,6 +170,45 @@
   flex: 0 0 auto;
 }
 
+.station-search-result-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.station-search-result-badge {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.station-favorite-toggle,
+.dialog-favorite-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  background: var(--surface-soft);
+  color: var(--text-primary);
+}
+
+.station-favorite-toggle {
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.station-favorite-toggle.is-active,
+.dialog-favorite-button.is-active {
+  border-color: color-mix(in srgb, #ffd36a 55%, var(--border-color));
+  background: color-mix(in srgb, #ffd36a 14%, var(--surface-soft));
+  color: color-mix(in srgb, #ffd36a 78%, var(--text-primary));
+}
 
 body {
   margin: 0;
