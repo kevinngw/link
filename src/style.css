@@ -433,6 +433,53 @@ h1 {
   gap: 22px;
 }
 
+.favorites-grid {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+  gap: 18px;
+}
+
+.favorite-card-header {
+  margin-bottom: 12px;
+}
+
+.favorite-card-header h2 {
+  color: var(--text-primary);
+  font-size: 1.1rem;
+}
+
+.favorite-card-body {
+  display: grid;
+  gap: 16px;
+}
+
+.favorite-direction-title {
+  margin: 0 0 8px 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent-strong);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.favorite-arrival-list {
+  display: grid;
+  gap: 8px;
+}
+
+.favorite-empty-state {
+  padding: 20px 0;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.favorite-arrival-item .arrival-side {
+  min-width: 0;
+}
+
+
 .line-switcher {
   display: grid;
   grid-column: 1 / -1;
