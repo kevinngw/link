@@ -75,8 +75,8 @@ export function createStationDialogRenderers({
     if (loading) {
       arrivalsNbPinned.innerHTML = ''
       arrivalsSbPinned.innerHTML = ''
-      arrivalsNb.innerHTML = `<div class="arrival-item muted">${copyValue('loadingArrivals')}</div>`
-      arrivalsSb.innerHTML = `<div class="arrival-item muted">${copyValue('loadingArrivals')}</div>`
+      arrivalsNb.innerHTML = `<div class="arrivals-loading">${copyValue('loadingArrivals')}</div>`
+      arrivalsSb.innerHTML = `<div class="arrivals-loading">${copyValue('loadingArrivals')}</div>`
       syncDialogDisplayScroll()
       return
     }
@@ -84,7 +84,7 @@ export function createStationDialogRenderers({
     const renderBucket = (bucket, pinnedElement, listElement) => {
       if (!bucket.length) {
         pinnedElement.innerHTML = ''
-        listElement.innerHTML = `<div class="arrival-item muted">${copyValue('noUpcomingVehicles', getVehicleLabelPlural().toLowerCase())}</div>`
+        listElement.innerHTML = `<div class="arrivals-empty">${copyValue('noUpcomingVehicles', getVehicleLabelPlural().toLowerCase())}</div>`
         return
       }
 
@@ -95,7 +95,7 @@ export function createStationDialogRenderers({
       listElement.innerHTML = scrollingItems.length
         ? scrollingItems.map(renderArrival).join('')
         : state.dialogDisplayMode
-          ? `<div class="arrival-item muted">${copyValue('noAdditionalVehicles', getVehicleLabelPlural().toLowerCase())}</div>`
+          ? `<div class="arrivals-empty">${copyValue('noAdditionalVehicles', getVehicleLabelPlural().toLowerCase())}</div>`
           : ''
     }
 

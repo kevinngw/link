@@ -1863,6 +1863,215 @@ button.train-list-item {
   background: rgba(248, 113, 113, 0.16);
 }
 
+/* Fix favorite button text rendering - remove conflicting dialog-close class styles */
+.dialog-favorite-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 80px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 0 0 auto;
+}
+
+.dialog-favorite-button.is-active {
+  border-color: color-mix(in srgb, #ffd36a 55%, var(--border-color));
+  background: color-mix(in srgb, #ffd36a 14%, var(--surface-soft));
+  color: color-mix(in srgb, #ffd36a 78%, var(--text-primary));
+}
+
+.dialog-favorite-button:hover {
+  background: var(--surface-active);
+  border-color: var(--border-strong);
+}
+
+/* iPhone portrait specific fixes (≤430px) */
+@media (max-width: 430px) {
+  .station-dialog {
+    --dialog-max-height: calc(100dvh - 16px);
+    width: 96vw;
+    border-radius: 14px;
+  }
+
+  .dialog-content {
+    padding: 12px 14px 16px;
+  }
+
+  .dialog-header {
+    gap: 10px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+  }
+
+  .dialog-header h3 {
+    font-size: 1.05rem;
+    line-height: 1.2;
+  }
+
+  .dialog-service-summary {
+    font-size: 0.75rem;
+    margin-top: 4px;
+    -webkit-line-clamp: 1;
+  }
+
+  /* Fix actions layout on small screens */
+  .dialog-actions {
+    gap: 6px;
+  }
+
+  .dialog-actions-top {
+    gap: 6px;
+  }
+
+  /* Smaller direction tabs */
+  .dialog-direction-tabs {
+    padding: 3px;
+    border-radius: 10px;
+  }
+
+  .dialog-direction-tab {
+    min-width: 0;
+    padding: 6px 8px;
+    font-size: 0.7rem;
+    letter-spacing: 0.03em;
+  }
+
+  /* Smaller favorite and mode buttons */
+  .dialog-favorite-button,
+  .dialog-mode-button {
+    min-width: 64px;
+    height: 34px;
+    padding: 0 10px;
+    font-size: 0.72rem;
+    border-radius: 8px;
+  }
+
+  /* Tighter dialog body */
+  .dialog-body {
+    gap: 8px;
+  }
+
+  /* Smaller arrivals sections */
+  .arrivals-section {
+    padding: 10px 12px;
+    border-radius: 10px;
+  }
+
+  .arrivals-title {
+    font-size: 0.8rem;
+    margin-bottom: 8px;
+  }
+
+  .arrivals-pinned {
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+
+  /* Smaller arrival items */
+  .arrival-item {
+    padding: 10px;
+    gap: 8px;
+    border-radius: 8px;
+  }
+
+  .arrival-line-token {
+    width: 20px;
+    height: 20px;
+    font-size: 0.7rem;
+  }
+
+  .arrival-vehicle {
+    font-size: 0.8rem;
+  }
+
+  .arrival-destination {
+    font-size: 0.72rem;
+  }
+
+  .arrival-time {
+    font-size: 0.88rem;
+    gap: 1px;
+  }
+
+  .arrival-status {
+    font-size: 0.6rem;
+  }
+
+  .arrival-precision {
+    font-size: 0.62rem;
+  }
+
+  /* Smaller loading/empty states */
+  .arrivals-loading,
+  .arrivals-empty {
+    padding: 12px 8px;
+    font-size: 0.8rem;
+  }
+
+  /* Station alerts more compact */
+  .station-alerts {
+    margin-bottom: 10px;
+    gap: 6px;
+  }
+
+  .station-alert-pill {
+    padding: 10px 12px;
+    border-radius: 10px;
+  }
+
+  .station-alert-pill-meta {
+    font-size: 0.65rem;
+  }
+
+  .station-alert-pill-copy {
+    font-size: 0.78rem;
+  }
+}
+
+/* Extra small screens (iPhone SE, mini) */
+@media (max-width: 375px) {
+  .dialog-content {
+    padding: 10px 12px 14px;
+  }
+
+  .dialog-header h3 {
+    font-size: 1rem;
+  }
+
+  .dialog-favorite-button,
+  .dialog-mode-button {
+    min-width: 56px;
+    height: 32px;
+    padding: 0 8px;
+    font-size: 0.68rem;
+  }
+
+  .dialog-direction-tab {
+    padding: 5px 6px;
+    font-size: 0.66rem;
+  }
+
+  .arrivals-section {
+    padding: 8px 10px;
+  }
+
+  .arrival-item {
+    padding: 8px;
+  }
+}
+
 .train-list-status-ok {
   color: var(--accent-strong);
 }
@@ -2821,7 +3030,22 @@ button.arrival-item {
   white-space: normal;
 }
 
-.station-dialog.is-display-mode {
+/* Clean loading and empty states - no double borders */
+.arrivals-loading,
+.arrivals-empty {
+  padding: 16px 12px;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  text-align: center;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.arrivals-loading {
+  color: var(--text-secondary);
+  font-style: italic;
+}
   max-width: none;
   width: 100vw;
   min-height: 100vh;
@@ -2841,25 +3065,39 @@ button.arrival-item {
 }
 
 .station-dialog.is-display-mode .dialog-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: 20px;
-  row-gap: 10px;
-  margin-bottom: 18px;
-  padding-bottom: 14px;
-  align-items: start;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-color);
   position: relative;
 }
 
 .station-dialog.is-display-mode .dialog-header > div:first-child {
   min-width: 0;
+  flex: 1 1 auto;
+}
+
+.station-dialog.is-display-mode .dialog-title {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.station-dialog.is-display-mode .dialog-service-summary {
+  margin-top: 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
 }
 
 .station-dialog.is-display-mode .dialog-header h3 {
-  font-size: clamp(2rem, 3.4vw, 3rem);
-  letter-spacing: 0.04em;
-  line-height: 1.05;
+  font-size: clamp(1.8rem, 2.5vw, 2.4rem);
+  letter-spacing: 0.02em;
+  line-height: 1.2;
   white-space: nowrap;
+  margin: 0;
 }
 
 .station-dialog.is-display-mode .dialog-title-track {
@@ -2884,57 +3122,56 @@ button.arrival-item {
 }
 
 .station-dialog.is-display-mode .dialog-meta {
-  display: inline-grid;
-  justify-items: start;
-  gap: 6px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin-top: 0;
   min-width: max-content;
-  padding: 12px 14px;
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--surface-strong) 90%, transparent);
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
 .station-dialog.is-display-mode .dialog-actions {
-  display: grid;
-  align-items: start;
-  justify-items: end;
-  align-content: start;
-  gap: 10px;
-  min-width: min(46vw, 620px);
-  padding-right: 100px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 0 0 auto;
+  padding-right: 90px;
 }
 
 .station-dialog.is-display-mode .dialog-actions-top {
-  display: inline-grid;
-  grid-template-columns: minmax(320px, 42vw) auto auto;
-  align-items: start;
-  justify-content: end;
-  gap: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .station-dialog.is-display-mode .dialog-direction-tabs {
   display: inline-flex;
-  grid-area: tabs;
   min-width: 0;
+  margin-left: 8px;
 }
 
 .station-dialog.is-display-mode .dialog-mode-button {
   position: absolute;
-  top: 0;
+  top: 50%;
   right: 0;
+  transform: translateY(-50%);
   z-index: 2;
-  min-width: 82px;
+  min-width: 72px;
+  height: 40px;
+  font-size: 0.8rem;
 }
 
 .station-dialog.is-display-mode .dialog-meta .status-pill {
-  font-size: 1.2rem;
-  padding: 12px 18px;
+  font-size: 0.9rem;
+  padding: 8px 14px;
 }
 
 .station-dialog.is-display-mode .dialog-meta .updated-at {
   margin-top: 0;
-  font-size: 1.05rem;
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
 }
 
 .station-dialog.is-display-mode .dialog-body {

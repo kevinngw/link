@@ -129,7 +129,7 @@ document.querySelector('#app').innerHTML = `
               <p id="dialog-status-pill" class="status-pill">SYNC</p>
               <p id="dialog-updated-at" class="updated-at">Waiting for snapshot</p>
             </div>
-            <button id="dialog-favorite" class="dialog-close dialog-mode-button dialog-favorite-button" type="button" aria-label="Save station">☆ Save</button>
+            <button id="dialog-favorite" class="dialog-favorite-button" type="button" aria-label="Save station">☆ Save</button>
             <button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
           </div>
         </div>
