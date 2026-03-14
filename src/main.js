@@ -108,32 +108,34 @@ document.querySelector('#app').innerHTML = `
   <dialog id="station-dialog" class="station-dialog">
     <div class="dialog-content">
       <header class="dialog-header">
-        <div>
-          <h3 id="dialog-title" class="dialog-title">
-            <span id="dialog-title-track" class="dialog-title-track">
-              <span id="dialog-title-text" class="dialog-title-text">Station</span>
-              <span id="dialog-title-text-clone" class="dialog-title-text dialog-title-text-clone" aria-hidden="true">Station</span>
-            </span>
-          </h3>
-          <p id="dialog-service-summary" class="dialog-service-summary">Service summary</p>
-        </div>
-        <div class="dialog-actions">
-          <div class="dialog-actions-top">
-            <div id="dialog-direction-tabs" class="dialog-direction-tabs" aria-label="Board direction view">
-              <button class="dialog-direction-tab is-active" data-dialog-direction="both" type="button">Both</button>
-              <button class="dialog-direction-tab" data-dialog-direction="nb" type="button">NB</button>
-              <button class="dialog-direction-tab" data-dialog-direction="sb" type="button">SB</button>
-              <button class="dialog-direction-tab" data-dialog-direction="auto" type="button">Auto</button>
-            </div>
+        <div class="dialog-header-main">
+          <div class="dialog-title-wrap">
+            <h3 id="dialog-title" class="dialog-title">
+              <span id="dialog-title-track" class="dialog-title-track">
+                <span id="dialog-title-text" class="dialog-title-text">Station</span>
+                <span id="dialog-title-text-clone" class="dialog-title-text dialog-title-text-clone" aria-hidden="true">Station</span>
+              </span>
+            </h3>
             <div id="dialog-meta" class="dialog-meta">
               <p id="dialog-status-pill" class="status-pill">SYNC</p>
               <p id="dialog-updated-at" class="updated-at">Waiting for snapshot</p>
             </div>
-            <button id="dialog-favorite" class="dialog-favorite-button" type="button" aria-label="Save station">☆ Save</button>
-            <button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
           </div>
+          <p id="dialog-service-summary" class="dialog-service-summary">Service summary</p>
+        </div>
+        <div class="dialog-actions">
+          <button id="dialog-favorite" class="dialog-favorite-button" type="button" aria-label="Save station">☆ Save</button>
+          <button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
         </div>
       </header>
+      <div class="dialog-direction-bar">
+        <div id="dialog-direction-tabs" class="dialog-direction-tabs" aria-label="Board direction view">
+          <button class="dialog-direction-tab is-active" data-dialog-direction="both" type="button">Both</button>
+          <button class="dialog-direction-tab" data-dialog-direction="nb" type="button">NB</button>
+          <button class="dialog-direction-tab" data-dialog-direction="sb" type="button">SB</button>
+          <button class="dialog-direction-tab" data-dialog-direction="auto" type="button">Auto</button>
+        </div>
+      </div>
       <div id="station-alerts-container"></div>
       <div class="dialog-body">
         <div class="arrivals-section" data-direction-section="nb">
