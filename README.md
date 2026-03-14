@@ -8,9 +8,11 @@ Realtime PWA for Puget Sound transit, tracking live vehicles, arrivals, and serv
 
 - **Multi-system board** — switch between `Link`, `RapidRide`, and `Swift` from a shared shell
 - **Live vehicle positions** — adaptive refresh via Puget Sound OneBusAway API, with slower polling on the public `TEST` key
-- **Three views** — `Map`, `Trains`, and `Insights` tabs
-- **Station arrivals dialog** — click any station to see upcoming arrivals, service summary, alerts, and a board-style display mode
-- **Station search** — press `/` or use the search button to jump to any loaded station
+- **Four views** — `Map`, `Trains` (or `Buses` per system), `Favorites`, and `Insights` tabs
+- **Station arrivals dialog** — click any station to see upcoming arrivals, service summary, alerts
+- **Board display mode** — fullscreen station view with auto-rotating directions, optimized for glanceable displays
+- **Station search** — press `/` or use the search button to jump to any loaded station; supports location-based nearby search
+- **Favorites** — save frequently used stations for quick access
 - **Insights dashboard** — line spacing, delay distribution, attention flags, and system-level health rollups
 - **Bilingual + theme toggle** — switch between English / Simplified Chinese and light / dark themes
 - **PWA support** — installable on desktop and mobile
