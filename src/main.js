@@ -341,6 +341,7 @@ dialog.addEventListener('close', () => {
   stopDialogDirectionRotation()
   setDialogDisplayMode(false)
   clearStationDialogContent()
+  state.arrivalsCache.clear()
   setDialogTitle(copyValue('station'))
   if (!state.isSyncingFromUrl) {
     clearDialogParams({ keepPage: true, keepSystem: true })
@@ -2102,18 +2103,20 @@ function canRefreshStationDialog(station, requestId = state.activeDialogRequest)
   return isPageRequestContextActive() && isActiveStationDialogRequest(station, requestId)
 }
 
-async function refreshStationDialog(station, { requestId = state.activeDialogRequest } = {}) {
+async function refreshStationDialog(station, { requestId = state.activeDialogRequest, skipCache = false } = {}) {
   if (!station) return
 
   const dialogStations = getDialogStations(station)
 
-  // Phase 1: render stale cached arrivals immediately (zero wait)
-  const cachedArrivals = dialogStations.map(({ station: s, line }) => getCachedArrivalsForStation(s, line) ?? { nb: [], sb: [] })
-  const hasAnyCache = cachedArrivals.some((a) => a.nb.length > 0 || a.sb.length > 0)
-  if (hasAnyCache) {
-    renderArrivalLists(mergeArrivalBuckets(cachedArrivals))
-    renderDialogDirectionView()
-    syncDialogTitleMarquee()
+  // Phase 1: render stale cached arrivals immediately (zero wait) - skip for fresh opens
+  if (!skipCache) {
+    const cachedArrivals = dialogStations.map(({ station: s, line }) => getCachedArrivalsForStation(s, line) ?? { nb: [], sb: [] })
+    const hasAnyCache = cachedArrivals.some((a) => a.nb.length > 0 || a.sb.length > 0)
+    if (hasAnyCache) {
+      renderArrivalLists(mergeArrivalBuckets(cachedArrivals))
+      renderDialogDirectionView()
+      syncDialogTitleMarquee()
+    }
   }
 
   const stationAlerts = getStationDialogAlerts(station)
@@ -2129,7 +2132,18 @@ async function refreshStationDialog(station, { requestId = state.activeDialogReq
 
   // Phase 2: fetch fresh arrivals and re-render
   const arrivalsByLine = await Promise.all(dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line)))
-  if (!isActiveStationDialogRequest(station, requestId)) return
+  
+  // Safeguard: abort if station changed during fetch
+  if (state.currentDialogStationId !== station.id) {
+    console.debug(`[refreshStationDialog] Station changed during fetch (expected: ${station.id}, actual: ${state.currentDialogStationId}), aborting render`)
+    return
+  }
+  
+  if (!isActiveStationDialogRequest(station, requestId)) {
+    console.debug(`[refreshStationDialog] Request ID mismatch (expected: ${requestId}, actual: ${state.activeDialogRequest}), aborting render`)
+    return
+  }
+  
   renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
   renderDialogDirectionView()
   syncDialogTitleMarquee()
@@ -2150,7 +2164,7 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
   if (updateUrl) setStationParam(station)
   startDialogAutoRefresh()
   try {
-    await refreshStationDialog(station, { requestId })
+    await refreshStationDialog(station, { requestId, skipCache: true })
   } catch (e) {
     if (state.activeDialogRequest !== requestId) return
     showToast(copyValue('stationRequestFailed'))
