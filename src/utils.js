@@ -53,6 +53,10 @@ export function getDistanceMeters(lat1, lon1, lat2, lon2) {
 
 export function formatDistanceMeters(distanceMeters) {
   if (!Number.isFinite(distanceMeters)) return ''
-  if (distanceMeters < 1000) return `${Math.round(distanceMeters)} m`
-  return `${(distanceMeters / 1000).toFixed(distanceMeters >= 10000 ? 0 : 1)} km`
+  const miles = distanceMeters * 0.000621371
+  if (miles < 0.1) {
+    const feet = Math.round(distanceMeters * 3.28084)
+    return `${feet} ft`
+  }
+  return `${miles.toFixed(miles >= 10 ? 0 : 1)} mi`
 }
