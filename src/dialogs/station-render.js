@@ -34,9 +34,10 @@ export function createStationDialogRenderers({
 
       let precisionInfo = ''
       if (arrival.distanceFromStop > 0) {
-        const distanceStr = arrival.distanceFromStop >= 1000
-          ? `${(arrival.distanceFromStop / 1000).toFixed(1)}km`
-          : `${Math.round(arrival.distanceFromStop)}m`
+        const distanceMiles = arrival.distanceFromStop * 0.000621371
+        const distanceStr = distanceMiles >= 0.1
+          ? `${distanceMiles.toFixed(1)} mi`
+          : `${Math.round(arrival.distanceFromStop * 3.28084)} ft`
         const stopsStr = copyValue('stopAway', arrival.numberOfStopsAway)
         precisionInfo = ` • ${distanceStr} • ${stopsStr}`
       }
