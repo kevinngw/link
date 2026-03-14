@@ -10,6 +10,7 @@ import { parseVehicle } from './vehicles'
 import { createMapRenderer } from './renderers/map'
 import { createTrainRenderers } from './renderers/trains'
 import { createInsightsRenderers } from './renderers/insights'
+import { createFavoritesRenderer } from './renderers/favorites'
 import { getDialogElements } from './dialogs/dom'
 import { createStationDialogDisplayController } from './dialogs/station-display'
 import { createStationDialogRenderers } from './dialogs/station-render'
@@ -97,6 +98,7 @@ document.querySelector('#app').innerHTML = `
       <section id="view-bar" class="tab-bar" aria-label="Board views">
         <button class="tab-button is-active" data-tab="map" type="button">Map</button>
         <button class="tab-button" data-tab="trains" type="button" id="tab-trains">Trains</button>
+        <button class="tab-button" data-tab="favorites" type="button">Favorites</button>
         <button class="tab-button" data-tab="insights" type="button">Insights</button>
       </section>
     </div>
@@ -1684,7 +1686,7 @@ function updateUrlParams(mutator) {
 }
 
 function setPageParam(page) {
-  const nextPage = ['map', 'trains', 'insights'].includes(page) ? page : 'map'
+  const nextPage = ['map', 'trains', 'favorites', 'insights'].includes(page) ? page : 'map'
   updateUrlParams((params) => {
     if (nextPage === 'map') params.delete('page')
     else params.set('page', nextPage)
@@ -1694,7 +1696,7 @@ function setPageParam(page) {
 function getPageFromUrl() {
   const url = new URL(window.location.href)
   const requestedPage = (url.searchParams.get('page') ?? '').trim().toLowerCase()
-  return ['map', 'trains', 'insights'].includes(requestedPage) ? requestedPage : 'map'
+  return ['map', 'trains', 'favorites', 'insights'].includes(requestedPage) ? requestedPage : 'map'
 }
 
 function setSystemParam(systemId) {
@@ -2446,6 +2448,7 @@ function render() {
   tabButtons.forEach((button) => {
     if (button.dataset.tab === 'map') button.textContent = copyValue('tabMap')
     if (button.dataset.tab === 'trains') button.textContent = getVehicleLabelPlural()
+    if (button.dataset.tab === 'favorites') button.textContent = copyValue('favorites')
     if (button.dataset.tab === 'insights') button.textContent = copyValue('tabInsights')
   })
   attachSystemSwitcherHandlers()
@@ -2469,6 +2472,18 @@ function render() {
     attachAlertClickHandlers()
     attachTrainClickHandlers()
     queueMicrotask(syncCompactLayoutFromBoard)
+    return
+  }
+
+  if (state.activeTab === 'favorites') {
+    boardElement.className = 'board'
+    renderFavorites().then((html) => {
+      if (state.activeTab === 'favorites') {
+        boardElement.innerHTML = html
+        attachDialogArrivalClickHandlers()
+        attachTrainClickHandlers() // To handle clicks on vehicles if any
+      }
+    })
     return
   }
 
@@ -2686,6 +2701,20 @@ const init = bootstrapApp({
   setLanguage,
   setTheme,
   boardElement,
+})
+
+const { renderFavorites } = createFavoritesRenderer({
+  state,
+  copyValue,
+  getVehicleLabel,
+  getVehicleLabelPlural,
+  formatArrivalTime,
+  getStatusTone,
+  getArrivalServiceStatus,
+  getAllVehicles,
+  getArrivalsForStation,
+  formatDirectionLabel,
+  getVehicleDestinationLabel
 })
 
 init().catch((error) => {
