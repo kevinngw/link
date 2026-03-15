@@ -35,6 +35,9 @@ export function createObaClient(state) {
 
     while (queue.length > 0) {
       await waitForObaCooldown()
+      
+      // Random jitter (0-100ms) to spread out concurrent requests
+      await sleep(Math.random() * 100)
 
       const item = queue.shift()
       const { url, label, attempt, resolve, reject } = item
