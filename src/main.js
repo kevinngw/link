@@ -777,7 +777,7 @@ function isPageRequestContextActive() {
   return document.visibilityState === 'visible' && document.hasFocus()
 }
 
-const { fetchJsonWithRetry, clearQueue: clearObaQueue } = createObaClient(state)
+const { fetchJsonWithRetry, clearQueue: clearObaQueue, prefetch } = createObaClient(state)
 const { buildArrivalsForLine, fetchArrivalsForStopIds, getCachedArrivalsForStation, getArrivalsForStation, mergeArrivalBuckets, getArrivalServiceStatus } = createArrivalsHelpers({
   state,
   fetchJsonWithRetry,
@@ -2377,12 +2377,29 @@ function attachStationClickHandlers() {
 
     const stationGroups = card.querySelectorAll('.station-group')
     stationGroups.forEach((group) => {
+      const stopId = group.dataset.stopId
+      const station = layout.stations.find((candidate) => candidate.id === stopId)
+      if (!station) return
+
+      // Click handler
       group.addEventListener('click', () => {
-        const stopId = group.dataset.stopId
-        const station = layout.stations.find((candidate) => candidate.id === stopId)
-        if (station) {
-          showStationDialog(station)
-        }
+        showStationDialog(station)
+      })
+      
+      // Prefetch on hover (with debounce)
+      let prefetchTimeout
+      group.addEventListener('mouseenter', () => {
+        prefetchTimeout = setTimeout(() => {
+          const stopIds = getStationStopIds(station, line)
+          stopIds.forEach((stopId) => {
+            const url = `https://api.pugetsound.onebusaway.org/api/where/arrivals-and-departures-for-stop/${stopId}.json?key=${OBA_KEY}&minutesAfter=60`
+            prefetch(url, `Prefetch ${station.name}`)
+          })
+        }, 100) // 100ms debounce
+      })
+      
+      group.addEventListener('mouseleave', () => {
+        clearTimeout(prefetchTimeout)
       })
     })
   })

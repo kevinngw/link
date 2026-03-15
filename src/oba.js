@@ -215,10 +215,40 @@ export function createObaClient(state) {
     }
   }
 
+  /**
+   * Prefetch URL (low priority, for hover states)
+   * Only fetches if not already in cache
+   */
+  function prefetch(url, label = 'Prefetch') {
+    const cached = cache.get(url)
+    if (cached && Date.now() < cached.expiresAt + OBA_CACHE_TTL_MS) {
+      return // Already have fresh or stale data
+    }
+    
+    // Check if already in queue
+    if (queue.find((item) => item.url === url)) {
+      return
+    }
+    
+    // Low priority: add to end of queue
+    queue.push({ 
+      url, 
+      label, 
+      attempt: 0, 
+      resolve: () => {}, 
+      reject: () => {},
+      background: true 
+    })
+    
+    // Start processing if not already
+    processQueue()
+  }
+
   return {
     fetchJsonWithRetry,
     isRateLimitedPayload,
     clearQueue,
     clearExpiredCache,
+    prefetch,
   }
 }
