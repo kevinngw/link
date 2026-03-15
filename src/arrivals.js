@@ -9,6 +9,23 @@ import { normalizeName } from './utils'
 const ARRIVALS_LOOKAHEAD_MINUTES = 60
 const ARRIVALS_LOOKAHEAD_MS = ARRIVALS_LOOKAHEAD_MINUTES * 60 * 1000
 
+// Adaptive concurrency controller
+const MIN_CONCURRENCY = 1
+const MAX_CONCURRENCY = 6
+let currentConcurrency = OBA_ARRIVALS_CONCURRENCY
+
+function adjustConcurrency(success) {
+  if (success) {
+    currentConcurrency = Math.min(currentConcurrency + 1, MAX_CONCURRENCY)
+  } else {
+    currentConcurrency = Math.max(currentConcurrency - 1, MIN_CONCURRENCY)
+  }
+}
+
+function getConcurrency() {
+  return currentConcurrency
+}
+
 export function classifyArrivalDirection(arrival, line) {
   const lookedUpDirection = line.directionLookup?.[arrival.tripId ?? '']
   if (lookedUpDirection === '1') return 'nb'
@@ -63,13 +80,18 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
     const dedupedStopIds = [...new Set(stopIds)]
     const results = []
     const arrivals = []
+    const concurrency = getConcurrency()
 
-    for (let index = 0; index < dedupedStopIds.length; index += OBA_ARRIVALS_CONCURRENCY) {
-      const batch = dedupedStopIds.slice(index, index + OBA_ARRIVALS_CONCURRENCY)
+    for (let index = 0; index < dedupedStopIds.length; index += concurrency) {
+      const batch = dedupedStopIds.slice(index, index + concurrency)
       const batchResults = await Promise.allSettled(
         batch.map((stopId) => fetchArrivalsForStop(stopId, signal))
       )
       results.push(...batchResults)
+      
+      // Adjust concurrency based on batch success rate
+      const successCount = batchResults.filter(r => r.status === 'fulfilled').length
+      adjustConcurrency(successCount === batch.length)
     }
 
     for (const result of results) {
