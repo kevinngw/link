@@ -1,31 +1,13 @@
 import {
   OBA_CACHE_TTL_MS,
-  OBA_COOLDOWN_BASE_MS,
-  OBA_COOLDOWN_MAX_MS,
   OBA_MAX_RETRIES,
 } from './config'
-import { sleep } from './utils'
+
 
 export function createObaClient(state) {
   const cache = new Map()
   const queue = []
   let processing = false
-
-  function getGlobalCooldownMs() {
-    const exponent = Math.max(0, state.obaRateLimitStreak - 1)
-    const baseDelayMs = Math.min(OBA_COOLDOWN_MAX_MS, OBA_COOLDOWN_BASE_MS * 2 ** exponent)
-    // Round to nearest 200ms for consistent stepping
-    const roundedDelayMs = Math.round(baseDelayMs / 200) * 200
-    const jitterMs = Math.round(Math.random() * 200)
-    return Math.min(OBA_COOLDOWN_MAX_MS, roundedDelayMs + jitterMs)
-  }
-
-  async function waitForObaCooldown() {
-    const remainingMs = state.obaCooldownUntil - Date.now()
-    if (remainingMs > 0) {
-      await sleep(remainingMs)
-    }
-  }
 
   function isRateLimitedPayload(payload) {
     return payload?.code === 429 || /rate limit/i.test(payload?.text ?? '')
@@ -36,11 +18,6 @@ export function createObaClient(state) {
     processing = true
 
     while (queue.length > 0) {
-      await waitForObaCooldown()
-      
-      // Random jitter (0-100ms) to spread out concurrent requests
-      await sleep(Math.random() * 100)
-
       const item = queue.shift()
       const { url, label, attempt, resolve, reject } = item
 
@@ -64,8 +41,6 @@ export function createObaClient(state) {
 
       const isRateLimitedResponse = response?.status === 429 || isRateLimitedPayload(payload)
       if (response?.ok && !isRateLimitedResponse) {
-        state.obaRateLimitStreak = 0
-        state.obaCooldownUntil = 0
         cache.set(url, { payload, expiresAt: Date.now() + OBA_CACHE_TTL_MS })
         resolve(payload)
         // Notify all waiting callers
@@ -86,11 +61,6 @@ export function createObaClient(state) {
           item.waiting.forEach(({ reject: r }) => r(error))
         }
         continue
-      }
-
-      if (isRateLimitedResponse) {
-        state.obaRateLimitStreak += 1
-        state.obaCooldownUntil = Date.now() + getGlobalCooldownMs()
       }
 
       // Retry: preserve waiting list
@@ -136,7 +106,6 @@ export function createObaClient(state) {
   return {
     fetchJsonWithRetry,
     isRateLimitedPayload,
-    waitForObaCooldown,
     clearQueue,
   }
 }

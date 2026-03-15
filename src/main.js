@@ -50,8 +50,6 @@ const state = {
   insightsTickerTimer: 0,
   currentTrainId: '',
   alerts: [],
-  obaCooldownUntil: 0,
-  obaRateLimitStreak: 0,
   systemSnapshots: new Map(),
   vehicleGhosts: new Map(),
   language: 'en',
@@ -2123,8 +2121,6 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
   state.activeDialogRequest = requestId
   state.currentDialogStation = station
   state.currentDialogStationId = station.id
-  // Reset cooldown when user opens a new station dialog to allow immediate retry
-  state.obaCooldownUntil = 0
   setDialogTitle(station.name)
   renderStationServiceSummary(station)
   clearStationDialogContent()
