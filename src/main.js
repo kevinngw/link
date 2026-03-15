@@ -2064,42 +2064,56 @@ async function refreshStationDialog(station, { requestId = state.activeDialogReq
 
   if (!canRefreshStationDialog(station, requestId)) return
 
-  // Phase 2: fetch fresh arrivals with single request for all lines
-  // Collect all unique stop IDs across all lines for this station
-  const allStopIds = new Set()
+  // Phase 2: fetch fresh arrivals progressively for each line
+  // Each line's data is fetched and rendered as soon as it arrives
   const lineStopIdMap = new Map() // line -> stopIds for this station
+  const linePromises = []
   
   for (const { station: matchedStation, line } of dialogStations) {
     const stopIds = getStationStopIds(matchedStation, line)
     lineStopIdMap.set(line, stopIds)
-    for (const id of stopIds) {
-      allStopIds.add(id)
+    
+    // Create a promise for each line that renders immediately when data arrives
+    const linePromise = fetchArrivalsForStopIds(stopIds).then((arrivalFeed) => {
+      // Safeguard: abort if station changed during fetch
+      if (state.currentDialogStationId !== station.id) {
+        console.debug(`[refreshStationDialog] Station changed during fetch, aborting render`)
+        return null
+      }
+      
+      if (!isActiveStationDialogRequest(station, requestId)) {
+        console.debug(`[refreshStationDialog] Request ID mismatch, aborting render`)
+        return null
+      }
+      
+      return buildArrivalsForLine(arrivalFeed, line, stopIds)
+    }).catch((error) => {
+      console.warn(`Failed to fetch arrivals for ${line.name}:`, error)
+      return { nb: [], sb: [] }
+    })
+    
+    linePromises.push({ line, promise: linePromise })
+  }
+  
+  // Progressive rendering: render each line's data as it arrives
+  const arrivalsByLine = []
+  const renderPromises = linePromises.map(async ({ line, promise }) => {
+    const arrivals = await promise
+    if (arrivals) {
+      arrivalsByLine.push(arrivals)
+      
+      // Re-render with current data (merge all available arrivals so far)
+      if (isActiveStationDialogRequest(station, requestId)) {
+        renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
+        renderDialogDirectionView()
+        syncDialogTitleMarquee()
+      }
     }
-  }
-  
-  // Single fetch for all stop IDs
-  const arrivalFeed = await fetchArrivalsForStopIds([...allStopIds])
-  
-  // Safeguard: abort if station changed during fetch
-  if (state.currentDialogStationId !== station.id) {
-    console.debug(`[refreshStationDialog] Station changed during fetch (expected: ${station.id}, actual: ${state.currentDialogStationId}), aborting render`)
-    return
-  }
-  
-  if (!isActiveStationDialogRequest(station, requestId)) {
-    console.debug(`[refreshStationDialog] Request ID mismatch (expected: ${requestId}, actual: ${state.activeDialogRequest}), aborting render`)
-    return
-  }
-  
-  // Build arrivals for each line using the shared feed
-  const arrivalsByLine = dialogStations.map(({ station: matchedStation, line }) => {
-    const stopIds = lineStopIdMap.get(line)
-    return buildArrivalsForLine(arrivalFeed, line, stopIds)
+    return arrivals
   })
   
-  renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
-  renderDialogDirectionView()
-  syncDialogTitleMarquee()
+  // Wait for all to complete
+  await Promise.all(renderPromises)
 }
 
 async function showStationDialog(station, { updateUrl = true } = {}) {
