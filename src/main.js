@@ -1,6 +1,6 @@
 import './style.css'
 import { registerSW } from 'virtual:pwa-register'
-import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, FAVORITES_STORAGE_KEY, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
+import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
 import { clamp, formatDistanceMeters, getDistanceMeters, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
@@ -10,7 +10,7 @@ import { parseVehicle } from './vehicles'
 import { createMapRenderer } from './renderers/map'
 import { createTrainRenderers } from './renderers/trains'
 import { createInsightsRenderers } from './renderers/insights'
-import { createFavoritesRenderer } from './renderers/favorites'
+
 import { getDialogElements } from './dialogs/dom'
 import { createStationDialogDisplayController } from './dialogs/station-display'
 import { createStationDialogRenderers } from './dialogs/station-render'
@@ -61,7 +61,7 @@ const state = {
   activeDialogType: '',
   currentInsightsDetailType: '',
   currentInsightsLineId: '',
-  favoriteStations: new Set(),
+
   nearbyStations: [],
   highlightedNearbyStationIndex: 0,
   geolocationStatus: '',
@@ -98,7 +98,7 @@ document.querySelector('#app').innerHTML = `
       <section id="view-bar" class="tab-bar" aria-label="Board views">
         <button class="tab-button is-active" data-tab="map" type="button">Map</button>
         <button class="tab-button" data-tab="trains" type="button" id="tab-trains">Trains</button>
-        <button class="tab-button" data-tab="favorites" type="button">Favorites</button>
+
         <button class="tab-button" data-tab="insights" type="button">Insights</button>
       </section>
     </div>
@@ -124,7 +124,6 @@ document.querySelector('#app').innerHTML = `
           <p id="dialog-service-summary" class="dialog-service-summary">Service summary</p>
         </div>
         <div class="dialog-actions">
-          <button id="dialog-favorite" class="dialog-favorite-button" type="button" aria-label="Save station">☆ Save</button>
           <button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
         </div>
       </header>
@@ -249,7 +248,7 @@ const stationSearchResultsElement = document.querySelector('#station-search-resu
 const stationSearchCloseButton = document.querySelector('#station-search-close')
 const stationLocationButton = document.querySelector('#station-location-button')
 const stationLocationStatusElement = document.querySelector('#station-location-status')
-const dialogFavoriteButton = document.querySelector('#dialog-favorite')
+
 const dialogElements = getDialogElements()
 const {
   dialog,
@@ -282,10 +281,7 @@ const {
 } = dialogElements
 
 dialogDisplay.addEventListener('click', () => toggleDialogDisplayMode())
-dialogFavoriteButton.addEventListener('click', () => {
-  if (!state.currentDialogStation) return
-  toggleFavoriteStation(state.currentDialogStation)
-})
+
 trainDialogClose.addEventListener('click', () => closeTrainDialog())
 alertDialogClose.addEventListener('click', () => closeAlertDialog())
 insightsDetailClose.addEventListener('click', () => closeInsightsDetailDialog())
@@ -437,59 +433,7 @@ let toastHideTimer = 0
 let lastToastMessage = ''
 let lastToastAt = 0
 
-function getFavoriteStationKey(station) {
-  if (!station?.id) return ''
-  return station.id
-}
 
-function loadFavoriteStations() {
-  try {
-    const raw = window.localStorage.getItem(FAVORITES_STORAGE_KEY)
-    if (!raw) return new Set()
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return new Set()
-    return new Set(parsed.filter((value) => typeof value === 'string' && value.trim()))
-  } catch (error) {
-    console.warn('Failed to load favorites:', error)
-    return new Set()
-  }
-}
-
-function saveFavoriteStations() {
-  window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify([...state.favoriteStations]))
-}
-
-function isFavoriteStation(station) {
-  if (!station?.id) return false
-  return state.favoriteStations.has(getFavoriteStationKey(station))
-}
-
-function syncDialogFavoriteButton() {
-  if (!dialogFavoriteButton) return
-  const isFavorite = state.currentDialogStation ? isFavoriteStation(state.currentDialogStation) : false
-  dialogFavoriteButton.textContent = isFavorite
-    ? (state.language === 'zh-CN' ? '★ 已收藏' : '★ Saved')
-    : (state.language === 'zh-CN' ? '☆ 收藏' : '☆ Save')
-  dialogFavoriteButton.setAttribute('aria-label', isFavorite ? copyValue('unfavoriteStation') : copyValue('favoriteStation'))
-  dialogFavoriteButton.classList.toggle('is-active', isFavorite)
-  dialogFavoriteButton.disabled = !state.currentDialogStation
-}
-
-function toggleFavoriteStation(station) {
-  if (!station?.id) return
-  const key = getFavoriteStationKey(station)
-  const alreadyFavorite = isFavoriteStation(station)
-  if (alreadyFavorite) {
-    state.favoriteStations.delete(key)
-    showToast(copyValue('removedFavorite', normalizeName(station.name)), { tone: 'info', dedupeMs: 1000 })
-  } else {
-    state.favoriteStations.add(key)
-    showToast(copyValue('addedFavorite', normalizeName(station.name)), { tone: 'info', dedupeMs: 1000 })
-  }
-  saveFavoriteStations()
-  syncDialogFavoriteButton()
-  if (stationSearchDialog.open) renderStationSearchResults()
-}
 
 function getStationSearchEntries() {
   const entries = []
@@ -537,7 +481,7 @@ function getNearbyStationSearchEntries(latitude, longitude) {
     const distanceMeters = getDistanceMeters(latitude, longitude, lat, lon)
     const dedupeKey = `${entry.systemId}:${entry.normalizedStationName}`
     const existing = deduped.get(dedupeKey)
-    const candidate = { ...entry, distanceMeters, isFavorite: isFavoriteStation({ id: entry.stationId, name: entry.stationName }) }
+    const candidate = { ...entry, distanceMeters }
     if (!existing || candidate.distanceMeters < existing.distanceMeters) {
       deduped.set(dedupeKey, candidate)
     }
@@ -632,12 +576,11 @@ function getStationSearchResults() {
       if (!searchHaystack.includes(query)) return null
     }
 
-    const favoriteBoost = isFavoriteStation({ id: entry.stationId, name: entry.stationName }) ? 500 : 0
-    return { ...entry, score: score + favoriteBoost, isFavorite: favoriteBoost > 0 }
+    return { ...entry, score }
   }).filter(Boolean)
 
   return scored
-    .sort((left, right) => Number(right.isFavorite) - Number(left.isFavorite) || right.score - left.score || left.stationName.localeCompare(right.stationName) || left.lineName.localeCompare(right.lineName))
+    .sort((left, right) => right.score - left.score || left.stationName.localeCompare(right.stationName) || left.lineName.localeCompare(right.lineName))
     .slice(0, 12)
 }
 
@@ -681,13 +624,12 @@ function renderStationSearchResults() {
             <span class="station-search-result-main">
               <span class="arrival-line-token station-search-result-token" style="--line-color:${result.lineColor};">${result.lineName[0]}</span>
               <span class="station-search-result-copy">
-                <span class="station-search-result-title">${result.isFavorite ? '★ ' : ''}${normalizeName(result.stationName)}</span>
+                <span class="station-search-result-title">${normalizeName(result.stationName)}</span>
                 <span class="station-search-result-meta">${meta}</span>
               </span>
             </span>
             <span class="station-search-result-actions">
-              <span class="station-search-result-badge">${isNearby ? copyValue('nearbyStationBadge') : (result.isFavorite ? copyValue('stationFavorites') : '')}</span>
-              <button type="button" class="station-favorite-toggle${result.isFavorite ? ' is-active' : ''}" data-station-favorite-index="${index}" aria-label="${result.isFavorite ? copyValue('unfavoriteStation') : copyValue('favoriteStation')}">${result.isFavorite ? '★' : '☆'}</button>
+
             </span>
           </div>
         `
@@ -709,17 +651,7 @@ function renderStationSearchResults() {
     })
   })
 
-  const favoriteButtons = stationSearchResultsElement.querySelectorAll('[data-station-favorite-index]')
-  favoriteButtons.forEach((button) => {
-    button.addEventListener('click', (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-      const source = hasQuery ? state.stationSearchResults : state.nearbyStations
-      const selected = source[Number(button.dataset.stationFavoriteIndex)]
-      if (!selected) return
-      toggleFavoriteStation({ id: selected.stationId, name: selected.stationName })
-    })
-  })
+
 }
 
 function openStationSearch(prefill = '', { updateUrl = true } = {}) {
@@ -1689,7 +1621,7 @@ function updateUrlParams(mutator) {
 }
 
 function setPageParam(page) {
-  const nextPage = ['map', 'trains', 'favorites', 'insights'].includes(page) ? page : 'map'
+  const nextPage = ['map', 'trains', 'insights'].includes(page) ? page : 'map'
   updateUrlParams((params) => {
     if (nextPage === 'map') params.delete('page')
     else params.set('page', nextPage)
@@ -1699,7 +1631,7 @@ function setPageParam(page) {
 function getPageFromUrl() {
   const url = new URL(window.location.href)
   const requestedPage = (url.searchParams.get('page') ?? '').trim().toLowerCase()
-  return ['map', 'trains', 'favorites', 'insights'].includes(requestedPage) ? requestedPage : 'map'
+  return ['map', 'trains', 'insights'].includes(requestedPage) ? requestedPage : 'map'
 }
 
 function setSystemParam(systemId) {
@@ -2158,7 +2090,6 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
   state.currentDialogStation = station
   state.currentDialogStationId = station.id
   setDialogTitle(station.name)
-  syncDialogFavoriteButton()
   renderStationServiceSummary(station)
   clearStationDialogContent()
   renderArrivalLists({ nb: [], sb: [] }, true)
@@ -2444,7 +2375,6 @@ function render() {
   alertDialogClose.setAttribute('aria-label', copyValue('closeAlertDialog'))
   if (!dialog.open) {
     setDialogTitle(copyValue('station'))
-    syncDialogFavoriteButton()
     dialogServiceSummary.textContent = copyValue('serviceSummary')
   }
   if (!trainDialog.open) {
@@ -2464,7 +2394,7 @@ function render() {
   tabButtons.forEach((button) => {
     if (button.dataset.tab === 'map') button.textContent = copyValue('tabMap')
     if (button.dataset.tab === 'trains') button.textContent = getVehicleLabelPlural()
-    if (button.dataset.tab === 'favorites') button.textContent = copyValue('favorites')
+
     if (button.dataset.tab === 'insights') button.textContent = copyValue('tabInsights')
   })
   attachSystemSwitcherHandlers()
@@ -2491,17 +2421,7 @@ function render() {
     return
   }
 
-  if (state.activeTab === 'favorites') {
-    boardElement.className = 'board'
-    renderFavorites().then((html) => {
-      if (state.activeTab === 'favorites') {
-        boardElement.innerHTML = html
-        attachDialogArrivalClickHandlers()
-        attachTrainClickHandlers() // To handle clicks on vehicles if any
-      }
-    })
-    return
-  }
+
 
   if (state.activeTab === 'insights') {
     boardElement.className = 'board'
@@ -2696,8 +2616,6 @@ const handleViewportResize = () => {
 }
 
 state.activeTab = getPageFromUrl()
-state.favoriteStations = loadFavoriteStations()
-
 const init = bootstrapApp({
   getPreferredLanguage,
   getPreferredTheme,
@@ -2717,20 +2635,6 @@ const init = bootstrapApp({
   setLanguage,
   setTheme,
   boardElement,
-})
-
-const { renderFavorites } = createFavoritesRenderer({
-  state,
-  copyValue,
-  getVehicleLabel,
-  getVehicleLabelPlural,
-  formatArrivalTime,
-  getStatusTone,
-  getArrivalServiceStatus,
-  getAllVehicles,
-  getArrivalsForStation,
-  formatDirectionLabel,
-  getVehicleDestinationLabel
 })
 
 init().catch((error) => {

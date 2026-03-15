@@ -19,7 +19,7 @@ export const GHOST_HISTORY_LIMIT = 6
 export const GHOST_MAX_AGE_MS = 4 * 60_000
 export const THEME_STORAGE_KEY = 'link-pulse-theme'
 export const LANGUAGE_STORAGE_KEY = 'link-pulse-language'
-export const FAVORITES_STORAGE_KEY = 'link-pulse-favorite-stations'
+
 export const DEFAULT_SYSTEM_ID = 'link'
 
 export const SYSTEM_META = {
@@ -62,15 +62,7 @@ export const UI_COPY = {
     transitSystems: 'Transit systems',
     boardViews: 'Board views',
     openStationSearch: 'Station search',
-    favorites: 'Favorites',
-    stationFavorites: 'Favorites',
-    favoriteStation: 'Save station',
-    unfavoriteStation: 'Saved station',
-    favoritesEmpty: 'Save stations for one-tap access here.',
-    favoritesCount: (count) => `${count} favorite${count === 1 ? '' : 's'}`,
-    noFavorites: (label) => `No favorite ${label} saved.`,
-    addedFavorite: (name) => `Saved ${name}`,
-    removedFavorite: (name) => `Removed ${name}`,
+
     stationSearchPlaceholder: 'Search stations, lines, or systems',
     stationSearchHint: 'Jump straight to any station across loaded systems.',
     useMyLocation: 'Use my location',
@@ -182,15 +174,7 @@ export const UI_COPY = {
     transitSystems: '交通系统',
     boardViews: '视图切换',
     openStationSearch: '站点搜索',
-    favorites: '收藏',
-    stationFavorites: '收藏',
-    favoriteStation: '收藏站点',
-    unfavoriteStation: '已收藏站点',
-    favoritesEmpty: '收藏常用站点后，可在这里一键打开。',
-    favoritesCount: (count) => `${count} 个收藏站点`,
-    noFavorites: (label) => `暂无已收藏的${label}。`,
-    addedFavorite: (name) => `已收藏 ${name}`,
-    removedFavorite: (name) => `已移除 ${name}`,
+
     stationSearchPlaceholder: '搜索站点、线路或系统',
     stationSearchHint: '可直接跳转到任意已加载系统中的站点。',
     useMyLocation: '用我的位置',

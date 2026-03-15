@@ -62,10 +62,8 @@ export function createTrainRenderers(deps) {
             <div class="train-list-main">
               <span class="line-token train-list-token" style="--line-color:${vehicle.lineColor};">${vehicle.lineToken}</span>
               <div>
-                <div class="train-list-row">
-                  <p class="train-list-title">${vehicle.lineName} ${vehicleLabel} ${vehicle.label}</p>
-                  ${renderDirectionBadge(vehicle)}
-                </div>
+                <p class="train-list-title">${vehicle.lineName} ${vehicleLabel} ${vehicle.label}</p>
+                ${renderDirectionBadge(vehicle)}
                 <p class="train-list-subtitle">${copyValue('toDestination', getVehicleDestinationLabel(vehicle, state.layouts.get(vehicle.lineId)))}</p>
                 <p class="train-list-status ${getVehicleStatusClass(vehicle, getRealtimeOffset(vehicle.nextOffset ?? 0))}" data-vehicle-status="${vehicle.id}">${formatVehicleStatus(vehicle)}</p>
               </div>
@@ -101,10 +99,8 @@ export function createTrainRenderers(deps) {
                       <div class="train-focus-header">
                         <div>
                           <p class="train-focus-kicker">${state.language === 'zh-CN' ? '最近一班' : 'Next up'}</p>
-                          <div class="train-list-row">
-                            <p class="train-focus-title">${focusVehicle.lineName} ${vehicleLabel} ${focusVehicle.label}</p>
-                            ${renderDirectionBadge(focusVehicle)}
-                          </div>
+                          <p class="train-focus-title">${focusVehicle.lineName} ${vehicleLabel} ${focusVehicle.label}</p>
+                          ${renderDirectionBadge(focusVehicle)}
                         </div>
                         <div class="train-focus-side">
                           <p class="train-focus-time" data-vehicle-next-countdown="${focusVehicle.id}">${formatArrivalTime(getRealtimeOffset(focusVehicle.nextOffset ?? 0))}</p>
