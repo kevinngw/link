@@ -14,8 +14,10 @@ export function createObaClient(state) {
   function getGlobalCooldownMs() {
     const exponent = Math.max(0, state.obaRateLimitStreak - 1)
     const baseDelayMs = Math.min(OBA_COOLDOWN_MAX_MS, OBA_COOLDOWN_BASE_MS * 2 ** exponent)
-    const jitterMs = Math.round(baseDelayMs * (0.15 + Math.random() * 0.2))
-    return Math.min(OBA_COOLDOWN_MAX_MS, baseDelayMs + jitterMs)
+    // Round to nearest 200ms for consistent stepping
+    const roundedDelayMs = Math.round(baseDelayMs / 200) * 200
+    const jitterMs = Math.round(Math.random() * 200)
+    return Math.min(OBA_COOLDOWN_MAX_MS, roundedDelayMs + jitterMs)
   }
 
   async function waitForObaCooldown() {
