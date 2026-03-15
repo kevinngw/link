@@ -50,23 +50,25 @@ export function getStatusTone(status) {
 }
 
 export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationStopIds, copyValue, getLanguage }) {
-  async function fetchArrivalsForStop(stopId) {
+  async function fetchArrivalsForStop(stopId, signal) {
     const url = `${OBA_BASE_URL}/arrivals-and-departures-for-stop/${stopId}.json?key=${OBA_KEY}&minutesAfter=${ARRIVALS_LOOKAHEAD_MINUTES}`
-    const payload = await fetchJsonWithRetry(url, 'Arrivals')
+    const payload = await fetchJsonWithRetry(url, 'Arrivals', signal)
     if (payload.code !== 200) {
       throw new Error(payload.text || `Arrivals request failed for ${stopId}`)
     }
     return payload.data?.entry?.arrivalsAndDepartures ?? []
   }
 
-  async function fetchArrivalsForStopIds(stopIds) {
+  async function fetchArrivalsForStopIds(stopIds, signal) {
     const dedupedStopIds = [...new Set(stopIds)]
     const results = []
     const arrivals = []
 
     for (let index = 0; index < dedupedStopIds.length; index += OBA_ARRIVALS_CONCURRENCY) {
       const batch = dedupedStopIds.slice(index, index + OBA_ARRIVALS_CONCURRENCY)
-      const batchResults = await Promise.allSettled(batch.map((stopId) => fetchArrivalsForStop(stopId)))
+      const batchResults = await Promise.allSettled(
+        batch.map((stopId) => fetchArrivalsForStop(stopId, signal))
+      )
       results.push(...batchResults)
     }
 

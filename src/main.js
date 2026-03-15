@@ -59,6 +59,7 @@ const state = {
   activeDialogType: '',
   currentInsightsDetailType: '',
   currentInsightsLineId: '',
+  dialogAbortController: null,
 
   nearbyStations: [],
   highlightedNearbyStationIndex: 0,
@@ -332,6 +333,11 @@ dialog.addEventListener('close', () => {
   state.currentDialogStationId = ''
   state.currentDialogStation = null
   state.activeDialogType = ''
+  // Cancel pending requests
+  if (state.dialogAbortController) {
+    state.dialogAbortController.abort()
+    state.dialogAbortController = null
+  }
   stopDialogAutoRefresh()
   stopDialogDisplayScroll()
   stopDialogDirectionRotation()
@@ -2063,6 +2069,14 @@ async function refreshStationDialog(station, { requestId = state.activeDialogReq
 
   if (!canRefreshStationDialog(station, requestId)) return
 
+  // Cancel previous request if any
+  if (state.dialogAbortController) {
+    state.dialogAbortController.abort()
+  }
+  // Create new controller for this request
+  state.dialogAbortController = new AbortController()
+  const { signal } = state.dialogAbortController
+
   // Phase 2: fetch fresh arrivals for all lines
   // Collect all unique stop IDs across all lines, then fetch once and distribute
   const lineStopIdMap = new Map() // line -> stopIds for this station
@@ -2077,10 +2091,16 @@ async function refreshStationDialog(station, { requestId = state.activeDialogReq
   }
   
   // Single fetch for all unique stop IDs
-  const arrivalFeed = await fetchArrivalsForStopIds([...allStopIds]).catch((error) => {
+  let arrivalFeed = []
+  try {
+    arrivalFeed = await fetchArrivalsForStopIds([...allStopIds], signal)
+  } catch (error) {
+    if (error.message?.includes('cancelled') || error.name === 'AbortError') {
+      console.debug(`[refreshStationDialog] Request cancelled for ${station.name}`)
+      return
+    }
     console.warn(`Failed to fetch arrivals for station ${station.name}:`, error)
-    return []
-  })
+  }
   
   // Safeguard: abort if station changed during fetch
   if (state.currentDialogStationId !== station.id) {
