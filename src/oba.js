@@ -102,9 +102,18 @@ export function createObaClient(state) {
     })
   }
 
+  function clearQueue() {
+    // Reject and clear all pending queue items
+    while (queue.length > 0) {
+      const item = queue.shift()
+      item.reject(new Error('Request cancelled: dialog closed'))
+    }
+  }
+
   return {
     fetchJsonWithRetry,
     isRateLimitedPayload,
     waitForObaCooldown,
+    clearQueue,
   }
 }

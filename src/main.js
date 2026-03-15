@@ -340,6 +340,7 @@ dialog.addEventListener('close', () => {
   setDialogDisplayMode(false)
   clearStationDialogContent()
   state.arrivalsCache.clear()
+  clearObaQueue() // Cancel pending requests for this dialog
   setDialogTitle(copyValue('station'))
   if (!state.isSyncingFromUrl) {
     clearDialogParams({ keepPage: true, keepSystem: true })
@@ -772,7 +773,7 @@ function isPageRequestContextActive() {
   return document.visibilityState === 'visible' && document.hasFocus()
 }
 
-const { fetchJsonWithRetry } = createObaClient(state)
+const { fetchJsonWithRetry, clearQueue: clearObaQueue } = createObaClient(state)
 const { buildArrivalsForLine, fetchArrivalsForStopIds, getCachedArrivalsForStation, getArrivalsForStation, mergeArrivalBuckets, getArrivalServiceStatus } = createArrivalsHelpers({
   state,
   fetchJsonWithRetry,
