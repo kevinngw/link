@@ -1701,6 +1701,9 @@ button.train-list-item {
   margin-top: 10px;
   color: var(--text-primary);
   font-size: 0.96rem;
+  overflow-wrap: break-word;
+  word-break: normal;
+  white-space: normal;
 }
 
 .train-focus-segment {
