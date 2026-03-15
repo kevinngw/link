@@ -124,15 +124,40 @@ export function createObaClient(state) {
   }
 
   /**
-   * Fetch JSON with retry and deduplication
+   * Stale-while-revalidate fetch
+   * 1. Fresh cache (< TTL): return immediately
+   * 2. Stale cache (TTL ~ 2x TTL): return stale, revalidate in background
+   * 3. Expired (> 2x TTL): wait for revalidation
    * @param {string} url - Request URL
    * @param {string} label - Request label for error messages
    * @param {AbortSignal} [signal] - Optional abort signal
+   * @param {boolean} [forceFresh=false] - Force fresh fetch
    */
-  async function fetchJsonWithRetry(url, label, signal) {
-    // Check cache first
+  async function fetchJsonWithRetry(url, label, signal, forceFresh = false) {
+    const now = Date.now()
     const cached = cache.get(url)
-    if (cached && Date.now() < cached.expiresAt) {
+    
+    // Fresh cache - return immediately
+    if (!forceFresh && cached && now < cached.expiresAt) {
+      return cached.payload
+    }
+    
+    // Stale cache - return stale data, revalidate in background
+    if (!forceFresh && cached && now < cached.expiresAt + OBA_CACHE_TTL_MS) {
+      // Background revalidation
+      const existingItem = queue.find((item) => item.url === url)
+      if (!existingItem) {
+        queue.push({ 
+          url, 
+          label, 
+          attempt: 0, 
+          resolve: () => {}, // No-op, we already returned
+          reject: () => {}, 
+          signal,
+          background: true // Mark as background request
+        })
+        processQueue()
+      }
       return cached.payload
     }
 
@@ -143,7 +168,6 @@ export function createObaClient(state) {
         if (!existingItem.waiting) existingItem.waiting = []
         existingItem.waiting.push({ resolve, reject })
         
-        // Also respect new signal
         if (signal) {
           signal.addEventListener('abort', () => {
             reject(new Error('Request cancelled'))
