@@ -2357,7 +2357,6 @@ function render() {
   stationSearchInput.setAttribute('placeholder', copyValue('stationSearchPlaceholder'))
   if (stationSearchDialog.open) renderStationSearchResults()
   else stationSearchMetaElement.textContent = copyValue('searchShortcut')
-  syncDialogFavoriteButton()
   languageToggleButton.textContent = copyValue('languageToggle')
   languageToggleButton.setAttribute('aria-label', copyValue('languageToggleAria'))
   themeToggleButton.textContent = state.theme === 'dark' ? copyValue('themeLight') : copyValue('themeDark')
