@@ -1,4 +1,4 @@
-import { DATA_URL, DEFAULT_SYSTEM_ID } from './config'
+import { DATA_URL, DEFAULT_SYSTEM_ID, SYSTEM_DATA_URL } from './config'
 import { normalizeName, sleep } from './utils'
 
 export function buildLayout(line) {
@@ -66,7 +66,39 @@ function applySystemState(state, systemId) {
   state.vehicleGhosts = new Map()
 }
 
-export async function loadStaticData({ state, getSystemIdFromUrl }) {
+async function loadSystemData(systemId) {
+  const STATIC_MAX_RETRIES = 4
+  const STATIC_RETRY_BASE_MS = 1_000
+  const url = SYSTEM_DATA_URL(systemId)
+
+  for (let attempt = 0; attempt <= STATIC_MAX_RETRIES; attempt += 1) {
+    let response = null
+    let payload = null
+
+    try {
+      response = await fetch(url, { cache: 'no-store' })
+      payload = await response.json()
+    } catch (error) {
+      if (attempt === STATIC_MAX_RETRIES) throw error
+      await sleep(STATIC_RETRY_BASE_MS * 2 ** attempt)
+      continue
+    }
+
+    if (!response.ok) {
+      if (attempt === STATIC_MAX_RETRIES) {
+        throw new Error(`System data load failed with ${response.status}`)
+      }
+      await sleep(STATIC_RETRY_BASE_MS * 2 ** attempt)
+      continue
+    }
+
+    return payload.system
+  }
+
+  throw new Error(`Failed to load system data for ${systemId}`)
+}
+
+async function loadIndex() {
   const STATIC_MAX_RETRIES = 4
   const STATIC_RETRY_BASE_MS = 1_000
 
@@ -85,20 +117,52 @@ export async function loadStaticData({ state, getSystemIdFromUrl }) {
 
     if (!response.ok) {
       if (attempt === STATIC_MAX_RETRIES) {
-        throw new Error(`Static data load failed with ${response.status}`)
+        throw new Error(`Index load failed with ${response.status}`)
       }
       await sleep(STATIC_RETRY_BASE_MS * 2 ** attempt)
       continue
     }
 
-    const systems = payload.systems ?? []
-    state.systemsById = new Map(systems.map((system) => [system.id, system]))
-    state.layoutsBySystem = new Map(
-      systems.map((system) => [system.id, new Map(system.lines.map((line) => [line.id, buildLayout(line)]))]),
-    )
-    applySystemState(state, getSystemIdFromUrl())
-    return
+    return payload.systems ?? []
   }
+
+  throw new Error('Failed to load index')
+}
+
+export async function loadStaticData({ state, getSystemIdFromUrl }) {
+  // 加载索引（只包含系统列表）
+  const indexSystems = await loadIndex()
+  state.systemsById = new Map(indexSystems.map((system) => [system.id, system]))
+  state.layoutsBySystem = new Map()
+
+  // 加载默认系统的完整数据
+  const targetSystemId = getSystemIdFromUrl()
+  const systemToLoad = state.systemsById.has(targetSystemId) ? targetSystemId : DEFAULT_SYSTEM_ID
+
+  const systemData = await loadSystemData(systemToLoad)
+  state.systemsById.set(systemToLoad, systemData)
+  state.layoutsBySystem.set(
+    systemToLoad,
+    new Map(systemData.lines.map((line) => [line.id, buildLayout(line)])),
+  )
+
+  applySystemState(state, targetSystemId)
+}
+
+export async function loadSystemDataById(state, systemId) {
+  if (state.systemsById.get(systemId)?.lines) {
+    // 已加载过完整数据
+    return state.systemsById.get(systemId)
+  }
+
+  const systemData = await loadSystemData(systemId)
+  state.systemsById.set(systemId, systemData)
+  state.layoutsBySystem.set(
+    systemId,
+    new Map(systemData.lines.map((line) => [line.id, buildLayout(line)])),
+  )
+
+  return systemData
 }
 
 export function bootstrapApp({

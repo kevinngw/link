@@ -4,7 +4,12 @@ import path from 'node:path'
 import AdmZip from 'adm-zip'
 import { parse } from 'csv-parse/sync'
 
-const OUTPUT_FILE = path.resolve('public/pulse-data.json')
+const OUTPUT_DIR = path.resolve('public')
+const INDEX_FILE = path.resolve(OUTPUT_DIR, 'pulse-data.json')
+
+function getSystemFilePath(systemId) {
+  return path.resolve(OUTPUT_DIR, `pulse-data-${systemId}.json`)
+}
 
 const SYSTEM_CONFIG = {
   link: {
@@ -497,19 +502,37 @@ async function buildSystem(systemConfig) {
   }
 }
 
-async function writeOutputFile(payload) {
-  await fs.mkdir(path.dirname(OUTPUT_FILE), { recursive: true })
+async function writeOutputFile(systems) {
+  await fs.mkdir(OUTPUT_DIR, { recursive: true })
 
-  const nextContent = `${JSON.stringify(payload, null, 2)}\n`
-  const existingContent = await fs.readFile(OUTPUT_FILE, 'utf8').catch(() => '')
+  // 为每个系统生成单独的数据文件
+  for (const system of systems) {
+    const filePath = getSystemFilePath(system.id)
+    const systemData = { system }
+    const nextContent = `${JSON.stringify(systemData, null, 2)}\n`
+    const existingContent = await fs.readFile(filePath, 'utf8').catch(() => '')
 
-  if (existingContent === nextContent) {
-    console.log(`Static data unchanged: ${path.relative(process.cwd(), OUTPUT_FILE)}`)
-    return
+    if (existingContent === nextContent) {
+      console.log(`Static data unchanged: ${path.relative(process.cwd(), filePath)}`)
+    } else {
+      await fs.writeFile(filePath, nextContent)
+      console.log(`Static data updated: ${path.relative(process.cwd(), filePath)} (${(nextContent.length / 1024).toFixed(1)} KB)`)
+    }
   }
 
-  await fs.writeFile(OUTPUT_FILE, nextContent)
-  console.log(`Static data updated: ${path.relative(process.cwd(), OUTPUT_FILE)}`)
+  // 生成索引文件（只包含系统列表，不含详细数据）
+  const indexPayload = {
+    systems: systems.map((s) => ({ id: s.id, name: s.name, agencyId: s.agencyId })),
+  }
+  const indexContent = `${JSON.stringify(indexPayload, null, 2)}\n`
+  const existingIndex = await fs.readFile(INDEX_FILE, 'utf8').catch(() => '')
+
+  if (existingIndex === indexContent) {
+    console.log(`Index unchanged: ${path.relative(process.cwd(), INDEX_FILE)}`)
+  } else {
+    await fs.writeFile(INDEX_FILE, indexContent)
+    console.log(`Index updated: ${path.relative(process.cwd(), INDEX_FILE)}`)
+  }
 }
 
 async function main() {
@@ -523,7 +546,7 @@ async function main() {
   }
   const systems = [...gtfsSystems, ...obaSystems]
 
-  await writeOutputFile({ systems })
+  await writeOutputFile(systems)
 }
 
 main().catch((error) => {

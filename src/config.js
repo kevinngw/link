@@ -1,4 +1,5 @@
 export const DATA_URL = './pulse-data.json'
+export const SYSTEM_DATA_URL = (systemId) => `./pulse-data-${systemId}.json`
 export const OBA_BASE_URL = 'https://api.pugetsound.onebusaway.org/api/where'
 export const OBA_KEY = (import.meta.env.VITE_OBA_KEY || 'TEST').trim() || 'TEST'
 export const IS_PUBLIC_TEST_KEY = OBA_KEY === 'TEST'

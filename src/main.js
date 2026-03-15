@@ -14,7 +14,7 @@ import { getDialogElements } from './dialogs/dom'
 import { createStationDialogDisplayController } from './dialogs/station-display'
 import { createStationDialogRenderers } from './dialogs/station-render'
 import { createOverlayDialogs } from './dialogs/overlays'
-import { bootstrapApp, loadStaticData } from './static-data'
+import { bootstrapApp, loadStaticData, loadSystemDataById } from './static-data'
 
 const state = {
   fetchedAt: '',
@@ -2560,8 +2560,24 @@ function applySystem(systemId) {
 
 async function switchSystem(systemId, { updateUrl = true, preserveDialog = false } = {}) {
   if (!state.systemsById.has(systemId) || state.activeSystemId === systemId) {
-    if (updateUrl) setSystemParam(state.activeSystemId)
-    return
+    // 如果系统已存在但还没有加载详细数据（lines），需要加载
+    if (state.systemsById.has(systemId) && !state.systemsById.get(systemId)?.lines) {
+      // 继续加载数据
+    } else {
+      if (updateUrl) setSystemParam(state.activeSystemId)
+      return
+    }
+  }
+
+  // 按需加载系统数据
+  if (!state.systemsById.get(systemId)?.lines) {
+    try {
+      await loadSystemDataById(state, systemId)
+    } catch (error) {
+      console.error('Failed to load system data:', error)
+      showToast(copyValue('startupRequestFailed'))
+      return
+    }
   }
 
   applySystem(systemId)
