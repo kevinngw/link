@@ -68,6 +68,10 @@ export function createObaClient(state) {
         state.obaCooldownUntil = 0
         cache.set(url, { payload, expiresAt: Date.now() + OBA_CACHE_TTL_MS })
         resolve(payload)
+        // Notify all waiting callers
+        if (item.waiting) {
+          item.waiting.forEach(({ resolve: r }) => r(payload))
+        }
         continue
       }
 
@@ -75,9 +79,12 @@ export function createObaClient(state) {
         (response != null && (response.status === 429 || (response.status >= 500 && response.status < 600)))
 
       if (attempt >= OBA_MAX_RETRIES || !isTransientError) {
-        if (networkError) reject(networkError)
-        else if (payload?.text) reject(new Error(payload.text))
-        else reject(new Error(`${label} request failed with ${response?.status ?? 'network error'}`))
+        const error = networkError || new Error(payload?.text || `${label} request failed with ${response?.status ?? 'network error'}`)
+        reject(error)
+        // Notify all waiting callers
+        if (item.waiting) {
+          item.waiting.forEach(({ reject: r }) => r(error))
+        }
         continue
       }
 
@@ -86,7 +93,8 @@ export function createObaClient(state) {
         state.obaCooldownUntil = Date.now() + getGlobalCooldownMs()
       }
 
-      queue.push({ url, label, attempt: attempt + 1, resolve, reject })
+      // Retry: preserve waiting list
+      queue.push({ url, label, attempt: attempt + 1, resolve, reject, waiting: item.waiting })
     }
 
     processing = false
@@ -95,6 +103,16 @@ export function createObaClient(state) {
   async function fetchJsonWithRetry(url, label) {
     const cached = cache.get(url)
     if (cached && Date.now() < cached.expiresAt) return cached.payload
+
+    // Check if there's already a pending request for this URL in the queue
+    const existingItem = queue.find((item) => item.url === url)
+    if (existingItem) {
+      // Add this caller's resolve/reject to the existing item's waiting list
+      return new Promise((resolve, reject) => {
+        if (!existingItem.waiting) existingItem.waiting = []
+        existingItem.waiting.push({ resolve, reject })
+      })
+    }
 
     return new Promise((resolve, reject) => {
       queue.push({ url, label, attempt: 0, resolve, reject })
@@ -106,7 +124,12 @@ export function createObaClient(state) {
     // Reject and clear all pending queue items
     while (queue.length > 0) {
       const item = queue.shift()
-      item.reject(new Error('Request cancelled: dialog closed'))
+      const error = new Error('Request cancelled: dialog closed')
+      item.reject(error)
+      // Notify all waiting callers
+      if (item.waiting) {
+        item.waiting.forEach(({ reject }) => reject(error))
+      }
     }
   }
 
