@@ -2511,7 +2511,28 @@ button.train-list-item {
   .train-focus-header,
   .train-queue-item,
   .train-list-row {
-    display: grid;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .train-focus-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .train-list-row {
+    align-items: flex-start;
+  }
+
+  .train-list-title {
+    font-size: 0.92rem;
+    word-break: keep-all;
+  }
+
+  .train-focus-title {
+    font-size: 1.05rem;
+    word-break: keep-all;
   }
 
   .train-focus-metrics {
