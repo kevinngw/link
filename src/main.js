@@ -2064,8 +2064,21 @@ async function refreshStationDialog(station, { requestId = state.activeDialogReq
 
   if (!canRefreshStationDialog(station, requestId)) return
 
-  // Phase 2: fetch fresh arrivals and re-render
-  const arrivalsByLine = await Promise.all(dialogStations.map(({ station: matchedStation, line }) => getArrivalsForStation(matchedStation, line)))
+  // Phase 2: fetch fresh arrivals with single request for all lines
+  // Collect all unique stop IDs across all lines for this station
+  const allStopIds = new Set()
+  const lineStopIdMap = new Map() // line -> stopIds for this station
+  
+  for (const { station: matchedStation, line } of dialogStations) {
+    const stopIds = getStationStopIds(matchedStation, line)
+    lineStopIdMap.set(line, stopIds)
+    for (const id of stopIds) {
+      allStopIds.add(id)
+    }
+  }
+  
+  // Single fetch for all stop IDs
+  const arrivalFeed = await fetchArrivalsForStopIds([...allStopIds])
   
   // Safeguard: abort if station changed during fetch
   if (state.currentDialogStationId !== station.id) {
@@ -2077,6 +2090,12 @@ async function refreshStationDialog(station, { requestId = state.activeDialogReq
     console.debug(`[refreshStationDialog] Request ID mismatch (expected: ${requestId}, actual: ${state.activeDialogRequest}), aborting render`)
     return
   }
+  
+  // Build arrivals for each line using the shared feed
+  const arrivalsByLine = dialogStations.map(({ station: matchedStation, line }) => {
+    const stopIds = lineStopIdMap.get(line)
+    return buildArrivalsForLine(arrivalFeed, line, stopIds)
+  })
   
   renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
   renderDialogDirectionView()
