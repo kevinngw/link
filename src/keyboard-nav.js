@@ -25,7 +25,6 @@ export function createKeyboardNavigation(state, actions) {
     'Enter': 'select',
     'Escape': 'close',
     ' ': 'toggleDisplay', // Space
-    'f': 'toggleFavorite',
     'r': 'refresh',
     '/': 'search',
     '?': 'help',

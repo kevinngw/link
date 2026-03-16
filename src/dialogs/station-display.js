@@ -20,6 +20,8 @@ export function createStationDialogDisplayController({
     dialogTitleTextClone,
     dialogDisplay,
     dialogDirectionTabs,
+    arrivalsTitleNb,
+    arrivalsTitleSb,
     arrivalsSectionNb,
     arrivalsNb,
     arrivalsSectionSb,
@@ -93,8 +95,8 @@ export function createStationDialogDisplayController({
       button.classList.toggle('is-active', button.dataset.dialogDirection === requestedDirection)
     })
 
-    dialog.classList.toggle('show-nb-only', state.dialogDisplayMode && direction === 'nb')
-    dialog.classList.toggle('show-sb-only', state.dialogDisplayMode && direction === 'sb')
+    dialog.classList.toggle('show-nb-only', direction === 'nb')
+    dialog.classList.toggle('show-sb-only', direction === 'sb')
 
     if (animate) {
       startDialogDirectionAnimation(direction)

@@ -123,8 +123,7 @@ document.querySelector('#app').innerHTML = `
           <p id="dialog-service-summary" class="dialog-service-summary">Service summary</p>
         </div>
         <div class="dialog-actions">
-          <button id="dialog-favorite" class="dialog-favorite-button" type="button" aria-label="Save station">☆ Save</button>
-          <button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
+<button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
         </div>
       </header>
       <div class="dialog-direction-bar">
@@ -736,14 +735,18 @@ function showToast(message, { tone = 'error', dedupeMs = 15_000 } = {}) {
   }, 4500)
 }
 
+function setArrivalsTitleHtml(element, text) {
+  element.innerHTML = `<span class="arrivals-title-track"><span class="arrivals-title-text">${text}</span><span class="arrivals-title-text arrivals-title-clone" aria-hidden="true">${text}</span></span>`
+}
+
 function clearStationDialogContent() {
   stationAlertsContainer.innerHTML = ''
   arrivalsNbPinned.innerHTML = ''
   arrivalsSbPinned.innerHTML = ''
   arrivalsNb.innerHTML = ''
   arrivalsSb.innerHTML = ''
-  arrivalsTitleNb.textContent = formatDirectionLabel('▲', '', { includeSymbol: true })
-  arrivalsTitleSb.textContent = formatDirectionLabel('▼', '', { includeSymbol: true })
+  setArrivalsTitleHtml(arrivalsTitleNb, formatDirectionLabel('▲', '', { includeSymbol: true }))
+  setArrivalsTitleHtml(arrivalsTitleSb, formatDirectionLabel('▼', '', { includeSymbol: true }))
   dialogServiceSummary.textContent = copyValue('serviceSummary')
 }
 
@@ -2435,8 +2438,8 @@ function render() {
   systemBarElement.setAttribute('aria-label', copyValue('transitSystems'))
   viewBarElement.setAttribute('aria-label', copyValue('boardViews'))
   document.querySelector('#dialog-direction-tabs')?.setAttribute('aria-label', copyValue('boardDirectionView'))
-  arrivalsTitleNb.textContent = formatDirectionLabel('▲', getDialogDirectionSummary('▲'), { includeSymbol: true })
-  arrivalsTitleSb.textContent = formatDirectionLabel('▼', getDialogDirectionSummary('▼'), { includeSymbol: true })
+  setArrivalsTitleHtml(arrivalsTitleNb, formatDirectionLabel('▲', getDialogDirectionSummary('▲'), { includeSymbol: true }))
+  setArrivalsTitleHtml(arrivalsTitleSb, formatDirectionLabel('▼', getDialogDirectionSummary('▼'), { includeSymbol: true }))
   dialogDisplay.textContent = state.dialogDisplayMode ? copyValue('exit') : copyValue('board')
   dialogDisplay.setAttribute('aria-label', state.dialogDisplayMode ? copyValue('exit') : copyValue('board'))
   trainDialogClose.setAttribute('aria-label', copyValue('closeTrainDialog'))
@@ -2665,7 +2668,7 @@ async function refreshVehicles() {
 
   render()
 
-  if (state.activeDialogType === 'train' && state.currentTrainId) {
+  if (trainDialog.open && state.currentTrainId) {
     const currentVehicle = getAllVehicles().find((vehicle) => vehicle.id === state.currentTrainId)
     if (currentVehicle) renderTrainDialog(currentVehicle, { updateUrl: false })
   }
