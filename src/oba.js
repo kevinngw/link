@@ -3,6 +3,8 @@ import {
   OBA_MAX_RETRIES,
 } from './config'
 
+const REQUEST_TIMEOUT_MS = 10_000
+
 /**
  * Create OBA API client with request deduplication, caching, and cancellation
  */
@@ -51,9 +53,10 @@ export function createObaClient(state) {
       currentController = new AbortController()
       const fetchSignal = currentController.signal
 
-      // Combine external signal with internal controller
+      // Combine external signal and timeout with internal controller
       const onAbort = () => currentController.abort()
       signal?.addEventListener('abort', onAbort)
+      const timeoutId = setTimeout(() => currentController?.abort(), REQUEST_TIMEOUT_MS)
 
       let response = null
       let payload = null
@@ -62,10 +65,11 @@ export function createObaClient(state) {
       try {
         const result = await fetchWithAbort(url, fetchSignal)
         response = result.response
-        
+
         if (result.error === 'ABORTED') {
           reject(new Error('Request cancelled'))
           signal?.removeEventListener('abort', onAbort)
+          clearTimeout(timeoutId)
           continue
         }
         if (result.error) {
@@ -76,6 +80,7 @@ export function createObaClient(state) {
       }
 
       signal?.removeEventListener('abort', onAbort)
+      clearTimeout(timeoutId)
       currentController = null
 
       if (response !== null) {

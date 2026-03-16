@@ -1,8 +1,21 @@
+// Headway health thresholds (in minutes)
+const HEADWAY = {
+  BUNCHING_MAX: 12,
+  BUNCHING_MIN: 4,
+  BUNCHING_RATIO: 3,
+  UNEVEN_MAX: 12,
+  UNEVEN_SPREAD: 6,
+  SPARSE_AVG: 18,
+  LARGE_GAP: 12,
+}
+
+function gapsForDirection(vehicles) {
+  const sorted = [...vehicles].sort((a, b) => a.minutePosition - b.minutePosition)
+  return sorted.slice(1).map((v, i) => Math.round(v.minutePosition - sorted[i].minutePosition))
+}
+
 export function computeLineHeadways(nb, sb) {
-  const sortedNb = [...nb].sort((a, b) => a.minutePosition - b.minutePosition)
-  const sortedSb = [...sb].sort((a, b) => a.minutePosition - b.minutePosition)
-  const gaps = (sorted) => sorted.slice(1).map((v, i) => Math.round(v.minutePosition - sorted[i].minutePosition))
-  return { nbGaps: gaps(sortedNb), sbGaps: gaps(sortedSb) }
+  return { nbGaps: gapsForDirection(nb), sbGaps: gapsForDirection(sb) }
 }
 
 export function computeGapStats(gaps) {
@@ -27,9 +40,9 @@ export function classifyHeadwayHealth(gaps, count) {
   if (count < 2 || stats.avg == null) return { health: 'quiet', stats }
 
   let health = 'healthy'
-  if ((stats.max >= 12 && stats.min <= 4) || stats.ratio >= 3) health = 'bunched'
-  else if (stats.max >= 12 || stats.spread >= 6) health = 'uneven'
-  else if (stats.avg >= 18) health = 'sparse'
+  if ((stats.max >= HEADWAY.BUNCHING_MAX && stats.min <= HEADWAY.BUNCHING_MIN) || stats.ratio >= HEADWAY.BUNCHING_RATIO) health = 'bunched'
+  else if (stats.max >= HEADWAY.UNEVEN_MAX || stats.spread >= HEADWAY.UNEVEN_SPREAD) health = 'uneven'
+  else if (stats.avg >= HEADWAY.SPARSE_AVG) health = 'sparse'
 
   return { health, stats }
 }
@@ -52,7 +65,7 @@ export function formatPercent(value, total) {
 export function getLineAttentionReasons({ worstGap, severeLateCount, alertCount, balanceDelta, language }) {
   const reasons = []
 
-  if (worstGap >= 12) {
+  if (worstGap >= HEADWAY.LARGE_GAP) {
     reasons.push({ key: 'gap', tone: 'alert', label: language === 'zh-CN' ? '大间隔' : 'Large gap' })
   }
   if (severeLateCount > 0) {

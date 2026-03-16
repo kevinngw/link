@@ -8,22 +8,18 @@ import { normalizeName } from './utils'
 
 const ARRIVALS_LOOKAHEAD_MINUTES = 60
 const ARRIVALS_LOOKAHEAD_MS = ARRIVALS_LOOKAHEAD_MINUTES * 60 * 1000
+const MAX_ARRIVALS_PER_DIRECTION = 4
+
+const sortByArrivalTime = (arr) => arr.sort((a, b) => a.arrivalTime - b.arrivalTime)
 
 // Adaptive concurrency controller
-const MIN_CONCURRENCY = 1
-const MAX_CONCURRENCY = 6
-let currentConcurrency = OBA_ARRIVALS_CONCURRENCY
-
-function adjustConcurrency(success) {
-  if (success) {
-    currentConcurrency = Math.min(currentConcurrency + 1, MAX_CONCURRENCY)
-  } else {
-    currentConcurrency = Math.max(currentConcurrency - 1, MIN_CONCURRENCY)
-  }
-}
-
-function getConcurrency() {
-  return currentConcurrency
+const concurrency = {
+  value: OBA_ARRIVALS_CONCURRENCY,
+  adjust(success) {
+    this.value = success
+      ? Math.min(this.value + 1, 6)
+      : Math.max(this.value - 1, 1)
+  },
 }
 
 export function classifyArrivalDirection(arrival, line) {
@@ -80,10 +76,8 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
     const dedupedStopIds = [...new Set(stopIds)]
     const results = []
     const arrivals = []
-    const concurrency = getConcurrency()
-
-    for (let index = 0; index < dedupedStopIds.length; index += concurrency) {
-      const batch = dedupedStopIds.slice(index, index + concurrency)
+    for (let index = 0; index < dedupedStopIds.length; index += concurrency.value) {
+      const batch = dedupedStopIds.slice(index, index + concurrency.value)
       const batchResults = await Promise.allSettled(
         batch.map((stopId) => fetchArrivalsForStop(stopId, signal))
       )
@@ -91,7 +85,7 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
       
       // Adjust concurrency based on batch success rate
       const successCount = batchResults.filter(r => r.status === 'fulfilled').length
-      adjustConcurrency(successCount === batch.length)
+      concurrency.adjust(successCount === batch.length)
     }
 
     for (const result of results) {
@@ -141,10 +135,8 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
       })
     }
 
-    arrivals.nb.sort((left, right) => left.arrivalTime - right.arrivalTime)
-    arrivals.sb.sort((left, right) => left.arrivalTime - right.arrivalTime)
-    arrivals.nb = arrivals.nb.slice(0, 4)
-    arrivals.sb = arrivals.sb.slice(0, 4)
+    arrivals.nb = sortByArrivalTime(arrivals.nb).slice(0, MAX_ARRIVALS_PER_DIRECTION)
+    arrivals.sb = sortByArrivalTime(arrivals.sb).slice(0, MAX_ARRIVALS_PER_DIRECTION)
     return arrivals
   }
 
@@ -175,8 +167,8 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
       merged.sb.push(...arrivals.sb)
     }
 
-    merged.nb.sort((left, right) => left.arrivalTime - right.arrivalTime)
-    merged.sb.sort((left, right) => left.arrivalTime - right.arrivalTime)
+    sortByArrivalTime(merged.nb)
+    sortByArrivalTime(merged.sb)
     return merged
   }
 

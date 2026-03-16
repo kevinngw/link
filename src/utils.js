@@ -6,12 +6,16 @@ export function pluralizeVehicleLabel(label) {
   return `${label}s`
 }
 
+const NAME_REPLACEMENTS = [
+  ['Station', ''],
+  ['Univ of Washington', 'UW'],
+  ["Int'l", 'Intl'],
+]
+
 export function normalizeName(name) {
-  return name
-    .replace('Station', '')
-    .replace('Univ of Washington', 'UW')
-    .replace("Int'l", 'Intl')
-    .trim()
+  let result = name
+  for (const [from, to] of NAME_REPLACEMENTS) result = result.replace(from, to)
+  return result.trim()
 }
 
 export function slugifyStation(value) {
@@ -37,9 +41,12 @@ export function parseClockToSeconds(value) {
 }
 
 
+const EARTH_RADIUS_METERS = 6_371_000
+const METERS_TO_MILES = 0.000_621_371
+const METERS_TO_FEET = 3.280_84
+
 export function getDistanceMeters(lat1, lon1, lat2, lon2) {
   const toRadians = (value) => (value * Math.PI) / 180
-  const earthRadiusMeters = 6371000
   const deltaLat = toRadians(lat2 - lat1)
   const deltaLon = toRadians(lon2 - lon1)
   const startLat = toRadians(lat1)
@@ -48,14 +55,14 @@ export function getDistanceMeters(lat1, lon1, lat2, lon2) {
   const a = Math.sin(deltaLat / 2) ** 2
     + Math.cos(startLat) * Math.cos(endLat) * Math.sin(deltaLon / 2) ** 2
 
-  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return 2 * EARTH_RADIUS_METERS * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
 export function formatDistanceMeters(distanceMeters) {
   if (!Number.isFinite(distanceMeters)) return ''
-  const miles = distanceMeters * 0.000621371
+  const miles = distanceMeters * METERS_TO_MILES
   if (miles < 0.1) {
-    const feet = Math.round(distanceMeters * 3.28084)
+    const feet = Math.round(distanceMeters * METERS_TO_FEET)
     return `${feet} ft`
   }
   return `${miles.toFixed(miles >= 10 ? 0 : 1)} mi`

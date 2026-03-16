@@ -47,7 +47,7 @@ export function buildLayout(line) {
   }
 }
 
-function applySystemState(state, systemId) {
+export function applySystemState(state, systemId) {
   const resolvedSystemId = state.systemsById.has(systemId) ? systemId : DEFAULT_SYSTEM_ID
   const system = state.systemsById.get(resolvedSystemId)
   state.activeSystemId = resolvedSystemId
@@ -66,67 +66,31 @@ function applySystemState(state, systemId) {
   state.vehicleGhosts = new Map()
 }
 
-async function loadSystemData(systemId) {
-  const STATIC_MAX_RETRIES = 4
-  const STATIC_RETRY_BASE_MS = 1_000
-  const url = SYSTEM_DATA_URL(systemId)
+const STATIC_MAX_RETRIES = 4
+const STATIC_RETRY_BASE_MS = 1_000
 
+async function fetchJsonWithRetries(url, errorLabel) {
   for (let attempt = 0; attempt <= STATIC_MAX_RETRIES; attempt += 1) {
-    let response = null
-    let payload = null
-
     try {
-      response = await fetch(url, { cache: 'no-store' })
-      payload = await response.json()
+      const response = await fetch(url, { cache: 'no-store' })
+      if (response.ok) return await response.json()
+      if (attempt === STATIC_MAX_RETRIES) throw new Error(`${errorLabel} failed with ${response.status}`)
     } catch (error) {
       if (attempt === STATIC_MAX_RETRIES) throw error
-      await sleep(STATIC_RETRY_BASE_MS * 2 ** attempt)
-      continue
     }
-
-    if (!response.ok) {
-      if (attempt === STATIC_MAX_RETRIES) {
-        throw new Error(`System data load failed with ${response.status}`)
-      }
-      await sleep(STATIC_RETRY_BASE_MS * 2 ** attempt)
-      continue
-    }
-
-    return payload.system
+    await sleep(STATIC_RETRY_BASE_MS * 2 ** attempt)
   }
+  throw new Error(`${errorLabel} failed`)
+}
 
-  throw new Error(`Failed to load system data for ${systemId}`)
+async function loadSystemData(systemId) {
+  const payload = await fetchJsonWithRetries(SYSTEM_DATA_URL(systemId), `System data load for ${systemId}`)
+  return payload.system
 }
 
 async function loadIndex() {
-  const STATIC_MAX_RETRIES = 4
-  const STATIC_RETRY_BASE_MS = 1_000
-
-  for (let attempt = 0; attempt <= STATIC_MAX_RETRIES; attempt += 1) {
-    let response = null
-    let payload = null
-
-    try {
-      response = await fetch(DATA_URL, { cache: 'no-store' })
-      payload = await response.json()
-    } catch (error) {
-      if (attempt === STATIC_MAX_RETRIES) throw error
-      await sleep(STATIC_RETRY_BASE_MS * 2 ** attempt)
-      continue
-    }
-
-    if (!response.ok) {
-      if (attempt === STATIC_MAX_RETRIES) {
-        throw new Error(`Index load failed with ${response.status}`)
-      }
-      await sleep(STATIC_RETRY_BASE_MS * 2 ** attempt)
-      continue
-    }
-
-    return payload.systems ?? []
-  }
-
-  throw new Error('Failed to load index')
+  const payload = await fetchJsonWithRetries(DATA_URL, 'Index load')
+  return payload.systems ?? []
 }
 
 export async function loadStaticData({ state, getSystemIdFromUrl }) {

@@ -1,3 +1,6 @@
+// Vertical stagger for overlapping vehicles on the same line segment
+const VEHICLE_Y_STAGGER = 1.5
+
 export function createMapRenderer(deps) {
   const {
     state,
@@ -86,7 +89,7 @@ export function createMapRenderer(deps) {
               .map(
                 (ghost, ghostIndex) => `
                   <circle
-                    cy="${ghost.y + ((index % 3) - 1) * 1.5}"
+                    cy="${ghost.y + ((index % 3) - 1) * VEHICLE_Y_STAGGER}"
                     r="${Math.max(3, 7 - ghostIndex)}"
                     class="train-ghost-dot"
                     style="--line-color:${line.color}; --ghost-opacity:${Math.max(0.18, 0.56 - ghostIndex * 0.1)};"
@@ -94,7 +97,7 @@ export function createMapRenderer(deps) {
                 `,
               )
               .join('')}
-            <g transform="translate(0, ${vehicle.y + ((index % 3) - 1) * 1.5})">
+            <g transform="translate(0, ${vehicle.y + ((index % 3) - 1) * VEHICLE_Y_STAGGER})">
               <circle r="13" class="train-wave" style="--line-color:${line.color}; animation-delay:${index * 0.18}s;"></circle>
               <path d="M 0 -8 L 7 6 L -7 6 Z" transform="${vehicle.directionSymbol === '▼' ? 'rotate(180)' : ''}" class="train-arrow" style="--line-color:${line.color};"></path>
             </g>

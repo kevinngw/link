@@ -64,11 +64,7 @@ export function parseVehicle(rawVehicle, line, layout, tripsById, { language, co
   let fromIndex = closestIndex ?? nextIndex
   let toIndex = nextIndex ?? closestIndex
 
-  if (fromIndex > toIndex) {
-    const swap = fromIndex
-    fromIndex = toIndex
-    toIndex = swap
-  }
+  if (fromIndex > toIndex) [fromIndex, toIndex] = [toIndex, fromIndex]
 
   const currentStation = layout.stations[fromIndex]
   const nextStation = layout.stations[toIndex]

@@ -15,7 +15,7 @@ import { getDialogElements } from './dialogs/dom'
 import { createStationDialogDisplayController } from './dialogs/station-display'
 import { createStationDialogRenderers } from './dialogs/station-render'
 import { createOverlayDialogs } from './dialogs/overlays'
-import { bootstrapApp, loadStaticData, loadSystemDataById } from './static-data'
+import { applySystemState, bootstrapApp, loadStaticData, loadSystemDataById } from './static-data'
 
 const state = {
   fetchedAt: '',
@@ -444,15 +444,125 @@ window.addEventListener('focus', () => {
   refreshVisibleRealtime().catch(console.error)
 })
 
+// ---------------------------------------------------------------------------
+// Event delegation — set up once; no re-attachment on every render
+// ---------------------------------------------------------------------------
+
+function findStationAndLineByStopId(stopId) {
+  for (const line of state.lines) {
+    const layout = state.layouts.get(line.id)
+    const station = layout?.stations.find((s) => s.id === stopId)
+    if (station) return { station, line }
+  }
+  return null
+}
+
+// Board: handles line-switch, train, alert, station, insights, terminal clicks
+boardElement.addEventListener('click', (e) => {
+  const lineSwitchBtn = e.target.closest('[data-line-switch]')
+  if (lineSwitchBtn) {
+    state.activeLineId = lineSwitchBtn.dataset.lineSwitch
+    render()
+    return
+  }
+
+  const trainItem = e.target.closest('[data-train-id]')
+  if (trainItem) {
+    const vehicle = getAllVehicles().find((c) => c.id === trainItem.dataset.trainId)
+    if (vehicle) {
+      state.currentTrainId = trainItem.dataset.trainId
+      renderTrainDialog(vehicle)
+    }
+    return
+  }
+
+  const alertBtn = e.target.closest('[data-alert-line-id]')
+  if (alertBtn) {
+    const line = state.lines.find((c) => c.id === alertBtn.dataset.alertLineId)
+    if (line) renderAlertListDialog(line)
+    return
+  }
+
+  const stationGroup = e.target.closest('.station-group')
+  if (stationGroup) {
+    const result = findStationAndLineByStopId(stationGroup.dataset.stopId)
+    if (result) showStationDialog(result.station)
+    return
+  }
+
+  const insightsEl = e.target.closest('[data-insights-type]')
+  if (insightsEl) {
+    const lineId = insightsEl.dataset.insightsLineId ?? null
+    const type = insightsEl.dataset.insightsType
+    const content = buildInsightsDetailContent(lineId, type)
+    if (content) showInsightsDetail(content.title, content.subtitle, content.body, { type, lineId: lineId ?? '' })
+    return
+  }
+
+  const terminalEl = e.target.closest('[data-terminal-line-id]')
+  if (terminalEl) {
+    const layout = state.layouts.get(terminalEl.dataset.terminalLineId)
+    if (!layout) return
+    const station = terminalEl.dataset.terminalDirection === 'nb' ? layout.stations[0] : layout.stations.at(-1)
+    if (station) showStationDialog(station)
+  }
+})
+
+// Board: hover prefetch for station groups
+let _prefetchTimeout = 0
+let _lastHoveredGroup = null
+boardElement.addEventListener('mouseover', (e) => {
+  const group = e.target.closest('.station-group')
+  if (!group || group === _lastHoveredGroup) return
+  _lastHoveredGroup = group
+  clearTimeout(_prefetchTimeout)
+  _prefetchTimeout = setTimeout(() => {
+    const result = findStationAndLineByStopId(group.dataset.stopId)
+    if (!result) return
+    getStationStopIds(result.station, result.line).forEach((id) => {
+      prefetch(`${OBA_BASE_URL}/arrivals-and-departures-for-stop/${id}.json?key=${OBA_KEY}&minutesAfter=60`, `Prefetch ${result.station.name}`)
+    })
+  }, 100)
+})
+boardElement.addEventListener('mouseout', (e) => {
+  if (!e.target.closest('.station-group')) return
+  _lastHoveredGroup = null
+  clearTimeout(_prefetchTimeout)
+})
+
+// System bar: system switcher
+systemBarElement.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-system-switch]')
+  if (!btn) return
+  await switchSystem(btn.dataset.systemSwitch, { updateUrl: true, preserveDialog: false })
+})
+
+// Station dialog: arrival items → train dialog
+dialog.addEventListener('click', (e) => {
+  const item = e.target.closest('[data-arrival-vehicle-id]')
+  if (!item) return
+  const vehicle = getAllVehicles().find((c) => c.id === item.dataset.arrivalVehicleId)
+  if (!vehicle) return
+  state.currentTrainId = item.dataset.arrivalVehicleId
+  renderTrainDialog(vehicle)
+})
+
 let toastHideTimer = 0
 let lastToastMessage = ''
 let lastToastAt = 0
 
 
 
-function getStationSearchEntries() {
-  const entries = []
+let _stationSearchEntriesCache = null
+let _stationSearchEntriesSystemKey = ''
 
+function getStationSearchEntries() {
+  const systemKey = [...state.systemsById.keys()].join(',')
+  if (_stationSearchEntriesCache && systemKey === _stationSearchEntriesSystemKey) {
+    return _stationSearchEntriesCache
+  }
+
+  const entries = []
   for (const system of state.systemsById.values()) {
     for (const line of system.lines ?? []) {
       for (const station of line.stops ?? []) {
@@ -474,6 +584,8 @@ function getStationSearchEntries() {
     }
   }
 
+  _stationSearchEntriesCache = entries
+  _stationSearchEntriesSystemKey = systemKey
   return entries
 }
 
@@ -1337,27 +1449,23 @@ function renderLineStatusMarquee(lineColor, vehicles) {
 }
 
 function refreshVehicleStatusMessages() {
-  const statusElements = document.querySelectorAll('[data-vehicle-status]')
-  statusElements.forEach((element) => {
-    const vehicleId = element.dataset.vehicleStatus
-    const vehicle = getAllVehicles().find((candidate) => candidate.id === vehicleId)
+  const vehiclesById = new Map(getAllVehicles().map((v) => [v.id, v]))
+
+  document.querySelectorAll('[data-vehicle-status]').forEach((element) => {
+    const vehicle = vehiclesById.get(element.dataset.vehicleStatus)
     if (!vehicle) return
     const liveNextOffset = getRealtimeOffset(vehicle.nextOffset ?? 0)
     element.innerHTML = formatVehicleStatus(vehicle)
     element.className = `train-list-status ${getVehicleStatusClass(vehicle, liveNextOffset)}`
   })
 
-  const marqueeElements = document.querySelectorAll('[data-vehicle-marquee]')
-  marqueeElements.forEach((element) => {
-    const vehicleId = element.dataset.vehicleMarquee
-    const vehicle = getAllVehicles().find((candidate) => candidate.id === vehicleId)
+  document.querySelectorAll('[data-vehicle-marquee]').forEach((element) => {
+    const vehicle = vehiclesById.get(element.dataset.vehicleMarquee)
     if (!vehicle) return
     const liveNextOffset = getRealtimeOffset(vehicle.nextOffset ?? 0)
     element.className = `line-marquee-item ${getVehicleStatusClass(vehicle, liveNextOffset)}`
     const copyElement = element.querySelector('.line-marquee-copy')
-    if (copyElement) {
-      copyElement.innerHTML = formatVehicleArrivalMessage(vehicle)
-    }
+    if (copyElement) copyElement.innerHTML = formatVehicleArrivalMessage(vehicle)
   })
 }
 
@@ -2231,27 +2339,9 @@ const { renderArrivalLists } = createStationDialogRenderers({
   getArrivalServiceStatus,
   getAllVehicles,
   syncDialogDisplayScroll,
-  attachDialogArrivalClickHandlers: () => attachDialogArrivalClickHandlers(),
+  attachDialogArrivalClickHandlers: () => {},
 })
 
-function attachSystemSwitcherHandlers() {
-  const buttons = document.querySelectorAll('[data-system-switch]')
-  buttons.forEach((button) => {
-    button.addEventListener('click', async () => {
-      await switchSystem(button.dataset.systemSwitch, { updateUrl: true, preserveDialog: false })
-    })
-  })
-}
-
-function attachLineSwitcherHandlers() {
-  const buttons = document.querySelectorAll('[data-line-switch]')
-  buttons.forEach((button) => {
-    button.addEventListener('click', () => {
-      state.activeLineId = button.dataset.lineSwitch
-      render()
-    })
-  })
-}
 
 const overlayDialogs = createOverlayDialogs({
   state,
@@ -2318,110 +2408,13 @@ function showInsightsDetail(title, subtitle, body, { updateUrl = true, lineId = 
   if (updateUrl && type) setInsightsDialogParams(type, lineId)
 }
 
-function attachTrainClickHandlers() {
-  const trainItems = document.querySelectorAll('[data-train-id]')
-  trainItems.forEach((item) => {
-    item.addEventListener('click', () => {
-      const trainId = item.dataset.trainId
-      const vehicle = getAllVehicles().find((candidate) => candidate.id === trainId)
-      if (!vehicle) return
-      state.currentTrainId = trainId
-      renderTrainDialog(vehicle)
-    })
-  })
-}
 
-function attachAlertClickHandlers() {
-  const alertButtons = document.querySelectorAll('[data-alert-line-id]')
-  alertButtons.forEach((button) => {
-    button.addEventListener('click', () => {
-      const line = state.lines.find((candidate) => candidate.id === button.dataset.alertLineId)
-      if (!line) return
-      renderAlertListDialog(line)
-    })
-  })
-}
-
-function attachDialogArrivalClickHandlers() {
-  const items = document.querySelectorAll('[data-arrival-vehicle-id]')
-  items.forEach((item) => {
-    item.addEventListener('click', () => {
-      const vehicleId = item.dataset.arrivalVehicleId
-      const vehicle = getAllVehicles().find((candidate) => candidate.id === vehicleId)
-      if (!vehicle) return
-      state.currentTrainId = vehicleId
-      renderTrainDialog(vehicle)
-    })
-  })
-}
-
-function attachInsightsClickHandlers() {
-  const elements = document.querySelectorAll('[data-insights-type]')
-  elements.forEach((el) => {
-    el.addEventListener('click', () => {
-      const lineId = el.dataset.insightsLineId ?? null
-      const type = el.dataset.insightsType
-      const content = buildInsightsDetailContent(lineId, type)
-      if (!content) return
-      showInsightsDetail(content.title, content.subtitle, content.body, { type, lineId: lineId ?? '' })
-    })
-  })
-}
-
-function attachInsightsStationClickHandlers() {
-  const elements = document.querySelectorAll('[data-terminal-line-id]')
-  elements.forEach((el) => {
-    el.addEventListener('click', (e) => {
-      if (e.target.closest('[data-train-id]')) return
-      const lineId = el.dataset.terminalLineId
-      const direction = el.dataset.terminalDirection
-      const layout = state.layouts.get(lineId)
-      if (!layout) return
-      const station = direction === 'nb' ? layout.stations[0] : layout.stations.at(-1)
-      if (station) showStationDialog(station)
-    })
-  })
-}
-
-function attachStationClickHandlers() {
-  state.lines.forEach((line) => {
-    const layout = state.layouts.get(line.id)
-    const card = document.querySelector(`.line-card[data-line-id="${line.id}"]`)
-    if (!card) return
-
-    const stationGroups = card.querySelectorAll('.station-group')
-    stationGroups.forEach((group) => {
-      const stopId = group.dataset.stopId
-      const station = layout.stations.find((candidate) => candidate.id === stopId)
-      if (!station) return
-
-      // Click handler
-      group.addEventListener('click', () => {
-        showStationDialog(station)
-      })
-      
-      // Prefetch on hover (with debounce)
-      let prefetchTimeout
-      group.addEventListener('mouseenter', () => {
-        prefetchTimeout = setTimeout(() => {
-          const stopIds = getStationStopIds(station, line)
-          stopIds.forEach((stopId) => {
-            const url = `https://api.pugetsound.onebusaway.org/api/where/arrivals-and-departures-for-stop/${stopId}.json?key=${OBA_KEY}&minutesAfter=60`
-            prefetch(url, `Prefetch ${station.name}`)
-          })
-        }, 100) // 100ms debounce
-      })
-      
-      group.addEventListener('mouseleave', () => {
-        clearTimeout(prefetchTimeout)
-      })
-    })
-  })
-}
-
-function render() {
+function renderShellCopy() {
   const systemMeta = getActiveSystemMeta()
   document.documentElement.lang = state.language
+  screenKickerElement.textContent = systemMeta.kicker
+  screenTitleElement.textContent = systemMeta.title
+
   stationSearchToggleButton.textContent = copyValue('openStationSearch')
   stationSearchToggleButton.setAttribute('aria-label', copyValue('openStationSearch'))
   stationSearchTitleElement.textContent = copyValue('openStationSearch')
@@ -2429,14 +2422,17 @@ function render() {
   stationSearchInput.setAttribute('placeholder', copyValue('stationSearchPlaceholder'))
   if (stationSearchDialog.open) renderStationSearchResults()
   else stationSearchMetaElement.textContent = copyValue('searchShortcut')
+
   languageToggleButton.textContent = copyValue('languageToggle')
   languageToggleButton.setAttribute('aria-label', copyValue('languageToggleAria'))
   themeToggleButton.textContent = state.theme === 'dark' ? copyValue('themeLight') : copyValue('themeDark')
   themeToggleButton.setAttribute('aria-label', copyValue('themeToggleAria'))
-  screenKickerElement.textContent = systemMeta.kicker
-  screenTitleElement.textContent = systemMeta.title
+
   systemBarElement.setAttribute('aria-label', copyValue('transitSystems'))
   viewBarElement.setAttribute('aria-label', copyValue('boardViews'))
+}
+
+function renderDialogCopy() {
   document.querySelector('#dialog-direction-tabs')?.setAttribute('aria-label', copyValue('boardDirectionView'))
   setArrivalsTitleHtml(arrivalsTitleNb, formatDirectionLabel('▲', getDialogDirectionSummary('▲'), { includeSymbol: true }))
   setArrivalsTitleHtml(arrivalsTitleSb, formatDirectionLabel('▼', getDialogDirectionSummary('▼'), { includeSymbol: true }))
@@ -2444,6 +2440,7 @@ function render() {
   dialogDisplay.setAttribute('aria-label', state.dialogDisplayMode ? copyValue('exit') : copyValue('board'))
   trainDialogClose.setAttribute('aria-label', copyValue('closeTrainDialog'))
   alertDialogClose.setAttribute('aria-label', copyValue('closeAlertDialog'))
+  alertDialogLink.textContent = copyValue('readOfficialAlert')
   if (!dialog.open) {
     setDialogTitle(copyValue('station'))
     dialogServiceSummary.textContent = copyValue('serviceSummary')
@@ -2456,54 +2453,45 @@ function render() {
     alertDialogTitle.textContent = copyValue('serviceAlert')
     alertDialogSubtitle.textContent = copyValue('transitAdvisory')
   }
-  alertDialogLink.textContent = copyValue('readOfficialAlert')
-  systemBarElement.hidden = state.systemsById.size < 2
-  systemBarElement.innerHTML = renderSystemSwitcher()
-  refreshLiveMeta()
+}
 
-  tabButtons.forEach((button) => button.classList.toggle('is-active', button.dataset.tab === state.activeTab))
-  tabButtons.forEach((button) => {
-    if (button.dataset.tab === 'map') button.textContent = copyValue('tabMap')
-    if (button.dataset.tab === 'trains') button.textContent = getVehicleLabelPlural()
-
-    if (button.dataset.tab === 'insights') button.textContent = copyValue('tabInsights')
-  })
-  attachSystemSwitcherHandlers()
-
+function renderBoard() {
+  boardElement.className = 'board'
   if (state.activeTab === 'map') {
-    boardElement.className = 'board'
     const visibleLines = getVisibleLines()
     boardElement.innerHTML = `${renderLineSwitcher()}${visibleLines.map(renderLine).join('')}`
-    attachLineSwitcherHandlers()
-    attachAlertClickHandlers()
-    attachStationClickHandlers()
-    attachTrainClickHandlers()
     queueMicrotask(syncCompactLayoutFromBoard)
     return
   }
 
   if (state.activeTab === 'trains') {
-    boardElement.className = 'board'
     boardElement.innerHTML = `${renderLineSwitcher()}${renderTrainList()}`
-    attachLineSwitcherHandlers()
-    attachAlertClickHandlers()
-    attachTrainClickHandlers()
     queueMicrotask(syncCompactLayoutFromBoard)
     return
   }
 
-
-
   if (state.activeTab === 'insights') {
-    boardElement.className = 'board'
     const visibleLines = getVisibleLines()
     boardElement.innerHTML = `${renderLineSwitcher()}${renderInsightsBoard(visibleLines)}`
-    attachLineSwitcherHandlers()
-    attachAlertClickHandlers()
-    attachTrainClickHandlers()
-    attachInsightsClickHandlers()
-    attachInsightsStationClickHandlers()
   }
+}
+
+function render() {
+  renderShellCopy()
+  renderDialogCopy()
+  refreshLiveMeta()
+
+  systemBarElement.hidden = state.systemsById.size < 2
+  systemBarElement.innerHTML = renderSystemSwitcher()
+
+  tabButtons.forEach((button) => {
+    button.classList.toggle('is-active', button.dataset.tab === state.activeTab)
+    if (button.dataset.tab === 'map') button.textContent = copyValue('tabMap')
+    if (button.dataset.tab === 'trains') button.textContent = getVehicleLabelPlural()
+    if (button.dataset.tab === 'insights') button.textContent = copyValue('tabInsights')
+  })
+
+  renderBoard()
 }
 
 function stopInsightsTickerRotation() {
@@ -2562,22 +2550,7 @@ async function refreshVisibleRealtime() {
 }
 
 function applySystem(systemId) {
-  const resolvedSystemId = state.systemsById.has(systemId) ? systemId : DEFAULT_SYSTEM_ID
-  const system = state.systemsById.get(resolvedSystemId)
-  state.activeSystemId = resolvedSystemId
-  state.lines = system?.lines ?? []
-  state.layouts = state.layoutsBySystem.get(resolvedSystemId) ?? new Map()
-  if (!state.lines.some((line) => line.id === state.activeLineId)) {
-    state.activeLineId = state.lines[0]?.id ?? ''
-  }
-  state.vehiclesByLine = new Map()
-  state.rawVehicles = []
-  state.arrivalsCache.clear()
-  state.alerts = []
-  state.error = ''
-  state.fetchedAt = ''
-  state.insightsTickerIndex = 0
-  state.vehicleGhosts = new Map()
+  applySystemState(state, systemId)
 }
 
 async function switchSystem(systemId, { updateUrl = true, preserveDialog = false } = {}) {

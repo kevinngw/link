@@ -21,6 +21,39 @@ export function createTrainRenderers(deps) {
     formatVehicleStatus,
   } = deps
 
+  function renderDirectionBadge(vehicle) {
+    return `
+      <span class="train-direction-badge">
+        ${formatDirectionLabel(
+          vehicle.directionSymbol,
+          getVehicleDestinationLabel(vehicle, state.layouts.get(vehicle.lineId)),
+          { includeSymbol: true },
+        )}
+      </span>
+    `
+  }
+
+  function renderQueueItem(vehicle, vehicleLabel) {
+    const nextOffset = getRealtimeOffset(vehicle.nextOffset ?? 0)
+    return `
+      <button class="train-list-item train-queue-item" data-train-id="${vehicle.id}" type="button" aria-label="${vehicle.lineName} ${vehicleLabel} ${vehicle.label}">
+        <div class="train-list-main">
+          <span class="line-token train-list-token" style="--line-color:${vehicle.lineColor};">${vehicle.lineToken}</span>
+          <div>
+            <p class="train-list-title">${vehicle.lineName} ${vehicleLabel} ${vehicle.label}</p>
+            ${renderDirectionBadge(vehicle)}
+            <p class="train-list-subtitle">${copyValue('toDestination', getVehicleDestinationLabel(vehicle, state.layouts.get(vehicle.lineId)))}</p>
+            <p class="train-list-status ${getVehicleStatusClass(vehicle, nextOffset)}" data-vehicle-status="${vehicle.id}">${formatVehicleStatus(vehicle)}</p>
+          </div>
+        </div>
+        <div class="train-queue-side">
+          <p class="train-queue-time" data-vehicle-next-countdown="${vehicle.id}">${formatArrivalTime(nextOffset)}</p>
+          <p class="train-queue-clock" data-vehicle-next-clock="${vehicle.id}">${formatEtaClockFromNow(nextOffset)}</p>
+        </div>
+      </button>
+    `
+  }
+
   function renderTrainList() {
     const vehicles = getAllVehicles().sort((left, right) => left.minutePosition - right.minutePosition)
     const vehicleLabel = getVehicleLabel()
@@ -48,32 +81,6 @@ export function createTrainRenderers(deps) {
         )
         const focusVehicle = sortedLineVehicles[0] ?? null
         const queueVehicles = sortedLineVehicles.slice(1)
-        const renderDirectionBadge = (vehicle) => `
-          <span class="train-direction-badge">
-            ${formatDirectionLabel(
-              vehicle.directionSymbol,
-              getVehicleDestinationLabel(vehicle, state.layouts.get(vehicle.lineId)),
-              { includeSymbol: true },
-            )}
-          </span>
-        `
-        const renderQueueItem = (vehicle) => `
-          <button class="train-list-item train-queue-item" data-train-id="${vehicle.id}" type="button" aria-label="${vehicle.lineName} ${vehicleLabel} ${vehicle.label}">
-            <div class="train-list-main">
-              <span class="line-token train-list-token" style="--line-color:${vehicle.lineColor};">${vehicle.lineToken}</span>
-              <div>
-                <p class="train-list-title">${vehicle.lineName} ${vehicleLabel} ${vehicle.label}</p>
-                ${renderDirectionBadge(vehicle)}
-                <p class="train-list-subtitle">${copyValue('toDestination', getVehicleDestinationLabel(vehicle, state.layouts.get(vehicle.lineId)))}</p>
-                <p class="train-list-status ${getVehicleStatusClass(vehicle, getRealtimeOffset(vehicle.nextOffset ?? 0))}" data-vehicle-status="${vehicle.id}">${formatVehicleStatus(vehicle)}</p>
-              </div>
-            </div>
-            <div class="train-queue-side">
-              <p class="train-queue-time" data-vehicle-next-countdown="${vehicle.id}">${formatArrivalTime(getRealtimeOffset(vehicle.nextOffset ?? 0))}</p>
-              <p class="train-queue-clock" data-vehicle-next-clock="${vehicle.id}">${formatEtaClockFromNow(getRealtimeOffset(vehicle.nextOffset ?? 0))}</p>
-            </div>
-          </button>
-        `
 
         return `
           <article class="line-card train-line-card">
@@ -120,7 +127,7 @@ export function createTrainRenderers(deps) {
                   ? `
                     <div class="train-queue-list">
                       <p class="train-queue-heading">${state.language === 'zh-CN' ? '后续车次' : 'Following vehicles'}</p>
-                      ${queueVehicles.map(renderQueueItem).join('')}
+                      ${queueVehicles.map((v) => renderQueueItem(v, vehicleLabel)).join('')}
                     </div>
                   `
                   : ''
