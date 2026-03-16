@@ -3215,6 +3215,35 @@ button.arrival-item {
 .station-dialog.is-display-mode .arrivals-title {
   margin-bottom: 18px;
   font-size: 1.6rem;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.station-dialog.is-display-mode .arrivals-title-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 2.5rem;
+}
+
+.station-dialog.is-display-mode .arrivals-title.is-marquee .arrivals-title-track {
+  animation: arrivalsTitleMarquee 10s linear infinite;
+}
+
+.station-dialog.is-display-mode .arrivals-title-clone {
+  display: none;
+}
+
+.station-dialog.is-display-mode .arrivals-title.is-marquee .arrivals-title-clone {
+  display: inline;
+}
+
+@keyframes arrivalsTitleMarquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
 }
 
 .station-dialog.is-display-mode .arrivals-viewport {

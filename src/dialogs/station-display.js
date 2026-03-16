@@ -202,6 +202,23 @@ export function createStationDialogDisplayController({
       dialogTitleText.scrollWidth > title.clientWidth
 
     title.classList.toggle('is-marquee', shouldMarquee)
+
+    // Sync arrivals title marquees
+    syncArrivalsTitleMarquee(arrivalsTitleNb)
+    syncArrivalsTitleMarquee(arrivalsTitleSb)
+  }
+
+  function syncArrivalsTitleMarquee(titleElement) {
+    if (!titleElement) return
+    const textElement = titleElement.querySelector('.arrivals-title-text')
+    if (!textElement) return
+
+    const shouldMarquee =
+      state.dialogDisplayMode &&
+      dialog.open &&
+      textElement.scrollWidth > titleElement.clientWidth
+
+    titleElement.classList.toggle('is-marquee', shouldMarquee)
   }
 
   return {

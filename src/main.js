@@ -123,6 +123,7 @@ document.querySelector('#app').innerHTML = `
           <p id="dialog-service-summary" class="dialog-service-summary">Service summary</p>
         </div>
         <div class="dialog-actions">
+          <button id="dialog-favorite" class="dialog-favorite-button" type="button" aria-label="Save station">☆ Save</button>
           <button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
         </div>
       </header>
@@ -137,12 +138,22 @@ document.querySelector('#app').innerHTML = `
       <div id="station-alerts-container"></div>
       <div class="dialog-body">
         <div class="arrivals-section" data-direction-section="nb">
-          <h4 id="arrivals-title-nb" class="arrivals-title">Northbound (▲)</h4>
+          <h4 id="arrivals-title-nb" class="arrivals-title">
+            <span class="arrivals-title-track">
+              <span class="arrivals-title-text">Northbound (▲)</span>
+              <span class="arrivals-title-text arrivals-title-clone" aria-hidden="true">Northbound (▲)</span>
+            </span>
+          </h4>
           <div id="arrivals-nb-pinned" class="arrivals-pinned"></div>
           <div class="arrivals-viewport"><div id="arrivals-nb" class="arrivals-list"></div></div>
         </div>
         <div class="arrivals-section" data-direction-section="sb">
-          <h4 id="arrivals-title-sb" class="arrivals-title">Southbound (▼)</h4>
+          <h4 id="arrivals-title-sb" class="arrivals-title">
+            <span class="arrivals-title-track">
+              <span class="arrivals-title-text">Southbound (▼)</span>
+              <span class="arrivals-title-text arrivals-title-clone" aria-hidden="true">Southbound (▼)</span>
+            </span>
+          </h4>
           <div id="arrivals-sb-pinned" class="arrivals-pinned"></div>
           <div class="arrivals-viewport"><div id="arrivals-sb" class="arrivals-list"></div></div>
         </div>

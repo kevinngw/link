@@ -102,8 +102,23 @@ export function createStationDialogRenderers({
 
     renderBucket(arrivals.nb, arrivalsNbPinned, arrivalsNb)
     renderBucket(arrivals.sb, arrivalsSbPinned, arrivalsSb)
-    arrivalsTitleNb.textContent = formatDirectionLabel('▲', nbSummary, { includeSymbol: true })
-    arrivalsTitleSb.textContent = formatDirectionLabel('▼', sbSummary, { includeSymbol: true })
+    
+    // Update arrivals titles with marquee support
+    const nbTitle = formatDirectionLabel('▲', nbSummary, { includeSymbol: true })
+    const sbTitle = formatDirectionLabel('▼', sbSummary, { includeSymbol: true })
+    
+    arrivalsTitleNb.innerHTML = `
+      <span class="arrivals-title-track">
+        <span class="arrivals-title-text">${nbTitle}</span>
+        <span class="arrivals-title-text arrivals-title-clone" aria-hidden="true">${nbTitle}</span>
+      </span>
+    `
+    arrivalsTitleSb.innerHTML = `
+      <span class="arrivals-title-track">
+        <span class="arrivals-title-text">${sbTitle}</span>
+        <span class="arrivals-title-text arrivals-title-clone" aria-hidden="true">${sbTitle}</span>
+      </span>
+    `
 
     attachDialogArrivalClickHandlers()
     syncDialogDisplayScroll()
