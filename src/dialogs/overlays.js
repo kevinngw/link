@@ -29,13 +29,22 @@ export function createOverlayDialogs({
     alertDialogLink,
   } = elements
 
+  function closeDialogAnimated(dialogEl) {
+    if (!dialogEl.open) return
+    dialogEl.classList.add('is-closing')
+    dialogEl.addEventListener('animationend', () => {
+      dialogEl.classList.remove('is-closing')
+      dialogEl.close()
+    }, { once: true })
+  }
+
   function closeTrainDialog() {
     state.currentTrainId = ''
-    if (trainDialog.open) trainDialog.close()
+    closeDialogAnimated(trainDialog)
   }
 
   function closeAlertDialog() {
-    if (alertDialog.open) alertDialog.close()
+    closeDialogAnimated(alertDialog)
   }
 
   function renderAlertListDialog(line) {

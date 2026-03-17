@@ -69,6 +69,15 @@ const state = {
   userLocation: null,
 }
 
+function closeDialogAnimated(dialogEl) {
+  if (!dialogEl.open) return
+  dialogEl.classList.add('is-closing')
+  dialogEl.addEventListener('animationend', () => {
+    dialogEl.classList.remove('is-closing')
+    dialogEl.close()
+  }, { once: true })
+}
+
 const updateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
@@ -362,9 +371,14 @@ dialog.addEventListener('close', () => {
 })
 tabButtons.forEach((button) => {
   button.addEventListener('click', () => {
-    state.activeTab = button.dataset.tab
-    setPageParam(state.activeTab)
-    render()
+    if (button.dataset.tab === state.activeTab) return
+    boardElement.style.opacity = '0'
+    setTimeout(() => {
+      state.activeTab = button.dataset.tab
+      setPageParam(state.activeTab)
+      render()
+      boardElement.style.opacity = '1'
+    }, 150)
   })
 })
 themeToggleButton.addEventListener('click', () => {
@@ -811,7 +825,7 @@ function closeStationSearch() {
   state.geolocationError = ''
   state.isLocating = false
   if (state.activeDialogType === 'search') state.activeDialogType = ''
-  if (stationSearchDialog.open) stationSearchDialog.close()
+  closeDialogAnimated(stationSearchDialog)
 }
 
 async function handleStationSearchSelection(result) {
@@ -829,7 +843,15 @@ async function handleStationSearchSelection(result) {
 function hideToast() {
   window.clearTimeout(toastHideTimer)
   toastHideTimer = 0
-  toastRegionElement.innerHTML = ''
+  const toast = toastRegionElement.querySelector('.toast')
+  if (toast) {
+    toast.classList.add('toast-leaving')
+    toast.addEventListener('animationend', () => {
+      toastRegionElement.innerHTML = ''
+    }, { once: true })
+  } else {
+    toastRegionElement.innerHTML = ''
+  }
 }
 
 function showToast(message, { tone = 'error', dedupeMs = 15_000 } = {}) {
@@ -2397,7 +2419,7 @@ function closeInsightsDetailDialog() {
   if (state.activeDialogType === 'insights') state.activeDialogType = ''
   state.currentInsightsDetailType = ''
   state.currentInsightsLineId = ''
-  if (insightsDetailDialog.open) insightsDetailDialog.close()
+  closeDialogAnimated(insightsDetailDialog)
 }
 
 function showInsightsDetail(title, subtitle, body, { updateUrl = true, lineId = '', type = '' } = {}) {

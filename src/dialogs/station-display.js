@@ -177,7 +177,11 @@ export function createStationDialogDisplayController({
     state.currentDialogStationId = ''
     state.currentDialogStation = null
     if (dialog.open) {
-      dialog.close()
+      dialog.classList.add('is-closing')
+      dialog.addEventListener('animationend', () => {
+        dialog.classList.remove('is-closing')
+        dialog.close()
+      }, { once: true })
     } else {
       stopDialogAutoRefresh()
       stopDialogDisplayScroll()

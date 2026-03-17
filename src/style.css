@@ -30,6 +30,13 @@
   --status-chip-text: #f6fbff;
   --status-chip-bg: rgba(255, 255, 255, 0.06);
   --status-chip-border: rgba(255, 255, 255, 0.16);
+  --duration-instant: 80ms;
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   font-synthesis: none;
   line-height: 1.4;
   font-weight: 400;
@@ -3689,5 +3696,217 @@ button.arrival-item {
 
   .station-dialog.is-display-mode .arrival-status {
     font-size: 0.78rem;
+  }
+}
+
+/* ─── Dialog open/close animations ─── */
+
+@keyframes dialogIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes dialogOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+}
+
+@keyframes backdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+dialog[open] {
+  animation: dialogIn var(--duration-slow) var(--ease-out) both;
+}
+
+dialog[open]::backdrop {
+  animation: backdropIn var(--duration-normal) ease both;
+}
+
+dialog.is-closing {
+  animation: dialogOut var(--duration-normal) var(--ease-in-out) both;
+}
+
+dialog.is-closing::backdrop {
+  opacity: 0;
+  transition: opacity var(--duration-normal) ease;
+}
+
+/* ─── Toast animations ─── */
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toastOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+.toast {
+  animation: toastIn var(--duration-normal) var(--ease-out) both;
+}
+
+.toast.toast-leaving {
+  animation: toastOut var(--duration-fast) var(--ease-in-out) both;
+}
+
+/* ─── Tab/board transition ─── */
+
+.board {
+  transition: opacity var(--duration-fast) var(--ease-in-out);
+}
+
+/* ─── Arrival list item stagger animation ─── */
+
+@keyframes arrivalItemIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.arrival-item {
+  animation: arrivalItemIn var(--duration-normal) var(--ease-out) both;
+}
+
+.arrival-item:nth-child(1) { animation-delay: 0ms; }
+.arrival-item:nth-child(2) { animation-delay: 40ms; }
+.arrival-item:nth-child(3) { animation-delay: 50ms; }
+.arrival-item:nth-child(4) { animation-delay: 60ms; }
+.arrival-item:nth-child(5) { animation-delay: 70ms; }
+.arrival-item:nth-child(6) { animation-delay: 80ms; }
+.arrival-item:nth-child(7) { animation-delay: 90ms; }
+.arrival-item:nth-child(8) { animation-delay: 100ms; }
+
+/* ─── Skeleton/shimmer loading ─── */
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+
+.arrivals-loading {
+  background: linear-gradient(90deg, var(--surface-soft) 25%, var(--surface-active) 50%, var(--surface-soft) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease infinite;
+  border-radius: 8px;
+}
+
+/* ─── Line switcher press feedback ─── */
+
+.line-switcher-button:active {
+  transform: scale(0.96);
+  transition-duration: var(--duration-instant);
+}
+
+/* ─── Tablet breakpoint (701–1100px) ─── */
+
+@media (min-width: 701px) and (max-width: 1100px) {
+  .metric-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .system-summary-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .system-ranking-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .station-dialog {
+    max-width: 600px;
+    width: 90vw;
+    margin: auto;
+  }
+
+  .train-focus-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .train-eta-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .headway-health-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .delay-distribution {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ─── Landscape handling ─── */
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .station-dialog {
+    --dialog-max-height: calc(100dvh - 12px);
+    max-width: 80vw;
+  }
+
+  .dialog-content {
+    padding: 12px 16px 14px;
+  }
+
+  .dialog-header {
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    gap: 10px;
+  }
+
+  .dialog-header h3 {
+    font-size: 1rem;
+  }
+
+  .dialog-body {
+    gap: 8px;
+  }
+
+  .arrivals-section {
+    padding: 8px 10px;
+  }
+}
+
+/* ─── Prefers reduced motion ─── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
   }
 }
