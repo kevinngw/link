@@ -3052,11 +3052,11 @@ button.arrival-item {
 
 .station-dialog.is-display-mode .dialog-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 24px;
-  padding-bottom: 20px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--border-color);
   position: relative;
 }
@@ -3149,7 +3149,6 @@ button.arrival-item {
   align-items: center;
   gap: 16px;
   flex: 0 0 auto;
-  padding-right: 90px;
 }
 
 .station-dialog.is-display-mode .dialog-actions-top {
@@ -3158,7 +3157,8 @@ button.arrival-item {
   gap: 12px;
 }
 
-.station-dialog.is-display-mode .dialog-direction-bar {
+.station-dialog.is-display-mode .dialog-direction-bar,
+.station-dialog.is-display-mode #station-alerts-container:empty {
   display: none;
 }
 
@@ -3169,11 +3169,7 @@ button.arrival-item {
 }
 
 .station-dialog.is-display-mode .dialog-mode-button {
-  position: absolute;
-  top: 50%;
-  right: 0;
-  transform: translateY(-50%);
-  z-index: 2;
+  position: static;
   min-width: 72px;
   height: 40px;
   font-size: 0.8rem;
@@ -3192,7 +3188,8 @@ button.arrival-item {
 
 .station-dialog.is-display-mode .dialog-body {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
+  align-content: start;
+  gap: 20px;
   overflow: hidden;
 }
 
@@ -3641,7 +3638,6 @@ button.arrival-item {
   .station-dialog.is-display-mode .dialog-actions {
     gap: 8px;
     min-width: 0;
-    padding-right: 84px;
   }
 
   .station-dialog.is-display-mode .dialog-actions-top {

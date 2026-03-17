@@ -112,11 +112,6 @@ export function formatEtaClockFromNow(offsetSeconds, language) {
   return formatClockTime(Date.now() + Math.max(0, offsetSeconds) * 1000, language)
 }
 
-export function formatWalkDistance(distanceKm, copyValue) {
-  if (distanceKm >= 1) return copyValue('walkKm', distanceKm)
-  return copyValue('walkMeters', Math.round(distanceKm * 1000))
-}
-
 export function formatAlertEffect(effect) {
   return String(effect || 'SERVICE ALERT')
     .replaceAll('_', ' ')

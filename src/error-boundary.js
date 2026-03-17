@@ -284,12 +284,3 @@ export function createPerformanceMonitor() {
   }
 }
 
-// Create singleton instances
-export const errorBoundary = createErrorBoundary({
-  fallback: (error, context) => {
-    console.warn(`[${context}] Using fallback due to error:`, error.message)
-    return null
-  }
-})
-
-export const perfMonitor = createPerformanceMonitor()

@@ -126,18 +126,3 @@ export function computed(store, key, fn, deps) {
 /**
  * Create action with automatic change tracking
  */
-export function createAction(store, name, fn) {
-  return (...args) => {
-    store.clearChanged()
-    const result = fn(store.state, ...args)
-    
-    // Auto-notify after action completes
-    if (result && typeof result.then === 'function') {
-      return result.finally(() => {
-        store.changed.forEach((key) => store.notify(key))
-      })
-    }
-    
-    return result
-  }
-}
