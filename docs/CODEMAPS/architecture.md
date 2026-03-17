@@ -1,4 +1,4 @@
-<!-- Generated: 2026-03-16 | Files scanned: 25 | Token estimate: ~700 -->
+<!-- Generated: 2026-03-17 | Files scanned: 25 | Token estimate: ~700 -->
 
 # Architecture
 
@@ -34,7 +34,7 @@ pulse-data.json ──> static-data.js     arrivals.js (adaptive concurrency)
 ## Module Dependency Graph
 
 ```
-main.js (orchestrator, 2688 lines)
+main.js (orchestrator, 2710 lines)
 ├── config.js          constants, API keys, i18n copy
 ├── app-store.js       reactive state + actions
 │   └── store.js       proxy-based reactive store

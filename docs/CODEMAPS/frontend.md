@@ -1,4 +1,4 @@
-<!-- Generated: 2026-03-16 | Files scanned: 25 | Token estimate: ~800 -->
+<!-- Generated: 2026-03-17 | Files scanned: 25 | Token estimate: ~800 -->
 
 # Frontend Architecture
 
@@ -56,9 +56,11 @@ Enter: select    Esc: close    Space: toggleDisplay    r: refresh
 
 ## Styling
 
-Single stylesheet: `src/style.css` (3693 lines)
+Single stylesheet: `src/style.css` (3908 lines)
 - Mobile-first responsive
 - CSS custom properties for theming
+- Motion design system (reduced-motion aware transitions)
+- Responsive breakpoints (compact/standard/expanded)
 - No CSS framework
 
 ## i18n

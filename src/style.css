@@ -3842,9 +3842,69 @@ dialog.is-closing::backdrop {
   }
 
   .station-dialog {
-    max-width: 600px;
-    width: 90vw;
+    max-width: 720px;
+    width: 92vw;
     margin: auto;
+  }
+
+  .station-dialog .dialog-content {
+    padding: 24px 28px 28px;
+  }
+
+  .station-dialog .dialog-header {
+    gap: 16px;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+  }
+
+  .station-dialog .dialog-header h3 {
+    font-size: 1.3rem;
+  }
+
+  .station-dialog .dialog-service-summary {
+    font-size: 0.88rem;
+  }
+
+  .station-dialog .dialog-direction-tab {
+    min-width: 72px;
+    padding: 10px 14px;
+    font-size: 0.82rem;
+  }
+
+  .station-dialog .dialog-mode-button {
+    min-width: 80px;
+    height: 44px;
+    font-size: 0.82rem;
+  }
+
+  .station-dialog .dialog-body {
+    gap: 16px;
+  }
+
+  .station-dialog .arrivals-section {
+    padding: 18px 20px;
+  }
+
+  .station-dialog .arrivals-title {
+    font-size: 0.94rem;
+    margin-bottom: 14px;
+  }
+
+  .station-dialog .arrival-item {
+    padding: 14px 16px;
+    gap: 14px;
+  }
+
+  .station-dialog .arrival-vehicle {
+    font-size: 0.92rem;
+  }
+
+  .station-dialog .arrival-destination {
+    font-size: 0.82rem;
+  }
+
+  .station-dialog .arrival-time {
+    font-size: 1.02rem;
   }
 
   .train-focus-metrics {
@@ -3893,6 +3953,73 @@ dialog.is-closing::backdrop {
   .arrivals-section {
     padding: 8px 10px;
   }
+}
+
+/* ─── Search match highlight ─── */
+
+.search-highlight {
+  background: color-mix(in srgb, var(--accent-strong) 25%, transparent);
+  color: var(--accent-strong);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* ─── Skeleton loading (initial page load) ─── */
+
+.skeleton-board {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+
+.skeleton-card {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--surface-card);
+}
+
+.skeleton-line {
+  height: 14px;
+  border-radius: 7px;
+  background: linear-gradient(90deg, var(--surface-soft) 25%, var(--surface-active) 50%, var(--surface-soft) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease infinite;
+}
+
+.skeleton-line-wide {
+  width: 75%;
+}
+
+.skeleton-line-narrow {
+  width: 45%;
+}
+
+@media (max-width: 700px) {
+  .skeleton-board {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+/* ─── View Transition (theme toggle) ─── */
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--duration-slow);
+  animation-timing-function: var(--ease-in-out);
+}
+
+::view-transition-old(root) {
+  animation-name: none;
+}
+
+::view-transition-new(root) {
+  animation-name: none;
+  mix-blend-mode: normal;
 }
 
 /* ─── Prefers reduced motion ─── */

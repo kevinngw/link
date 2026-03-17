@@ -382,8 +382,16 @@ tabButtons.forEach((button) => {
   })
 })
 themeToggleButton.addEventListener('click', () => {
-  setTheme(state.theme === 'dark' ? 'light' : 'dark')
-  render()
+  const nextTheme = state.theme === 'dark' ? 'light' : 'dark'
+  if (document.startViewTransition) {
+    document.startViewTransition(() => {
+      setTheme(nextTheme)
+      render()
+    })
+  } else {
+    setTheme(nextTheme)
+    render()
+  }
 })
 stationSearchToggleButton.addEventListener('click', () => {
   openStationSearch()
@@ -570,6 +578,32 @@ let lastToastAt = 0
 let _stationSearchEntriesCache = null
 let _stationSearchEntriesSystemKey = ''
 
+const RECENT_SEARCHES_KEY = 'link-pulse-recent-searches'
+const RECENT_SEARCHES_MAX = 5
+
+function getRecentSearches() {
+  try {
+    const raw = window.localStorage.getItem(RECENT_SEARCHES_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+function addRecentSearch(result) {
+  const recents = getRecentSearches()
+  const key = `${result.systemId}:${result.lineId}:${result.stationId}`
+  const updated = [
+    { key, systemId: result.systemId, lineId: result.lineId, stationId: result.stationId, stationName: result.stationName, lineName: result.lineName, lineColor: result.lineColor, systemName: result.systemName },
+    ...recents.filter((item) => item.key !== key),
+  ].slice(0, RECENT_SEARCHES_MAX)
+  try { window.localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated)) } catch {}
+}
+
+function highlightMatch(text, query) {
+  if (!query) return text
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return text.replace(new RegExp(`(${escaped})`, 'gi'), '<mark class="search-highlight">$1</mark>')
+}
+
 function getStationSearchEntries() {
   const systemKey = [...state.systemsById.keys()].join(',')
   if (_stationSearchEntriesCache && systemKey === _stationSearchEntriesSystemKey) {
@@ -725,9 +759,21 @@ function getStationSearchResults() {
     .slice(0, 12)
 }
 
+function getRecentSearchResults() {
+  const recents = getRecentSearches()
+  if (!recents.length) return []
+  return recents.map((recent) => ({
+    ...recent,
+    normalizedStationName: normalizeName(recent.stationName),
+  }))
+}
+
 function renderStationSearchResults() {
   const hasQuery = Boolean(state.stationSearchQuery.trim())
-  const results = hasQuery ? getStationSearchResults() : getNearbyStationResults()
+  const nearbyResults = getNearbyStationResults()
+  const recentResults = !hasQuery && !nearbyResults.length ? getRecentSearchResults() : []
+  const results = hasQuery ? getStationSearchResults() : (nearbyResults.length ? nearbyResults : recentResults)
+  const isShowingRecents = !hasQuery && !nearbyResults.length && recentResults.length > 0
 
   state.stationSearchResults = hasQuery ? results : []
   state.highlightedStationSearchIndex = Math.min(state.highlightedStationSearchIndex, Math.max(0, (hasQuery ? results.length : 0) - 1))
@@ -738,20 +784,26 @@ function renderStationSearchResults() {
   stationLocationStatusElement.textContent = state.geolocationError || state.geolocationStatus
   stationLocationStatusElement.classList.toggle('is-error', Boolean(state.geolocationError))
 
+  const query = state.stationSearchQuery.trim().toLowerCase()
+
   stationSearchMetaElement.textContent = results.length
     ? (hasQuery
-      ? copyValue('stationSearchResults', results.length)
-      : copyValue('nearbyStationsFound', results.length))
+      ? `${copyValue('stationSearchResults', results.length)} · ${copyValue('searchKeyboardHint')}`
+      : isShowingRecents
+        ? copyValue('recentSearches')
+        : copyValue('nearbyStationsFound', results.length))
     : (hasQuery
       ? copyValue('noStationSearchResults')
       : (state.geolocationError || state.geolocationStatus || copyValue('nearbyStationsHint')))
 
   stationSearchResultsElement.innerHTML = results.length
     ? results.map((result, index) => {
-        const isNearby = !hasQuery
+        const isNearby = !hasQuery && !isShowingRecents
         const isActive = hasQuery
           ? index === state.highlightedStationSearchIndex
           : index === state.highlightedNearbyStationIndex
+        const displayName = normalizeName(result.stationName)
+        const titleHtml = hasQuery ? highlightMatch(displayName, query) : displayName
         const meta = isNearby
           ? `${formatDistanceMeters(result.distanceMeters)} · ${result.lineName} · ${result.systemName}`
           : `${result.lineName} · ${result.systemName}`
@@ -765,7 +817,7 @@ function renderStationSearchResults() {
             <span class="station-search-result-main">
               <span class="arrival-line-token station-search-result-token" style="--line-color:${result.lineColor};">${result.lineName[0]}</span>
               <span class="station-search-result-copy">
-                <span class="station-search-result-title">${normalizeName(result.stationName)}</span>
+                <span class="station-search-result-title">${titleHtml}</span>
                 <span class="station-search-result-meta">${meta}</span>
               </span>
             </span>
@@ -780,7 +832,7 @@ function renderStationSearchResults() {
   const buttons = stationSearchResultsElement.querySelectorAll('[data-station-search-index]')
   buttons.forEach((button) => {
     const selectResult = async () => {
-      const source = hasQuery ? state.stationSearchResults : state.nearbyStations
+      const source = hasQuery ? state.stationSearchResults : (nearbyResults.length ? state.nearbyStations : recentResults)
       const selected = source[Number(button.dataset.stationSearchIndex)]
       if (selected) await handleStationSearchSelection(selected)
     }
@@ -829,6 +881,7 @@ function closeStationSearch() {
 }
 
 async function handleStationSearchSelection(result) {
+  addRecentSearch(result)
   closeStationSearch()
   if (result.systemId !== state.activeSystemId) {
     await switchSystem(result.systemId, { updateUrl: true, preserveDialog: false })
@@ -2477,8 +2530,21 @@ function renderDialogCopy() {
   }
 }
 
+function renderSkeleton() {
+  const cards = Array.from({ length: 4 }, () =>
+    '<div class="skeleton-card"><div class="skeleton-line skeleton-line-wide"></div><div class="skeleton-line skeleton-line-narrow"></div></div>'
+  ).join('')
+  return `<div class="skeleton-board">${cards}</div>`
+}
+
 function renderBoard() {
   boardElement.className = 'board'
+
+  if (!state.fetchedAt && !state.error && !state.lines.length) {
+    boardElement.innerHTML = renderSkeleton()
+    return
+  }
+
   if (state.activeTab === 'map') {
     const visibleLines = getVisibleLines()
     boardElement.innerHTML = `${renderLineSwitcher()}${visibleLines.map(renderLine).join('')}`
