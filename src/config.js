@@ -12,6 +12,8 @@ const _TEST_PROFILE = {
   OBA_COOLDOWN_BASE_MS: 30_000,
   OBA_COOLDOWN_MAX_MS: 180_000,
   OBA_ARRIVALS_CONCURRENCY: 1,
+  OBA_RETRY_BASE_MS: 2_000,
+  OBA_RATE_LIMIT_DELAY_MS: 10_000,
   VEHICLE_REFRESH_INTERVAL_MS: 45_000,
   DIALOG_REFRESH_INTERVAL_MS: 90_000,
 }
@@ -22,13 +24,15 @@ const _PROD_PROFILE = {
   OBA_COOLDOWN_BASE_MS: 10_000,
   OBA_COOLDOWN_MAX_MS: 60_000,
   OBA_ARRIVALS_CONCURRENCY: 3,
+  OBA_RETRY_BASE_MS: 1_000,
+  OBA_RATE_LIMIT_DELAY_MS: 5_000,
   VEHICLE_REFRESH_INTERVAL_MS: 15_000,
   DIALOG_REFRESH_INTERVAL_MS: 30_000,
 }
 
 const _PROFILE = IS_PUBLIC_TEST_KEY ? _TEST_PROFILE : _PROD_PROFILE
 
-export const { ARRIVALS_CACHE_TTL_MS, OBA_CACHE_TTL_MS, OBA_COOLDOWN_BASE_MS, OBA_COOLDOWN_MAX_MS, OBA_ARRIVALS_CONCURRENCY, VEHICLE_REFRESH_INTERVAL_MS, DIALOG_REFRESH_INTERVAL_MS } = _PROFILE
+export const { ARRIVALS_CACHE_TTL_MS, OBA_CACHE_TTL_MS, OBA_COOLDOWN_BASE_MS, OBA_COOLDOWN_MAX_MS, OBA_ARRIVALS_CONCURRENCY, OBA_RETRY_BASE_MS, OBA_RATE_LIMIT_DELAY_MS, VEHICLE_REFRESH_INTERVAL_MS, DIALOG_REFRESH_INTERVAL_MS } = _PROFILE
 export const DIALOG_DISPLAY_SCROLL_INTERVAL_MS = 4_000
 export const DIALOG_DISPLAY_DIRECTION_ROTATE_MS = 15_000
 export const DIALOG_DISPLAY_DIRECTION_ANIMATION_MS = 520
@@ -188,7 +192,10 @@ export const UI_COPY = {
     affectedLineAlerts: (lineName, count) => `${lineName} Alerts`,
     realtimeOffline: 'Realtime offline',
     realtimeRequestFailed: 'Realtime request failed. Using last successful snapshot.',
+    realtimeRateLimited: 'API rate limited. Retrying…',
+    realtimeNetworkError: 'Network issue. Check your connection.',
     stationRequestFailed: 'Station arrivals request failed.',
+    stationRateLimited: 'Station request rate limited. Retrying…',
     startupRequestFailed: 'Initial data request failed.',
   },
   'zh-CN': {
@@ -309,7 +316,10 @@ export const UI_COPY = {
     affectedLineAlerts: (lineName) => `${lineName} 通知`,
     realtimeOffline: '实时数据离线',
     realtimeRequestFailed: '实时请求失败，正在使用最近一次成功快照。',
+    realtimeRateLimited: 'API 频率受限，正在重试…',
+    realtimeNetworkError: '网络异常，请检查连接。',
     stationRequestFailed: '获取到站信息失败。',
+    stationRateLimited: '站点请求频率受限，正在重试…',
     startupRequestFailed: '初始数据请求失败。',
   },
 }

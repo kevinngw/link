@@ -3,7 +3,7 @@ import { registerSW } from 'virtual:pwa-register'
 import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
-import { clamp, formatDistanceMeters, getDistanceMeters, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
+import { clamp, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
 import { createObaClient } from './oba'
 import { createArrivalsHelpers, getLineRouteId, getStatusTone } from './arrivals'
 import { parseVehicle } from './vehicles'
@@ -16,6 +16,10 @@ import { createStationDialogDisplayController } from './dialogs/station-display'
 import { createStationDialogRenderers } from './dialogs/station-render'
 import { createOverlayDialogs } from './dialogs/overlays'
 import { applySystemState, bootstrapApp, loadStaticData, loadSystemDataById } from './static-data'
+import { clearDialogParams, clearStationParam, getPageFromUrl, isOptionalNavigationEnabled, setAlertDialogParams, setInsightsDialogParams, setPageParam, setStationParam, setStationSearchParams, setSystemParam, setTrainDialogParams } from './url-state'
+import { createToast } from './toast'
+import { createVehicleDisplay } from './vehicle-display'
+import { createStationSearch } from './station-search'
 
 const state = {
   fetchedAt: '',
@@ -532,27 +536,6 @@ boardElement.addEventListener('click', (e) => {
   }
 })
 
-// Board: hover prefetch for station groups
-let _prefetchTimeout = 0
-let _lastHoveredGroup = null
-boardElement.addEventListener('mouseover', (e) => {
-  const group = e.target.closest('.station-group')
-  if (!group || group === _lastHoveredGroup) return
-  _lastHoveredGroup = group
-  clearTimeout(_prefetchTimeout)
-  _prefetchTimeout = setTimeout(() => {
-    const result = findStationAndLineByStopId(group.dataset.stopId)
-    if (!result) return
-    getStationStopIds(result.station, result.line).forEach((id) => {
-      prefetch(`${OBA_BASE_URL}/arrivals-and-departures-for-stop/${id}.json?key=${OBA_KEY}&minutesAfter=60`, `Prefetch ${result.station.name}`)
-    })
-  }, 100)
-})
-boardElement.addEventListener('mouseout', (e) => {
-  if (!e.target.closest('.station-group')) return
-  _lastHoveredGroup = null
-  clearTimeout(_prefetchTimeout)
-})
 
 // System bar: system switcher
 systemBarElement.addEventListener('click', async (e) => {
@@ -571,358 +554,34 @@ dialog.addEventListener('click', (e) => {
   renderTrainDialog(vehicle)
 })
 
-let toastHideTimer = 0
-let lastToastMessage = ''
-let lastToastAt = 0
+const { showToast, hideToast } = createToast(toastRegionElement)
 
 
 
-let _stationSearchEntriesCache = null
-let _stationSearchEntriesSystemKey = ''
-
-const RECENT_SEARCHES_KEY = 'link-pulse-recent-searches'
-const RECENT_SEARCHES_MAX = 5
-
-function getRecentSearches() {
-  try {
-    const raw = window.localStorage.getItem(RECENT_SEARCHES_KEY)
-    return raw ? JSON.parse(raw) : []
-  } catch { return [] }
-}
-
-function addRecentSearch(result) {
-  const recents = getRecentSearches()
-  const key = `${result.systemId}:${result.lineId}:${result.stationId}`
-  const updated = [
-    { key, systemId: result.systemId, lineId: result.lineId, stationId: result.stationId, stationName: result.stationName, lineName: result.lineName, lineColor: result.lineColor, systemName: result.systemName },
-    ...recents.filter((item) => item.key !== key),
-  ].slice(0, RECENT_SEARCHES_MAX)
-  try { window.localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated)) } catch {}
-}
-
-function highlightMatch(text, query) {
-  if (!query) return text
-  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return text.replace(new RegExp(`(${escaped})`, 'gi'), '<mark class="search-highlight">$1</mark>')
-}
-
-function getStationSearchEntries() {
-  const systemKey = [...state.systemsById.keys()].join(',')
-  if (_stationSearchEntriesCache && systemKey === _stationSearchEntriesSystemKey) {
-    return _stationSearchEntriesCache
-  }
-
-  const entries = []
-  for (const system of state.systemsById.values()) {
-    for (const line of system.lines ?? []) {
-      for (const station of line.stops ?? []) {
-        entries.push({
-          key: `${system.id}:${line.id}:${station.id}`,
-          systemId: system.id,
-          systemName: system.name,
-          lineId: line.id,
-          lineName: line.name,
-          lineColor: line.color,
-          stationId: station.id,
-          stationName: station.name,
-          normalizedStationName: normalizeName(station.name),
-          aliases: line.stationAliases?.[station.id] ?? [],
-          lat: station.lat,
-          lon: station.lon,
-        })
-      }
-    }
-  }
-
-  _stationSearchEntriesCache = entries
-  _stationSearchEntriesSystemKey = systemKey
-  return entries
-}
-
-
-function getActiveStationSearchResults() {
-  return state.stationSearchQuery.trim() ? getStationSearchResults() : getNearbyStationResults()
-}
-
-function getNearbyStationResults() {
-  return state.nearbyStations.slice(0, 8)
-}
-
-function getNearbyStationSearchEntries(latitude, longitude) {
-  const deduped = new Map()
-
-  for (const entry of getStationSearchEntries()) {
-    const lat = Number(entry.lat)
-    const lon = Number(entry.lon)
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue
-    const distanceMeters = getDistanceMeters(latitude, longitude, lat, lon)
-    const dedupeKey = `${entry.systemId}:${entry.normalizedStationName}`
-    const existing = deduped.get(dedupeKey)
-    const candidate = { ...entry, distanceMeters }
-    if (!existing || candidate.distanceMeters < existing.distanceMeters) {
-      deduped.set(dedupeKey, candidate)
-    }
-  }
-
-  return [...deduped.values()]
-    .sort((left, right) => left.distanceMeters - right.distanceMeters || left.stationName.localeCompare(right.stationName))
-    .slice(0, 8)
-}
-
-async function findNearbyStations() {
-  if (!navigator.geolocation) {
-    state.geolocationError = copyValue('locationUnsupported')
-    state.geolocationStatus = ''
-    state.nearbyStations = []
-    renderStationSearchResults()
-    return
-  }
-
-  state.isLocating = true
-  state.geolocationError = ''
-  state.geolocationStatus = copyValue('locationFinding')
-  state.stationSearchQuery = ''
-  state.highlightedNearbyStationIndex = 0
-  renderStationSearchResults()
-
-  try {
-    const position = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: true,
-        timeout: 12000,
-        maximumAge: 120000,
-      })
-    })
-
-    const latitude = position.coords?.latitude
-    const longitude = position.coords?.longitude
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      throw new Error('invalid-location')
-    }
-
-    state.userLocation = { latitude, longitude }
-    state.nearbyStations = getNearbyStationSearchEntries(latitude, longitude)
-    state.geolocationStatus = state.nearbyStations.length
-      ? copyValue('locationFoundNearby', state.nearbyStations.length)
-      : copyValue('locationNoNearby')
-    state.geolocationError = ''
-  } catch (error) {
-    const code = error?.code
-    state.nearbyStations = []
-    state.geolocationStatus = ''
-    state.geolocationError = code === 1
-      ? copyValue('locationPermissionDenied')
-      : code === 2
-        ? copyValue('locationUnavailable')
-        : code === 3
-          ? copyValue('locationTimedOut')
-          : copyValue('locationFailed')
-  } finally {
-    state.isLocating = false
-    renderStationSearchResults()
-  }
-}
-
-function getStationSearchResults() {
-  const query = state.stationSearchQuery.trim().toLowerCase()
-  const entries = getStationSearchEntries()
-
-  const scored = entries.map((entry) => {
-    const searchHaystack = [
-      entry.stationName,
-      entry.normalizedStationName,
-      entry.lineName,
-      entry.systemName,
-      ...entry.aliases,
-    ].join(' | ').toLowerCase()
-
-    let score = query ? 0 : 1
-    if (query) {
-      const stationLower = entry.stationName.toLowerCase()
-      const normalizedLower = entry.normalizedStationName.toLowerCase()
-      const lineLower = entry.lineName.toLowerCase()
-      const systemLower = entry.systemName.toLowerCase()
-      const aliasHit = entry.aliases.some((alias) => alias.toLowerCase().includes(query))
-
-      if (stationLower === query || normalizedLower === query) score += 120
-      if (stationLower.startsWith(query) || normalizedLower.startsWith(query)) score += 90
-      if (stationLower.includes(query) || normalizedLower.includes(query)) score += 70
-      if (lineLower.includes(query)) score += 20
-      if (systemLower.includes(query)) score += 12
-      if (aliasHit) score += 18
-      if (!searchHaystack.includes(query)) return null
-    }
-
-    return { ...entry, score }
-  }).filter(Boolean)
-
-  return scored
-    .sort((left, right) => right.score - left.score || left.stationName.localeCompare(right.stationName) || left.lineName.localeCompare(right.lineName))
-    .slice(0, 12)
-}
-
-function getRecentSearchResults() {
-  const recents = getRecentSearches()
-  if (!recents.length) return []
-  return recents.map((recent) => ({
-    ...recent,
-    normalizedStationName: normalizeName(recent.stationName),
-  }))
-}
-
-function renderStationSearchResults() {
-  const hasQuery = Boolean(state.stationSearchQuery.trim())
-  const nearbyResults = getNearbyStationResults()
-  const recentResults = !hasQuery && !nearbyResults.length ? getRecentSearchResults() : []
-  const results = hasQuery ? getStationSearchResults() : (nearbyResults.length ? nearbyResults : recentResults)
-  const isShowingRecents = !hasQuery && !nearbyResults.length && recentResults.length > 0
-
-  state.stationSearchResults = hasQuery ? results : []
-  state.highlightedStationSearchIndex = Math.min(state.highlightedStationSearchIndex, Math.max(0, (hasQuery ? results.length : 0) - 1))
-  state.highlightedNearbyStationIndex = Math.min(state.highlightedNearbyStationIndex, Math.max(0, (hasQuery ? 0 : results.length) - 1))
-
-  stationLocationButton.textContent = state.isLocating ? copyValue('locationFindingButton') : copyValue('useMyLocation')
-  stationLocationButton.disabled = state.isLocating
-  stationLocationStatusElement.textContent = state.geolocationError || state.geolocationStatus
-  stationLocationStatusElement.classList.toggle('is-error', Boolean(state.geolocationError))
-
-  const query = state.stationSearchQuery.trim().toLowerCase()
-
-  stationSearchMetaElement.textContent = results.length
-    ? (hasQuery
-      ? `${copyValue('stationSearchResults', results.length)} · ${copyValue('searchKeyboardHint')}`
-      : isShowingRecents
-        ? copyValue('recentSearches')
-        : copyValue('nearbyStationsFound', results.length))
-    : (hasQuery
-      ? copyValue('noStationSearchResults')
-      : (state.geolocationError || state.geolocationStatus || copyValue('nearbyStationsHint')))
-
-  stationSearchResultsElement.innerHTML = results.length
-    ? results.map((result, index) => {
-        const isNearby = !hasQuery && !isShowingRecents
-        const isActive = hasQuery
-          ? index === state.highlightedStationSearchIndex
-          : index === state.highlightedNearbyStationIndex
-        const displayName = normalizeName(result.stationName)
-        const titleHtml = hasQuery ? highlightMatch(displayName, query) : displayName
-        const meta = isNearby
-          ? `${formatDistanceMeters(result.distanceMeters)} · ${result.lineName} · ${result.systemName}`
-          : `${result.lineName} · ${result.systemName}`
-        return `
-          <div
-            class="station-search-result${isActive ? ' is-active' : ''}"
-            data-station-search-index="${index}"
-            role="button"
-            tabindex="0"
-          >
-            <span class="station-search-result-main">
-              <span class="arrival-line-token station-search-result-token" style="--line-color:${result.lineColor};">${result.lineName[0]}</span>
-              <span class="station-search-result-copy">
-                <span class="station-search-result-title">${titleHtml}</span>
-                <span class="station-search-result-meta">${meta}</span>
-              </span>
-            </span>
-            <span class="station-search-result-actions">
-
-            </span>
-          </div>
-        `
-      }).join('')
-    : `<div class="arrival-item muted">${hasQuery ? copyValue('noStationSearchResults') : (state.geolocationError || state.geolocationStatus || copyValue('nearbyStationsHint'))}</div>`
-
-  const buttons = stationSearchResultsElement.querySelectorAll('[data-station-search-index]')
-  buttons.forEach((button) => {
-    const selectResult = async () => {
-      const source = hasQuery ? state.stationSearchResults : (nearbyResults.length ? state.nearbyStations : recentResults)
-      const selected = source[Number(button.dataset.stationSearchIndex)]
-      if (selected) await handleStationSearchSelection(selected)
-    }
-    button.addEventListener('click', selectResult)
-    button.addEventListener('keydown', async (event) => {
-      if (event.key !== 'Enter' && event.key !== ' ') return
-      event.preventDefault()
-      await selectResult()
-    })
-  })
-
-
-}
-
-function openStationSearch(prefill = '', { updateUrl = true } = {}) {
-  state.stationSearchQuery = prefill
-  state.highlightedStationSearchIndex = 0
-  state.highlightedNearbyStationIndex = 0
-  if (prefill.trim()) {
-    state.nearbyStations = []
-    state.geolocationStatus = ''
-    state.geolocationError = ''
-  }
-  state.activeDialogType = 'search'
-  if (!stationSearchDialog.open) stationSearchDialog.showModal()
-  stationSearchInput.value = prefill
-  renderStationSearchResults()
-  if (updateUrl) setStationSearchParams(prefill)
-  requestAnimationFrame(() => {
-    stationSearchInput.focus()
-    stationSearchInput.select()
-  })
-}
-
-function closeStationSearch() {
-  state.stationSearchQuery = ''
-  state.stationSearchResults = []
-  state.highlightedStationSearchIndex = 0
-  state.highlightedNearbyStationIndex = 0
-  state.nearbyStations = []
-  state.geolocationStatus = ''
-  state.geolocationError = ''
-  state.isLocating = false
-  if (state.activeDialogType === 'search') state.activeDialogType = ''
-  closeDialogAnimated(stationSearchDialog)
-}
-
-async function handleStationSearchSelection(result) {
-  addRecentSearch(result)
-  closeStationSearch()
-  if (result.systemId !== state.activeSystemId) {
-    await switchSystem(result.systemId, { updateUrl: true, preserveDialog: false })
-  }
-  const line = state.lines.find((candidate) => candidate.id === result.lineId)
-  const station = line?.stops?.find((candidate) => candidate.id === result.stationId)
-  if (station) {
-    await showStationDialog(station)
-  }
-}
-
-function hideToast() {
-  window.clearTimeout(toastHideTimer)
-  toastHideTimer = 0
-  const toast = toastRegionElement.querySelector('.toast')
-  if (toast) {
-    toast.classList.add('toast-leaving')
-    toast.addEventListener('animationend', () => {
-      toastRegionElement.innerHTML = ''
-    }, { once: true })
-  } else {
-    toastRegionElement.innerHTML = ''
-  }
-}
-
-function showToast(message, { tone = 'error', dedupeMs = 15_000 } = {}) {
-  if (!message) return
-
-  const now = Date.now()
-  if (message === lastToastMessage && now - lastToastAt < dedupeMs) return
-
-  lastToastMessage = message
-  lastToastAt = now
-  toastRegionElement.innerHTML = `<div class="toast toast-${tone}" role="status">${message}</div>`
-  window.clearTimeout(toastHideTimer)
-  toastHideTimer = window.setTimeout(() => {
-    hideToast()
-  }, 4500)
-}
+const {
+  getActiveStationSearchResults,
+  getStationSearchEntries,
+  findNearbyStations,
+  renderStationSearchResults,
+  openStationSearch,
+  closeStationSearch,
+  handleStationSearchSelection,
+} = createStationSearch({
+  state,
+  elements: {
+    stationSearchDialog,
+    stationSearchInput,
+    stationSearchMetaElement,
+    stationSearchResultsElement,
+    stationLocationButton,
+    stationLocationStatusElement,
+  },
+  copyValue,
+  closeDialogAnimated,
+  showStationDialog,
+  switchSystem,
+  setStationSearchParams,
+})
 
 function setArrivalsTitleHtml(element, text) {
   element.innerHTML = `<span class="arrivals-title-track"><span class="arrivals-title-text">${text}</span><span class="arrivals-title-text arrivals-title-clone" aria-hidden="true">${text}</span></span>`
@@ -980,7 +639,7 @@ function isPageRequestContextActive() {
   return document.visibilityState === 'visible' && document.hasFocus()
 }
 
-const { fetchJsonWithRetry, clearQueue: clearObaQueue, prefetch } = createObaClient(state)
+const { fetchJsonWithRetry, clearQueue: clearObaQueue } = createObaClient(state)
 const { buildArrivalsForLine, fetchArrivalsForStopIds, getCachedArrivalsForStation, getArrivalsForStation, mergeArrivalBuckets, getArrivalServiceStatus } = createArrivalsHelpers({
   state,
   fetchJsonWithRetry,
@@ -1405,206 +1064,6 @@ function renderInlineAlerts(lineAlerts, lineId) {
   `
 }
 
-function formatServiceStatus(serviceStatus) {
-  switch (serviceStatus) {
-    case 'ARR':
-      return copyValue('arrivingStatus')
-    case 'DELAY':
-      return copyValue('delayedStatus')
-    case 'OK':
-      return copyValue('enRoute')
-    default:
-      return ''
-  }
-}
-
-function getRealtimeOffset(offsetSeconds) {
-  if (!state.fetchedAt) return offsetSeconds
-  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - new Date(state.fetchedAt).getTime()) / 1000))
-  return offsetSeconds - elapsedSeconds
-}
-
-function getVehicleStatusClass(vehicle, nextOffset) {
-  if (nextOffset <= 90) return 'status-arriving'
-  return vehicle.delayInfo.colorClass
-}
-
-function getVehicleStatusPills(vehicle) {
-  const liveNextOffset = getRealtimeOffset(vehicle.nextOffset ?? 0)
-  const liveClosestOffset = getRealtimeOffset(vehicle.closestOffset ?? 0)
-  const delayText = vehicle.delayInfo.text
-
-  if (liveNextOffset <= 15) {
-    return [
-      { text: copyValue('arrivingNow'), toneClass: 'status-arriving' },
-      { text: delayText, toneClass: vehicle.delayInfo.colorClass },
-    ]
-  }
-
-  if (liveNextOffset <= 90) {
-    return [
-      { text: copyValue('arrivingIn', formatArrivalTime(liveNextOffset)), toneClass: 'status-arriving' },
-      { text: delayText, toneClass: vehicle.delayInfo.colorClass },
-    ]
-  }
-
-  if (liveClosestOffset < 0 && liveNextOffset > 0) {
-    return [
-      { text: copyValue('nextStopIn', formatArrivalTime(liveNextOffset)), toneClass: 'status-arriving' },
-      { text: delayText, toneClass: vehicle.delayInfo.colorClass },
-    ]
-  }
-
-  const statusText = formatServiceStatus(vehicle.serviceStatus)
-  return [
-    { text: statusText, toneClass: getVehicleStatusClass(vehicle, liveNextOffset) },
-    { text: delayText, toneClass: vehicle.delayInfo.colorClass },
-  ]
-}
-
-function renderStatusPills(pills) {
-  return pills
-    .map(
-      (pill) => `
-        <span class="status-chip ${pill.toneClass}">
-          ${pill.text}
-        </span>
-      `,
-    )
-    .join('')
-}
-
-function formatVehicleArrivalMessage(vehicle) {
-  const liveNextOffset = getRealtimeOffset(vehicle.nextOffset ?? 0)
-  const liveClosestOffset = getRealtimeOffset(vehicle.closestOffset ?? 0)
-  const stopLabel = vehicle.upcomingLabel || vehicle.toLabel || vehicle.currentStopLabel
-  const [statusPill, delayPill] = getVehicleStatusPills(vehicle)
-
-  if (liveNextOffset <= 15) {
-    return `${vehicle.label} at ${stopLabel} ${renderStatusPills([statusPill, delayPill])}`
-  }
-
-  if (liveNextOffset <= 90) {
-    return `${vehicle.label} at ${stopLabel} ${renderStatusPills([statusPill, delayPill])}`
-  }
-
-  if (liveClosestOffset < 0 && liveNextOffset > 0) {
-    return `${vehicle.label} ${stopLabel} ${renderStatusPills([statusPill, delayPill])}`
-  }
-
-  return `${vehicle.label} to ${stopLabel} ${renderStatusPills([statusPill, delayPill])}`
-}
-
-function formatVehicleStatus(vehicle) {
-  return renderStatusPills(getVehicleStatusPills(vehicle))
-}
-
-function renderLineStatusMarquee(lineColor, vehicles) {
-  if (!vehicles.length) return ''
-
-  const visibleVehicles = [...vehicles]
-    .sort((left, right) => getRealtimeOffset(left.nextOffset ?? 0) - getRealtimeOffset(right.nextOffset ?? 0))
-    .slice(0, 8)
-
-  const entries = [...visibleVehicles, ...visibleVehicles]
-
-  return `
-    <div class="line-marquee" style="--line-color:${lineColor};">
-      <div class="line-marquee-track">
-        ${entries.map((vehicle) => `
-          <span
-            class="line-marquee-item ${getVehicleStatusClass(vehicle, getRealtimeOffset(vehicle.nextOffset ?? 0))}"
-            data-vehicle-marquee="${vehicle.id}"
-          >
-            <span class="line-marquee-token">${vehicle.lineToken}</span>
-            <span class="line-marquee-copy">${formatVehicleArrivalMessage(vehicle)}</span>
-          </span>
-        `).join('')}
-      </div>
-    </div>
-  `
-}
-
-function refreshVehicleStatusMessages() {
-  const vehiclesById = new Map(getAllVehicles().map((v) => [v.id, v]))
-
-  document.querySelectorAll('[data-vehicle-status]').forEach((element) => {
-    const vehicle = vehiclesById.get(element.dataset.vehicleStatus)
-    if (!vehicle) return
-    const liveNextOffset = getRealtimeOffset(vehicle.nextOffset ?? 0)
-    element.innerHTML = formatVehicleStatus(vehicle)
-    element.className = `train-list-status ${getVehicleStatusClass(vehicle, liveNextOffset)}`
-  })
-
-  document.querySelectorAll('[data-vehicle-marquee]').forEach((element) => {
-    const vehicle = vehiclesById.get(element.dataset.vehicleMarquee)
-    if (!vehicle) return
-    const liveNextOffset = getRealtimeOffset(vehicle.nextOffset ?? 0)
-    element.className = `line-marquee-item ${getVehicleStatusClass(vehicle, liveNextOffset)}`
-    const copyElement = element.querySelector('.line-marquee-copy')
-    if (copyElement) copyElement.innerHTML = formatVehicleArrivalMessage(vehicle)
-  })
-}
-
-function refreshVehicleCountdownDisplays() {
-  const vehiclesById = new Map(getAllVehicles().map((vehicle) => [vehicle.id, vehicle]))
-
-  document.querySelectorAll('[data-vehicle-next-countdown]').forEach((element) => {
-    const vehicle = vehiclesById.get(element.dataset.vehicleNextCountdown ?? '')
-    if (!vehicle) return
-    element.textContent = formatArrivalTime(getRealtimeOffset(vehicle.nextOffset ?? 0))
-  })
-
-  document.querySelectorAll('[data-vehicle-next-clock]').forEach((element) => {
-    const vehicle = vehiclesById.get(element.dataset.vehicleNextClock ?? '')
-    if (!vehicle) return
-    element.textContent = formatEtaClockFromNow(getRealtimeOffset(vehicle.nextOffset ?? 0))
-  })
-
-  document.querySelectorAll('[data-vehicle-terminal-countdown]').forEach((element) => {
-    const vehicle = vehiclesById.get(element.dataset.vehicleTerminalCountdown ?? '')
-    if (!vehicle) return
-    const layout = state.layouts.get(vehicle.lineId)
-    const terminalEta = Math.max(0, (getTrainTimelineEntries(vehicle, layout).at(-1)?.etaSeconds) ?? (vehicle.nextOffset ?? 0))
-    element.textContent = formatArrivalTime(getRealtimeOffset(terminalEta))
-  })
-
-  document.querySelectorAll('[data-train-timeline-entry]').forEach((element) => {
-    const baseEtaSeconds = Number(element.dataset.baseEtaSeconds)
-    const renderedAt = Number(element.dataset.renderedAt)
-    if (!Number.isFinite(baseEtaSeconds) || !Number.isFinite(renderedAt)) return
-
-    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - renderedAt) / 1000))
-    const liveEtaSeconds = Math.max(0, baseEtaSeconds - elapsedSeconds)
-    const countdownElement = element.querySelector('[data-train-timeline-countdown]')
-    const clockElement = element.querySelector('[data-train-timeline-clock]')
-
-    if (countdownElement) countdownElement.textContent = formatArrivalTime(liveEtaSeconds)
-    if (clockElement) clockElement.textContent = formatEtaClockFromNow(liveEtaSeconds)
-  })
-}
-
-function refreshArrivalCountdowns() {
-  const arrivalElements = document.querySelectorAll('.arrival-item[data-arrival-time]')
-  arrivalElements.forEach((element) => {
-    const arrivalTime = Number(element.dataset.arrivalTime)
-    if (!Number.isFinite(arrivalTime)) return
-
-    const countdownElement = element.querySelector('.arrival-countdown')
-    const statusElement = element.querySelector('.arrival-status')
-    if (!countdownElement || !statusElement) return
-
-    const diffSeconds = Math.floor((arrivalTime - Date.now()) / 1000)
-    const scheduleDeviation = Number(element.dataset.scheduleDeviation ?? 0)
-    const serviceStatus = getArrivalServiceStatus(arrivalTime, scheduleDeviation)
-    const serviceTone = getStatusTone(serviceStatus)
-
-    countdownElement.textContent = formatArrivalTime(diffSeconds)
-    statusElement.textContent = serviceStatus
-    statusElement.className = `arrival-status arrival-status-${serviceTone}`
-  })
-}
-
 function formatVehicleSegment(vehicle) {
   if (vehicle.fromLabel === vehicle.toLabel || vehicle.progress === 0) {
     return state.language === 'zh-CN' ? `位于 ${vehicle.fromLabel}` : `At ${vehicle.fromLabel}`
@@ -1688,6 +1147,27 @@ function getAllVehicles() {
     })),
   )
 }
+
+const {
+  getRealtimeOffset,
+  getVehicleStatusClass,
+  getVehicleStatusPills,
+  renderStatusPills,
+  formatVehicleStatus,
+  renderLineStatusMarquee,
+  refreshVehicleStatusMessages,
+  refreshVehicleCountdownDisplays,
+  refreshArrivalCountdowns,
+} = createVehicleDisplay({
+  state,
+  copyValue,
+  formatArrivalTime,
+  formatEtaClockFromNow,
+  getArrivalServiceStatus,
+  getStatusTone,
+  getAllVehicles,
+  getTrainTimelineEntries,
+})
 
 function renderSystemSwitcher() {
   return Object.values(SYSTEM_META)
@@ -1817,117 +1297,7 @@ function findStationByParam(stationParam) {
   return null
 }
 
-function updateUrlParams(mutator) {
-  const url = new URL(window.location.href)
-  const before = url.search
-  mutator(url.searchParams, url)
-  if (url.search === before) return
-  window.history.pushState({}, '', url)
-}
 
-function setPageParam(page) {
-  const nextPage = ['map', 'trains', 'insights'].includes(page) ? page : 'map'
-  updateUrlParams((params) => {
-    if (nextPage === 'map') params.delete('page')
-    else params.set('page', nextPage)
-  })
-}
-
-function getPageFromUrl() {
-  const url = new URL(window.location.href)
-  const requestedPage = (url.searchParams.get('page') ?? '').trim().toLowerCase()
-  return ['map', 'trains', 'insights'].includes(requestedPage) ? requestedPage : 'map'
-}
-
-function setSystemParam(systemId) {
-  updateUrlParams((params) => {
-    if (systemId === DEFAULT_SYSTEM_ID) {
-      params.delete('system')
-    } else {
-      params.set('system', systemId)
-    }
-  })
-}
-
-function setStationParam(station) {
-  updateUrlParams((params) => {
-    params.set('dialog', 'station')
-    params.set('station', slugifyStation(station.name))
-    params.delete('train')
-    params.delete('line')
-    params.delete('detail')
-    params.delete('q')
-  })
-}
-
-function setTrainDialogParams(trainId) {
-  updateUrlParams((params) => {
-    params.set('dialog', 'train')
-    params.set('train', trainId)
-    params.delete('station')
-    params.delete('line')
-    params.delete('detail')
-    params.delete('q')
-  })
-}
-
-function setAlertDialogParams(lineId) {
-  updateUrlParams((params) => {
-    params.set('dialog', 'alerts')
-    params.set('line', lineId)
-    params.delete('station')
-    params.delete('train')
-    params.delete('detail')
-    params.delete('q')
-  })
-}
-
-function setStationSearchParams(prefill = '') {
-  updateUrlParams((params) => {
-    params.set('dialog', 'search')
-    params.delete('station')
-    params.delete('train')
-    params.delete('line')
-    params.delete('detail')
-    if (prefill) params.set('q', prefill)
-    else params.delete('q')
-  })
-}
-
-function setInsightsDialogParams(type, lineId = '') {
-  updateUrlParams((params) => {
-    params.set('dialog', 'insights')
-    params.set('detail', type)
-    params.delete('station')
-    params.delete('train')
-    params.delete('q')
-    if (lineId) params.set('line', lineId)
-    else params.delete('line')
-  })
-}
-
-function clearDialogParams({ keepPage = true, keepSystem = true, keepStation = false } = {}) {
-  updateUrlParams((params) => {
-    params.delete('dialog')
-    params.delete('train')
-    params.delete('line')
-    params.delete('detail')
-    params.delete('q')
-    if (!keepStation) params.delete('station')
-    if (!keepPage) params.delete('page')
-    if (!keepSystem) params.delete('system')
-  })
-}
-
-function clearStationParam() {
-  clearDialogParams({ keepPage: true, keepSystem: true })
-}
-
-function isOptionalNavigationEnabled() {
-  const url = new URL(window.location.href)
-  const value = (url.searchParams.get('navigate') ?? '').trim().toLowerCase()
-  return value === '1' || value === 'true' || value === 'yes'
-}
 
 function getSystemIdFromUrl() {
   const url = new URL(window.location.href)
@@ -2053,7 +1423,11 @@ const stationDialogDisplay = createStationDialogDisplayController({
     try {
       await refreshStationDialog(station)
     } catch (error) {
-      showToast(copyValue('stationRequestFailed'))
+      if (error.errorType === 'rate-limit') {
+        showToast(copyValue('stationRateLimited'))
+      } else {
+        showToast(copyValue('stationRequestFailed'))
+      }
       throw error
     }
   },
@@ -2341,7 +1715,11 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
     await refreshStationDialog(station, { requestId, skipCache: true })
   } catch (e) {
     if (state.activeDialogRequest !== requestId) return
-    showToast(copyValue('stationRequestFailed'))
+    if (e.errorType === 'rate-limit') {
+      showToast(copyValue('stationRateLimited'))
+    } else {
+      showToast(copyValue('stationRequestFailed'))
+    }
     console.warn('Station refresh failed:', e)
   }
 }
@@ -2739,7 +2117,13 @@ async function refreshVehicles() {
     })
   } catch (error) {
     state.error = copyValue('realtimeOffline')
-    showToast(copyValue('realtimeRequestFailed'))
+    if (error.errorType === 'rate-limit') {
+      showToast(copyValue('realtimeRateLimited'))
+    } else if (error.errorType === 'network') {
+      showToast(copyValue('realtimeNetworkError'))
+    } else {
+      showToast(copyValue('realtimeRequestFailed'))
+    }
     console.error(error)
   }
 

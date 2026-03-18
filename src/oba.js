@@ -1,9 +1,30 @@
 import {
   OBA_CACHE_TTL_MS,
   OBA_MAX_RETRIES,
+  OBA_RETRY_BASE_MS,
+  OBA_RATE_LIMIT_DELAY_MS,
 } from './config'
 
 const REQUEST_TIMEOUT_MS = 10_000
+
+/**
+ * Classify error type from response/network state
+ */
+function classifyError(response, networkError, payload) {
+  if (networkError) return 'network'
+  if (response?.status === 429 || (payload?.code === 429 || /rate limit/i.test(payload?.text ?? ''))) return 'rate-limit'
+  if (response?.status >= 500 && response?.status < 600) return 'server'
+  if (response && !response.ok) return 'client'
+  return null
+}
+
+/**
+ * Compute retry delay with exponential backoff
+ */
+function getRetryDelay(errorType, attempt) {
+  const base = errorType === 'rate-limit' ? OBA_RATE_LIMIT_DELAY_MS : OBA_RETRY_BASE_MS
+  return base * Math.pow(2, attempt)
+}
 
 /**
  * Create OBA API client with request deduplication, caching, and cancellation
@@ -23,9 +44,9 @@ export function createObaClient(state) {
    */
   async function fetchWithAbort(url, signal) {
     try {
-      const response = await fetch(url, { 
+      const response = await fetch(url, {
         cache: 'no-store',
-        signal 
+        signal
       })
       return { response, error: null }
     } catch (error) {
@@ -101,11 +122,13 @@ export function createObaClient(state) {
         continue
       }
 
-      const isTransientError = networkError != null ||
-        (response != null && (response.status === 429 || (response.status >= 500 && response.status < 600)))
+      const errorType = classifyError(response, networkError, payload)
+      const isTransientError = errorType === 'network' || errorType === 'rate-limit' || errorType === 'server'
 
       if (attempt >= OBA_MAX_RETRIES || !isTransientError) {
         const error = networkError || new Error(payload?.text || `${label} request failed with ${response?.status ?? 'network error'}`)
+        error.errorType = errorType
+        error.httpStatus = response?.status ?? null
         reject(error)
         if (item.waiting) {
           item.waiting.forEach(({ reject: r }) => r(error))
@@ -113,15 +136,28 @@ export function createObaClient(state) {
         continue
       }
 
+      // Exponential backoff before retry
+      const delay = getRetryDelay(errorType, attempt)
+      await new Promise(r => setTimeout(r, delay))
+
+      // Re-check abort after delay
+      if (signal?.aborted) {
+        reject(new Error('Request cancelled'))
+        if (item.waiting) {
+          item.waiting.forEach(({ reject: r }) => r(new Error('Request cancelled')))
+        }
+        continue
+      }
+
       // Retry: preserve waiting list and signal
-      queue.push({ 
-        url, 
-        label, 
-        attempt: attempt + 1, 
-        resolve, 
-        reject, 
+      queue.push({
+        url,
+        label,
+        attempt: attempt + 1,
+        resolve,
+        reject,
         waiting: item.waiting,
-        signal 
+        signal
       })
     }
 
@@ -141,23 +177,23 @@ export function createObaClient(state) {
   async function fetchJsonWithRetry(url, label, signal, forceFresh = false) {
     const now = Date.now()
     const cached = cache.get(url)
-    
+
     // Fresh cache - return immediately
     if (!forceFresh && cached && now < cached.expiresAt) {
       return cached.payload
     }
-    
+
     // Stale cache - return stale data, revalidate in background
     if (!forceFresh && cached && now < cached.expiresAt + OBA_CACHE_TTL_MS) {
       // Background revalidation
       const existingItem = queue.find((item) => item.url === url)
       if (!existingItem) {
-        queue.push({ 
-          url, 
-          label, 
-          attempt: 0, 
+        queue.push({
+          url,
+          label,
+          attempt: 0,
           resolve: () => {}, // No-op, we already returned
-          reject: () => {}, 
+          reject: () => {},
           signal,
           background: true // Mark as background request
         })
@@ -172,7 +208,7 @@ export function createObaClient(state) {
       return new Promise((resolve, reject) => {
         if (!existingItem.waiting) existingItem.waiting = []
         existingItem.waiting.push({ resolve, reject })
-        
+
         if (signal) {
           signal.addEventListener('abort', () => {
             reject(new Error('Request cancelled'))
@@ -196,7 +232,7 @@ export function createObaClient(state) {
       currentController.abort()
       currentController = null
     }
-    
+
     // Reject and clear all pending queue items
     while (queue.length > 0) {
       const item = queue.shift()
@@ -229,22 +265,22 @@ export function createObaClient(state) {
     if (cached && Date.now() < cached.expiresAt + OBA_CACHE_TTL_MS) {
       return // Already have fresh or stale data
     }
-    
+
     // Check if already in queue
     if (queue.find((item) => item.url === url)) {
       return
     }
-    
+
     // Low priority: add to end of queue
-    queue.push({ 
-      url, 
-      label, 
-      attempt: 0, 
-      resolve: () => {}, 
+    queue.push({
+      url,
+      label,
+      attempt: 0,
+      resolve: () => {},
       reject: () => {},
-      background: true 
+      background: true
     })
-    
+
     // Start processing if not already
     processQueue()
   }
