@@ -3955,6 +3955,60 @@ dialog.is-closing::backdrop {
   }
 }
 
+/* ─── Arrival source indicator (LIVE / SCHED) ─── */
+
+.arrival-source {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.arrival-source-live {
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent-strong) 14%, transparent);
+}
+
+.arrival-source-sched {
+  color: var(--text-muted);
+  background: var(--surface-soft);
+}
+
+/* ─── Train dialog clickable elements ─── */
+
+.train-detail-stop-clickable {
+  cursor: pointer;
+  transition: background var(--duration-fast) ease;
+  border-radius: 8px;
+  padding: 4px 6px;
+  margin: -4px -6px;
+}
+
+.train-detail-stop-clickable:hover {
+  background: var(--surface-active);
+}
+
+.train-detail-stop-clickable:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-strong) 70%, white);
+  outline-offset: 2px;
+}
+
+[data-timeline-station-id] {
+  cursor: pointer;
+  transition: background var(--duration-fast) ease;
+}
+
+[data-timeline-station-id]:hover {
+  background: var(--surface-active);
+}
+
+[data-timeline-station-id]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-strong) 70%, white);
+  outline-offset: 2px;
+}
+
 /* ─── Search match highlight ─── */
 
 .search-highlight {

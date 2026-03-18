@@ -133,6 +133,7 @@ document.querySelector('#app').innerHTML = `
         </div>
         <div class="dialog-actions">
 <button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
+<button id="station-dialog-close" class="dialog-close" type="button" aria-label="Close station dialog">&times;</button>
         </div>
       </header>
       <div class="dialog-direction-bar">
@@ -320,6 +321,7 @@ dialogDirectionTabs.forEach((button) => {
 dialog.addEventListener('click', (e) => {
   if (e.target === dialog) closeStationDialog()
 })
+document.querySelector('#station-dialog-close').addEventListener('click', () => closeStationDialog())
 trainDialog.addEventListener('click', (e) => {
   if (e.target === trainDialog) closeTrainDialog()
 })
@@ -1637,6 +1639,7 @@ function getTrainTimelineEntries(vehicle, layout) {
     if (!station) break
 
     entries.push({
+      stationId: station.id,
       label: station.label,
       etaSeconds,
       clockTime: formatClockTime(Date.now() + etaSeconds * 1000),
@@ -2414,7 +2417,15 @@ const { renderArrivalLists } = createStationDialogRenderers({
   getArrivalServiceStatus,
   getAllVehicles,
   syncDialogDisplayScroll,
-  attachDialogArrivalClickHandlers: () => {},
+  attachDialogArrivalClickHandlers: () => {
+    const buttons = dialog.querySelectorAll('[data-arrival-vehicle-id]')
+    buttons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const vehicle = getAllVehicles().find((v) => v.id === button.dataset.arrivalVehicleId)
+        if (vehicle) renderTrainDialog(vehicle)
+      })
+    })
+  },
 })
 
 
@@ -2434,6 +2445,11 @@ const overlayDialogs = createOverlayDialogs({
   renderStatusPills,
   formatArrivalTime,
   formatEtaClockFromNow,
+  onStationClick: (stationId, lineId) => {
+    const line = state.lines.find((l) => l.id === lineId)
+    const station = line?.stops?.find((s) => s.id === stationId)
+    if (station) showStationDialog(station)
+  },
 })
 
 const {

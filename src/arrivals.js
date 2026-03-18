@@ -110,6 +110,7 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
     for (const arrival of arrivalFeed) {
       if (arrival.routeId !== getLineRouteId(line)) continue
       if (stopIdFilter && !stopIdFilter.has(arrival.stopId)) continue
+      const isRealtime = Boolean(arrival.predictedArrivalTime)
       const arrivalTime = arrival.predictedArrivalTime || arrival.scheduledArrivalTime
       if (!arrivalTime || arrivalTime <= now || arrivalTime > cutoff) continue
 
@@ -124,6 +125,7 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
         vehicleId: (arrival.vehicleId || '').replace(/^\d+_/, '') || '--',
         rawVehicleId: arrival.vehicleId || '',
         arrivalTime,
+        isRealtime,
         destination: formatArrivalDestination(arrival, copyValue),
         scheduleDeviation: arrival.scheduleDeviation ?? 0,
         tripId: arrival.tripId,

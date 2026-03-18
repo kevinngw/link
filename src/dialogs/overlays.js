@@ -14,6 +14,7 @@ export function createOverlayDialogs({
   renderStatusPills,
   formatArrivalTime,
   formatEtaClockFromNow,
+  onStationClick,
 }) {
   const {
     trainDialog,
@@ -107,21 +108,21 @@ export function createOverlayDialogs({
           </svg>
         </span>
       </div>
-      <div class="train-detail-stop">
+      <div class="train-detail-stop train-detail-stop-clickable" data-spine-station-id="${vehicle.previousStopId}" role="button" tabindex="0">
         <span class="train-detail-marker"></span>
         <div>
           <p class="train-detail-label">${copyValue('previous')}</p>
           <p class="train-detail-name">${previousName}</p>
         </div>
       </div>
-      <div class="train-detail-stop is-current">
+      <div class="train-detail-stop is-current train-detail-stop-clickable" data-spine-station-id="${vehicle.currentStopId}" role="button" tabindex="0">
         <span class="train-detail-marker train-detail-marker-ghost"></span>
         <div>
           <p class="train-detail-label">${currentLabel === 'Between' ? (state.language === 'zh-CN' ? '区间' : 'Between') : copyValue('now')}</p>
           <p class="train-detail-name">${currentName}</p>
         </div>
       </div>
-      <div class="train-detail-stop">
+      <div class="train-detail-stop train-detail-stop-clickable" data-spine-station-id="${vehicle.upcomingStopId}" role="button" tabindex="0">
         <span class="train-detail-marker"></span>
         <div>
           <p class="train-detail-label">${copyValue('next')}</p>
@@ -161,6 +162,7 @@ export function createOverlayDialogs({
                       data-train-timeline-entry
                       data-base-eta-seconds="${entry.etaSeconds}"
                       data-rendered-at="${Date.now()}"
+                      ${entry.stationId ? `data-timeline-station-id="${entry.stationId}" role="button" tabindex="0"` : ''}
                     >
                       <div>
                         <p class="train-eta-stop-label">${entry.isNext ? copyValue('nextStop') : entry.isTerminal ? copyValue('terminal') : copyValue('upcoming')}</p>
@@ -181,6 +183,18 @@ export function createOverlayDialogs({
     )
 
     if (!trainDialog.open) trainDialog.showModal()
+
+    // Attach click handlers for spine stops and timeline entries
+    trainDialog.querySelectorAll('[data-spine-station-id]').forEach((el) => {
+      const handler = () => onStationClick(el.dataset.spineStationId, vehicle.lineId)
+      el.addEventListener('click', handler)
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler() } })
+    })
+    trainDialog.querySelectorAll('[data-timeline-station-id]').forEach((el) => {
+      const handler = () => onStationClick(el.dataset.timelineStationId, vehicle.lineId)
+      el.addEventListener('click', handler)
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler() } })
+    })
   }
 
   return {

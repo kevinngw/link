@@ -65,6 +65,7 @@ export function createStationDialogRenderers({
               <span class="arrival-countdown">${timeStr}</span>
               <span class="arrival-precision">${precisionInfo}</span>
             </span>
+            <span class="arrival-source arrival-source-${arrival.isRealtime ? 'live' : 'sched'}">${arrival.isRealtime ? copyValue('realtimeBadge') : copyValue('scheduleBadge')}</span>
           </span>
         </${wrapperTag}>
       `
