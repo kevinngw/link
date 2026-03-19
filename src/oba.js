@@ -1,6 +1,5 @@
 import {
   OBA_CACHE_TTL_MS,
-  OBA_MAX_RETRIES,
 } from './config'
 
 const REQUEST_TIMEOUT_MS = 10_000
@@ -116,7 +115,7 @@ export function createObaClient(state) {
       const errorType = classifyError(response, networkError, payload)
       const isTransientError = errorType === 'network' || errorType === 'rate-limit' || errorType === 'server'
 
-      if (attempt >= OBA_MAX_RETRIES || !isTransientError) {
+      if (attempt >= 5 || !isTransientError) {
         const error = networkError || new Error(payload?.text || `${label} request failed with ${response?.status ?? 'network error'}`)
         error.errorType = errorType
         error.httpStatus = response?.status ?? null
@@ -127,8 +126,8 @@ export function createObaClient(state) {
         continue
       }
 
-      // Random delay before retry (0-100ms)
-      await new Promise(r => setTimeout(r, Math.random() * 100))
+      // Random delay before retry (1-100ms)
+      await new Promise(r => setTimeout(r, 1 + Math.random() * 99))
 
       // Re-check abort after delay
       if (signal?.aborted || cancelled) {
