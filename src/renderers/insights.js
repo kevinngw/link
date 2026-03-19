@@ -25,9 +25,7 @@ export function createInsightsRenderers(deps) {
     if (!gaps.length || count < 2) {
       return {
         averageText: '—',
-        detailText: state.language === 'zh-CN'
-          ? `${getVehicleLabelPlural()}数量不足，无法判断间隔`
-          : `Too few ${getVehicleLabelPlural().toLowerCase()} for a spacing read`,
+        detailText: copyValue('tooFewForSpacing', getVehicleLabelPlural().toLowerCase()),
       }
     }
 
@@ -37,7 +35,7 @@ export function createInsightsRenderers(deps) {
 
     return {
       averageText: `~${avg} min`,
-      detailText: state.language === 'zh-CN' ? `观测间隔 ${min}-${max} 分钟` : `${min}-${max} min observed gap`,
+      detailText: copyValue('observedGapRange', min, max),
     }
   }
 
@@ -56,16 +54,16 @@ export function createInsightsRenderers(deps) {
 
   function getDirectionBalance(nb, sb) {
     const delta = Math.abs(nb.length - sb.length)
-    if (delta <= 1) return { label: state.language === 'zh-CN' ? '均衡' : 'Balanced', tone: 'healthy' }
-    if (nb.length > sb.length) return { label: state.language === 'zh-CN' ? '北向偏多' : 'Northbound heavier', tone: 'warn' }
-    return { label: state.language === 'zh-CN' ? '南向偏多' : 'Southbound heavier', tone: 'warn' }
+    if (delta <= 1) return { label: copyValue('balanceBalanced'), tone: 'healthy' }
+    if (nb.length > sb.length) return { label: copyValue('balanceNorthHeavier'), tone: 'warn' }
+    return { label: copyValue('balanceSouthHeavier'), tone: 'warn' }
   }
 
   function renderDelayDistribution(delayBuckets, total, lineId) {
     const items = [
-      [state.language === 'zh-CN' ? '准点' : 'On time', delayBuckets.onTime, 'healthy', 'delay-ontime'],
-      [state.language === 'zh-CN' ? '晚点 2-5 分钟' : '2-5 min late', delayBuckets.minorLate, 'warn', 'delay-minor'],
-      [state.language === 'zh-CN' ? '晚点 5+ 分钟' : '5+ min late', delayBuckets.severeLate, 'alert', 'delay-severe'],
+      [copyValue('delayOnTimeChip'), delayBuckets.onTime, 'healthy', 'delay-ontime'],
+      [copyValue('delayMinorChip'), delayBuckets.minorLate, 'warn', 'delay-minor'],
+      [copyValue('delaySevereChip'), delayBuckets.severeLate, 'alert', 'delay-severe'],
     ]
 
     return `
@@ -133,27 +131,27 @@ export function createInsightsRenderers(deps) {
     const imbalance = Math.abs(nb.length - sb.length)
 
     if (nbStats.max != null && nbStats.max >= 12) {
-      exceptions.push({ tone: 'alert', copy: state.language === 'zh-CN' ? `${nbDirectionLabel} 当前有 ${nbStats.max} 分钟的服务空档。` : `${nbDirectionLabel} has a ${nbStats.max} min service hole right now.` })
+      exceptions.push({ tone: 'alert', copy: copyValue('serviceHole', nbDirectionLabel, nbStats.max) })
     }
     if (sbStats.max != null && sbStats.max >= 12) {
-      exceptions.push({ tone: 'alert', copy: state.language === 'zh-CN' ? `${sbDirectionLabel} 当前有 ${sbStats.max} 分钟的服务空档。` : `${sbDirectionLabel} has a ${sbStats.max} min service hole right now.` })
+      exceptions.push({ tone: 'alert', copy: copyValue('serviceHole', sbDirectionLabel, sbStats.max) })
     }
     if (imbalance >= 2) {
       exceptions.push({
         tone: 'warn',
         copy: nb.length > sb.length
-          ? state.language === 'zh-CN' ? `车辆分布向 ${nbDirectionLabel} 偏多 ${imbalance} 辆。` : `Vehicle distribution is tilted toward ${nbDirectionLabel} by ${imbalance}.`
-          : state.language === 'zh-CN' ? `车辆分布向 ${sbDirectionLabel} 偏多 ${imbalance} 辆。` : `Vehicle distribution is tilted toward ${sbDirectionLabel} by ${imbalance}.`,
+          ? copyValue('vehicleTilt', nbDirectionLabel, imbalance)
+          : copyValue('vehicleTilt', sbDirectionLabel, imbalance),
       })
     }
     if (severeLateVehicles.length) {
-      exceptions.push({ tone: 'warn', copy: state.language === 'zh-CN' ? `${severeLateVehicles.length} 辆${severeLateVehicles.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()}晚点超过 5 分钟。` : `${severeLateVehicles.length} ${severeLateVehicles.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()} are running 5+ min late.` })
+      exceptions.push({ tone: 'warn', copy: copyValue('vehiclesRunningLate', severeLateVehicles.length, severeLateVehicles.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()) })
     }
     if (lineAlerts.length) {
-      exceptions.push({ tone: 'info', copy: state.language === 'zh-CN' ? `${line.name} 当前受 ${lineAlerts.length} 条告警影响。` : `${lineAlerts.length} active alert${lineAlerts.length === 1 ? '' : 's'} affecting ${line.name}.` })
+      exceptions.push({ tone: 'info', copy: copyValue('alertsAffecting', line.name, lineAlerts.length) })
     }
     if (!exceptions.length) {
-      exceptions.push({ tone: 'healthy', copy: state.language === 'zh-CN' ? '当前间隔和准点性都比较稳定。' : 'Spacing and punctuality look stable right now.' })
+      exceptions.push({ tone: 'healthy', copy: copyValue('spacingStable') })
     }
 
     return exceptions.slice(0, 4)
@@ -198,7 +196,7 @@ export function createInsightsRenderers(deps) {
         const isUneven = [nbHealth, sbHealth].some((health) => health === 'uneven' || health === 'bunched' || health === 'sparse')
         const hasSevereLate = severeLateCount > 0
         const score = item.lineAlerts.length * 5 + severeLateCount * 3 + Math.max(0, worstGap - 10)
-        const attentionReasons = getLineAttentionReasons({ worstGap, severeLateCount, alertCount: item.lineAlerts.length, balanceDelta, language: state.language })
+        const attentionReasons = getLineAttentionReasons({ worstGap, severeLateCount, alertCount: item.lineAlerts.length, balanceDelta, copyValue })
 
         return { line: item.line, score, worstGap, severeLateCount, alertCount: item.lineAlerts.length, balanceDelta, hasSevereLate, isUneven, attentionReasons }
       })
@@ -214,46 +212,109 @@ export function createInsightsRenderers(deps) {
     const onTimeRate = totalVehicles ? Math.round((delayBuckets.onTime / totalVehicles) * 100) : null
     const priorityLines = rankedLines.filter((item) => item.score > 0).slice(0, 2)
 
-    let topIssue = { tone: 'healthy', copy: state.language === 'zh-CN' ? '当前没有明显的主要问题。' : 'No major active issues right now.' }
+    let topIssue = { tone: 'healthy', copy: copyValue('noMajorIssues') }
     const topLine = rankedLines[0] ?? null
-    if (topLine?.alertCount) topIssue = { tone: 'info', copy: state.language === 'zh-CN' ? `${topLine.line.name} 当前有 ${topLine.alertCount} 条生效告警。` : `${topLine.line.name} has ${topLine.alertCount} active alert${topLine.alertCount === 1 ? '' : 's'}.` }
-    else if (topLine?.worstGap >= 12) topIssue = { tone: 'alert', copy: state.language === 'zh-CN' ? `当前最大实时间隔为空 ${topLine.line.name} 的 ${topLine.worstGap} 分钟。` : `Largest live gap: ${topLine.worstGap} min on ${topLine.line.name}.` }
-    else if (topLine?.severeLateCount) topIssue = { tone: 'warn', copy: state.language === 'zh-CN' ? `${topLine.line.name} 有 ${topLine.severeLateCount} 辆${topLine.severeLateCount === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()}晚点超过 5 分钟。` : `${topLine.line.name} has ${topLine.severeLateCount} ${topLine.severeLateCount === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()} running 5+ min late.` }
+    if (topLine?.alertCount) topIssue = { tone: 'info', copy: copyValue('topIssueAlerts', topLine.line.name, topLine.alertCount) }
+    else if (topLine?.worstGap >= 12) topIssue = { tone: 'alert', copy: copyValue('topIssueGap', topLine.line.name, topLine.worstGap) }
+    else if (topLine?.severeLateCount) topIssue = { tone: 'warn', copy: copyValue('topIssueLate', topLine.line.name, topLine.severeLateCount, topLine.severeLateCount === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()) }
 
     return { totalLines, totalVehicles, totalAlerts, impactedLines, impactedStopCount, delayedLineIds, unevenLineIds, lateOnlyLineCount, unevenOnlyLineCount, mixedIssueLineCount, attentionLineCount, healthyLineCount, onTimeRate, rankedLines, priorityLines, topIssue }
   }
 
   function formatMetricDelta(current, previous, { suffix = '', invert = false } = {}) {
-    if (current == null || previous == null || current === previous) return state.language === 'zh-CN' ? '与上次快照持平' : 'Flat vs last snapshot'
+    if (current == null || previous == null || current === previous) return copyValue('flatVsSnapshot')
     const delta = current - previous
     const positiveIsGood = invert ? delta < 0 : delta > 0
     const arrow = delta > 0 ? '↑' : '↓'
-    return state.language === 'zh-CN' ? `${positiveIsGood ? '改善' : '变差'} ${arrow} ${Math.abs(delta)}${suffix}` : `${positiveIsGood ? 'Improving' : 'Worse'} ${arrow} ${Math.abs(delta)}${suffix}`
+    return `${positiveIsGood ? copyValue('metricImproving') : copyValue('metricWorse')} ${arrow} ${Math.abs(delta)}${suffix}`
+  }
+
+  function computeStationHotspots(insightsItems) {
+    const stationMap = new Map()
+
+    for (const item of insightsItems) {
+      for (const vehicle of item.vehicles) {
+        if (!vehicle.currentStopId || !vehicle.isPredicted) continue
+        const delay = Number(vehicle.scheduleDeviation ?? 0)
+        const key = vehicle.currentStopId
+
+        if (!stationMap.has(key)) {
+          stationMap.set(key, {
+            stopId: key,
+            label: vehicle.currentStopLabel,
+            totalDelay: 0,
+            worstDelay: 0,
+            vehicleCount: 0,
+            lines: new Map(),
+            vehicles: [],
+          })
+        }
+
+        const entry = stationMap.get(key)
+        entry.totalDelay += delay
+        entry.worstDelay = Math.max(entry.worstDelay, delay)
+        entry.vehicleCount += 1
+        entry.vehicles.push({ ...vehicle, lineName: item.line.name, lineColor: item.line.color })
+        if (!entry.lines.has(item.line.id)) {
+          entry.lines.set(item.line.id, { name: item.line.name, color: item.line.color })
+        }
+      }
+    }
+
+    return [...stationMap.values()]
+      .filter((s) => s.vehicleCount > 0)
+      .map((s) => ({ ...s, avgDelay: Math.round(s.totalDelay / s.vehicleCount) }))
+      .sort((a, b) => b.avgDelay - a.avgDelay)
+      .slice(0, 5)
+  }
+
+  function getHotspotTone(avgDelaySeconds) {
+    if (avgDelaySeconds > 300) return 'alert'
+    if (avgDelaySeconds > 120) return 'warn'
+    return 'healthy'
+  }
+
+  function renderStationHotspots(hotspots) {
+    const hotspotCount = hotspots.filter((s) => s.avgDelay > 120).length
+
+    return `
+      <div class="station-hotspots"><div class="insight-exceptions-header"><p class="headway-chart-title">${copyValue('hotspotTitle')}</p><p class="headway-chart-copy">${hotspotCount ? copyValue('hotspotNotableDelays', hotspotCount) : copyValue('hotspotAllNormal')}</p></div>${hotspots.length ? `<div class="station-hotspot-list">${hotspots.map((s) => {
+        const tone = getHotspotTone(s.avgDelay)
+        const avgMin = Math.round(s.avgDelay / 60)
+        const worstMin = Math.round(s.worstDelay / 60)
+        const lines = [...s.lines.values()]
+        const vehicleLabel = s.vehicleCount === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()
+
+        return `<div class="station-hotspot-item station-hotspot-item-${tone} insights-clickable" data-insights-type="station-hotspot" data-hotspot-stop-id="${s.stopId}" role="button" tabindex="0"><div class="station-hotspot-main"><p class="station-hotspot-name">${s.label}</p><p class="station-hotspot-meta">${copyValue('hotspotAvgDelay', avgMin)}</p><div class="station-hotspot-lines">${lines.map((l) => `<span class="station-hotspot-line-dot" style="--line-color:${l.color};" title="${l.name}"></span>`).join('')}</div></div><div class="station-hotspot-stats"><p class="station-hotspot-stat-value">${s.vehicleCount}</p><p class="station-hotspot-stat-label">${vehicleLabel}</p><p class="station-hotspot-stat-sub">${copyValue('hotspotWorstDelay', worstMin)}</p></div></div>`
+      }).join('')}</div>` : ''}</div>
+    `
   }
 
   function renderSystemSummary(insightsItems) {
     const metrics = computeSystemSummaryMetrics(insightsItems)
+    const stationHotspots = computeStationHotspots(insightsItems)
     const previousSnapshot = state.systemSnapshots.get(state.activeSystemId)?.previous ?? null
     const exceptions = []
-    if (metrics.totalAlerts > 0) exceptions.push({ tone: 'info', copy: state.language === 'zh-CN' ? `${metrics.impactedLines} 条线路共受 ${metrics.totalAlerts} 条告警影响。` : `${metrics.totalAlerts} active alert${metrics.totalAlerts === 1 ? '' : 's'} across ${metrics.impactedLines} line${metrics.impactedLines === 1 ? '' : 's'}.` })
-    if (metrics.delayedLineIds.size > 0) exceptions.push({ tone: 'warn', copy: state.language === 'zh-CN' ? `${metrics.delayedLineIds.size} 条线路上有车辆晚点超过 5 分钟。` : `${metrics.delayedLineIds.size} line${metrics.delayedLineIds.size === 1 ? '' : 's'} have vehicles running 5+ min late.` })
-    if (metrics.unevenLineIds.size > 0) exceptions.push({ tone: 'alert', copy: state.language === 'zh-CN' ? `${metrics.unevenLineIds.size} 条线路当前发车间隔不均。` : `${metrics.unevenLineIds.size} line${metrics.unevenLineIds.size === 1 ? '' : 's'} show uneven spacing right now.` })
-    if (!exceptions.length) exceptions.push({ tone: 'healthy', copy: state.language === 'zh-CN' ? '系统整体稳定，当前没有明显问题。' : 'System looks stable right now with no major active issues.' })
+    if (metrics.totalAlerts > 0) exceptions.push({ tone: 'info', copy: copyValue('alertsAcrossLines', metrics.totalAlerts, metrics.impactedLines) })
+    if (metrics.delayedLineIds.size > 0) exceptions.push({ tone: 'warn', copy: copyValue('linesWithLateVehicles', metrics.delayedLineIds.size) })
+    if (metrics.unevenLineIds.size > 0) exceptions.push({ tone: 'alert', copy: copyValue('linesUnevenSpacing', metrics.unevenLineIds.size) })
+    if (!exceptions.length) exceptions.push({ tone: 'healthy', copy: copyValue('systemStable') })
 
     const trendItems = [
-      { label: state.language === 'zh-CN' ? '准点率' : 'On-Time Rate', value: metrics.onTimeRate != null ? `${metrics.onTimeRate}%` : '—', delta: formatMetricDelta(metrics.onTimeRate, previousSnapshot?.onTimeRate, { suffix: '%' }) },
-      { label: state.language === 'zh-CN' ? '需关注线路' : 'Attention Lines', value: metrics.attentionLineCount, delta: formatMetricDelta(metrics.attentionLineCount, previousSnapshot?.attentionLineCount, { invert: true }) },
+      { label: copyValue('onTimeRateLabel'), value: metrics.onTimeRate != null ? `${metrics.onTimeRate}%` : '—', delta: formatMetricDelta(metrics.onTimeRate, previousSnapshot?.onTimeRate, { suffix: '%' }) },
+      { label: copyValue('attentionLinesLabel'), value: metrics.attentionLineCount, delta: formatMetricDelta(metrics.attentionLineCount, previousSnapshot?.attentionLineCount, { invert: true }) },
     ]
 
     return `
       <article class="panel-card panel-card-wide system-summary-card">
-        <header class="panel-header"><div class="system-summary-header"><div class="line-title"><span class="line-token" style="--line-color:var(--accent-strong);">${getActiveSystemMeta().label[0]}</span><div class="line-title-copy"><h2>${getActiveSystemMeta().label} ${state.language === 'zh-CN' ? '概览' : 'Summary'}</h2><p>${state.language === 'zh-CN' ? `系统内 ${metrics.totalLines} 条线路 · 更新于 ${formatCurrentTime()}` : `${metrics.totalLines} line${metrics.totalLines === 1 ? '' : 's'} in system · Updated ${formatCurrentTime()}`}</p></div></div></div></header>
+        <header class="panel-header"><div class="system-summary-header"><div class="line-title"><span class="line-token" style="--line-color:var(--accent-strong);">${getActiveSystemMeta().label[0]}</span><div class="line-title-copy"><h2>${getActiveSystemMeta().label} ${copyValue('summaryTitle')}</h2><p>${copyValue('systemLinesUpdated', metrics.totalLines, formatCurrentTime())}</p></div></div></div></header>
         <div class="system-summary-hero"><div class="insight-exception insight-exception-${metrics.topIssue.tone}"><p>${metrics.topIssue.copy}</p></div><div class="system-trend-strip">${trendItems.map((item) => `<div class="metric-chip system-trend-chip"><p class="metric-chip-label">${item.label}</p><p class="metric-chip-value">${item.value}</p><p class="system-trend-copy">${item.delta}</p></div>`).join('')}</div></div>
-        <div class="metric-strip system-summary-strip"><div class="metric-chip insights-clickable" data-insights-type="sys-healthy" role="button" tabindex="0"><p class="metric-chip-label">${state.language === 'zh-CN' ? '健康线路' : 'Healthy Lines'}</p><p class="metric-chip-value">${metrics.healthyLineCount}</p></div><div class="metric-chip insights-clickable" data-insights-type="sys-vehicles" role="button" tabindex="0"><p class="metric-chip-label">${state.language === 'zh-CN' ? `实时${getVehicleLabelPlural()}` : `Live ${getVehicleLabelPlural()}`}</p><p class="metric-chip-value">${metrics.totalVehicles}</p></div><div class="metric-chip ${metrics.totalAlerts ? 'metric-chip-warn' : 'metric-chip-healthy'} insights-clickable" data-insights-type="sys-alerts" role="button" tabindex="0"><p class="metric-chip-label">${state.language === 'zh-CN' ? '告警' : 'Alerts'}</p><p class="metric-chip-value">${metrics.totalAlerts}</p></div><div class="metric-chip ${metrics.attentionLineCount ? 'metric-chip-warn' : 'metric-chip-healthy'} insights-clickable" data-insights-type="sys-attention" role="button" tabindex="0"><p class="metric-chip-label">${state.language === 'zh-CN' ? '需关注线路' : 'Lines Needing Attention'}</p><p class="metric-chip-value">${metrics.attentionLineCount}</p></div><div class="metric-chip insights-clickable" data-insights-type="sys-stops" role="button" tabindex="0"><p class="metric-chip-label">${state.language === 'zh-CN' ? '影响站点' : 'Impacted Stops'}</p><p class="metric-chip-value">${metrics.impactedStopCount}</p></div></div>
-        <div class="system-composition"><div class="insight-exceptions-header"><p class="headway-chart-title">${state.language === 'zh-CN' ? '需关注线路构成' : 'Attention Breakdown'}</p><p class="headway-chart-copy">${state.language === 'zh-CN' ? '按晚点与间隔异常拆解' : 'Split by lateness and spacing issues'}</p></div><div class="attention-breakdown-grid"><div class="metric-chip insights-clickable" data-insights-type="sys-late-only" role="button" tabindex="0"><p class="metric-chip-label">${state.language === 'zh-CN' ? '仅晚点' : 'Late Only'}</p><p class="metric-chip-value">${metrics.lateOnlyLineCount}</p></div><div class="metric-chip insights-clickable" data-insights-type="sys-spacing-only" role="button" tabindex="0"><p class="metric-chip-label">${state.language === 'zh-CN' ? '仅间隔不均' : 'Spacing Only'}</p><p class="metric-chip-value">${metrics.unevenOnlyLineCount}</p></div><div class="metric-chip insights-clickable" data-insights-type="sys-both" role="button" tabindex="0"><p class="metric-chip-label">${state.language === 'zh-CN' ? '两者都有' : 'Both'}</p><p class="metric-chip-value">${metrics.mixedIssueLineCount}</p></div></div></div>
-        <div class="system-priority"><div class="insight-exceptions-header">${state.language === 'zh-CN' ? '' : '<p class="headway-chart-title">Recommended Next</p>'}<p class="headway-chart-copy">${state.language === 'zh-CN' ? '基于当前快照的综合优先级' : 'Best next checks from the current snapshot'}</p></div><div class="system-priority-list">${(metrics.priorityLines.length ? metrics.priorityLines : metrics.rankedLines.slice(0, 1)).map(({ line, worstGap, severeLateCount, alertCount, attentionReasons }) => `<div class="system-priority-item insights-clickable" data-insights-line-id="${line.id}" data-insights-type="ranking" role="button" tabindex="0"><div class="line-title"><span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span><div class="line-title-copy"><p class="headway-chart-title">${line.name}</p><p class="headway-chart-copy">${state.language === 'zh-CN' ? `${worstGap ? `最大间隔 ${worstGap} 分钟` : '当前无明显间隔问题'}${severeLateCount ? ` · ${severeLateCount} 辆严重晚点` : ''}${alertCount ? ` · ${alertCount} 条告警` : ''}` : `${worstGap ? `Gap ${worstGap} min` : 'No major spacing issue'}${severeLateCount ? ` · ${severeLateCount} severe late` : ''}${alertCount ? ` · ${alertCount} alert${alertCount === 1 ? '' : 's'}` : ''}`}</p>${renderAttentionReasonBadges(attentionReasons)}</div></div></div>`).join('')}</div></div>
-        <div class="system-ranking"><div class="insight-exceptions-header"><p class="headway-chart-title">${state.language === 'zh-CN' ? '关注排名' : 'Attention Ranking'}</p><p class="headway-chart-copy">${state.error ? (state.language === 'zh-CN' ? '实时数据退化，使用最近一次成功快照' : 'Realtime degraded, using last successful snapshot') : (state.language === 'zh-CN' ? '仅基于当前实时快照' : 'Derived from the current live snapshot only')}</p></div><div class="system-ranking-list">${metrics.rankedLines.slice(0, 3).map(({ line, score, worstGap, alertCount, severeLateCount, attentionReasons }) => `<div class="system-ranking-item insights-clickable" data-insights-line-id="${line.id}" data-insights-type="ranking" role="button" tabindex="0"><div class="line-title"><span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span><div class="line-title-copy"><p class="headway-chart-title">${line.name}</p><p class="headway-chart-copy">${state.language === 'zh-CN' ? `评分 ${score}${worstGap ? ` · 最大间隔 ${worstGap} 分钟` : ''}${alertCount ? ` · ${alertCount} 条告警` : ''}${severeLateCount ? ` · ${severeLateCount} 辆严重晚点` : ''}` : `Score ${score}${worstGap ? ` · gap ${worstGap} min` : ''}${alertCount ? ` · ${alertCount} alert${alertCount === 1 ? '' : 's'}` : ''}${severeLateCount ? ` · ${severeLateCount} severe late` : ''}`}</p>${renderAttentionReasonBadges(attentionReasons)}</div></div></div>`).join('')}</div></div>
-        <div class="insight-exceptions"><div class="insight-exceptions-header"><p class="headway-chart-title">${state.language === 'zh-CN' ? '系统状态' : 'System Status'}</p><p class="headway-chart-copy">${state.error ? (state.language === 'zh-CN' ? '实时数据退化，使用最近一次成功快照' : 'Realtime degraded, using last successful snapshot') : (state.language === 'zh-CN' ? '仅基于当前实时快照' : 'Derived from the current live snapshot only')}</p></div>${exceptions.map((item) => `<div class="insight-exception insight-exception-${item.tone}"><p>${item.copy}</p></div>`).join('')}</div>
+        <div class="metric-strip system-summary-strip"><div class="metric-chip insights-clickable" data-insights-type="sys-healthy" role="button" tabindex="0"><p class="metric-chip-label">${copyValue('healthyLinesLabel')}</p><p class="metric-chip-value">${metrics.healthyLineCount}</p></div><div class="metric-chip insights-clickable" data-insights-type="sys-vehicles" role="button" tabindex="0"><p class="metric-chip-label">${copyValue('liveVehiclesLabel', getVehicleLabelPlural())}</p><p class="metric-chip-value">${metrics.totalVehicles}</p></div><div class="metric-chip ${metrics.totalAlerts ? 'metric-chip-warn' : 'metric-chip-healthy'} insights-clickable" data-insights-type="sys-alerts" role="button" tabindex="0"><p class="metric-chip-label">${copyValue('alertsChipLabel')}</p><p class="metric-chip-value">${metrics.totalAlerts}</p></div><div class="metric-chip ${metrics.attentionLineCount ? 'metric-chip-warn' : 'metric-chip-healthy'} insights-clickable" data-insights-type="sys-attention" role="button" tabindex="0"><p class="metric-chip-label">${copyValue('linesNeedingAttention')}</p><p class="metric-chip-value">${metrics.attentionLineCount}</p></div><div class="metric-chip insights-clickable" data-insights-type="sys-stops" role="button" tabindex="0"><p class="metric-chip-label">${copyValue('impactedStopsChipLabel')}</p><p class="metric-chip-value">${metrics.impactedStopCount}</p></div></div>
+        <div class="system-composition"><div class="insight-exceptions-header"><p class="headway-chart-title">${copyValue('attentionBreakdown')}</p><p class="headway-chart-copy">${copyValue('attentionBreakdownNote')}</p></div><div class="attention-breakdown-grid"><div class="metric-chip insights-clickable" data-insights-type="sys-late-only" role="button" tabindex="0"><p class="metric-chip-label">${copyValue('lateOnlyLabel')}</p><p class="metric-chip-value">${metrics.lateOnlyLineCount}</p></div><div class="metric-chip insights-clickable" data-insights-type="sys-spacing-only" role="button" tabindex="0"><p class="metric-chip-label">${copyValue('spacingOnlyLabel')}</p><p class="metric-chip-value">${metrics.unevenOnlyLineCount}</p></div><div class="metric-chip insights-clickable" data-insights-type="sys-both" role="button" tabindex="0"><p class="metric-chip-label">${copyValue('bothIssuesChipLabel')}</p><p class="metric-chip-value">${metrics.mixedIssueLineCount}</p></div></div></div>
+        <div class="system-priority"><div class="insight-exceptions-header"><p class="headway-chart-title">${copyValue('recommendedNext')}</p><p class="headway-chart-copy">${copyValue('recommendedNextNote')}</p></div><div class="system-priority-list">${(metrics.priorityLines.length ? metrics.priorityLines : metrics.rankedLines.slice(0, 1)).map(({ line, worstGap, severeLateCount, alertCount, attentionReasons }) => `<div class="system-priority-item insights-clickable" data-insights-line-id="${line.id}" data-insights-type="ranking" role="button" tabindex="0"><div class="line-title"><span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span><div class="line-title-copy"><p class="headway-chart-title">${line.name}</p><p class="headway-chart-copy">${worstGap ? copyValue('gapMinSummary', worstGap) : copyValue('noMajorSpacingIssue')}${severeLateCount ? ` · ${copyValue('severeLateCountText', severeLateCount)}` : ''}${alertCount ? ` · ${copyValue('alertCountText', alertCount)}` : ''}</p>${renderAttentionReasonBadges(attentionReasons)}</div></div></div>`).join('')}</div></div>
+        <div class="system-ranking"><div class="insight-exceptions-header"><p class="headway-chart-title">${copyValue('attentionRanking')}</p><p class="headway-chart-copy">${state.error ? copyValue('realtimeDegraded') : copyValue('fromLiveSnapshot')}</p></div><div class="system-ranking-list">${metrics.rankedLines.slice(0, 3).map(({ line, score, worstGap, alertCount, severeLateCount, attentionReasons }) => `<div class="system-ranking-item insights-clickable" data-insights-line-id="${line.id}" data-insights-type="ranking" role="button" tabindex="0"><div class="line-title"><span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span><div class="line-title-copy"><p class="headway-chart-title">${line.name}</p><p class="headway-chart-copy">${copyValue('scoreSummary', score)}${worstGap ? ` · ${copyValue('gapMinSummary', worstGap)}` : ''}${alertCount ? ` · ${copyValue('alertCountText', alertCount)}` : ''}${severeLateCount ? ` · ${copyValue('severeLateCountText', severeLateCount)}` : ''}</p>${renderAttentionReasonBadges(attentionReasons)}</div></div></div>`).join('')}</div></div>
+        ${renderStationHotspots(stationHotspots)}
+        <div class="insight-exceptions"><div class="insight-exceptions-header"><p class="headway-chart-title">${copyValue('systemStatusTitle')}</p><p class="headway-chart-copy">${state.error ? copyValue('realtimeDegraded') : copyValue('fromLiveSnapshot')}</p></div>${exceptions.map((item) => `<div class="insight-exception insight-exception-${item.tone}"><p>${item.copy}</p></div>`).join('')}</div>
       </article>
     `
   }
@@ -261,14 +322,14 @@ export function createInsightsRenderers(deps) {
   function buildInsightsTicker(items) {
     const entries = items.flatMap((item) => item.exceptions.map((exception) => ({ tone: exception.tone, copy: `${item.line.name}: ${exception.copy}`, lineColor: item.line.color })))
     if (!entries.length) return `
-      <section class="insights-ticker insights-ticker-empty" aria-label="${state.language === 'zh-CN' ? '当前洞察摘要' : 'Current insights summary'}"><div class="insights-ticker-viewport"><span class="insights-ticker-item insights-ticker-item-healthy">${state.language === 'zh-CN' ? '当前没有活跃问题。' : 'No active issues right now.'}</span></div></section>
+      <section class="insights-ticker insights-ticker-empty" aria-label="${copyValue('insightsSummaryAria')}"><div class="insights-ticker-viewport"><span class="insights-ticker-item insights-ticker-item-healthy">${copyValue('noActiveIssues')}</span></div></section>
     `
     const pageSize = getInsightsTickerPageSize()
     const totalPages = Math.ceil(entries.length / pageSize)
     const activePage = state.insightsTickerIndex % totalPages
     const visibleEntries = entries.slice(activePage * pageSize, activePage * pageSize + pageSize)
     return `
-      <section class="insights-ticker" aria-label="${state.language === 'zh-CN' ? '当前洞察摘要' : 'Current insights summary'}"><div class="insights-ticker-viewport">${visibleEntries.map((entry) => `<span class="insights-ticker-item insights-ticker-item-${entry.tone} insights-ticker-item-animated"><span class="insights-ticker-dot" style="--line-color:${entry.lineColor};"></span><span class="insights-ticker-copy">${entry.copy}</span></span>`).join('')}</div></section>
+      <section class="insights-ticker" aria-label="${copyValue('insightsSummaryAria')}"><div class="insights-ticker-viewport">${visibleEntries.map((entry) => `<span class="insights-ticker-item insights-ticker-item-${entry.tone} insights-ticker-item-animated"><span class="insights-ticker-dot" style="--line-color:${entry.lineColor};"></span><span class="insights-ticker-copy">${entry.copy}</span></span>`).join('')}</div></section>
     `
   }
 
@@ -283,7 +344,7 @@ export function createInsightsRenderers(deps) {
     const impactedStopCount = new Set(lineAlerts.flatMap((alert) => alert.stopIds ?? [])).size
 
     return `
-      <div class="line-insights"><div class="metric-strip"><div class="metric-chip insights-clickable" data-insights-line-id="${line.id}" data-insights-type="inservice" role="button" tabindex="0"><p class="metric-chip-label">${state.language === 'zh-CN' ? '运营中' : 'In Service'}</p><p class="metric-chip-value">${total}</p></div><div class="metric-chip insights-clickable" data-insights-line-id="${line.id}" data-insights-type="ontime" role="button" tabindex="0"><p class="metric-chip-label">${state.language === 'zh-CN' ? '准点率' : 'On-Time Rate'}</p><p class="metric-chip-value">${formatPercent(delayBuckets.onTime, total)}</p></div><div class="metric-chip insights-clickable" data-insights-line-id="${line.id}" data-insights-type="gap" role="button" tabindex="0"><p class="metric-chip-label">${state.language === 'zh-CN' ? '最大间隔' : 'Worst Gap'}</p><p class="metric-chip-value">${worstGap != null ? `${worstGap} min` : '—'}</p></div><div class="metric-chip metric-chip-${balance.tone} insights-clickable" data-insights-line-id="${line.id}" data-insights-type="balance" role="button" tabindex="0"><p class="metric-chip-label">${state.language === 'zh-CN' ? '方向平衡' : 'Balance'}</p><p class="metric-chip-value">${balance.label}</p></div></div><div class="headway-health-grid">${renderHeadwaySummaryCard(formatLayoutDirectionLabel('▲', layout, { includeSymbol: true }), nbGaps, nb.length, line.id, 'nb')}${renderHeadwaySummaryCard(formatLayoutDirectionLabel('▼', layout, { includeSymbol: true }), sbGaps, sb.length, line.id, 'sb')}</div>${renderDelayDistribution(delayBuckets, total, line.id)}<div class="flow-grid">${renderFlowLane(state.language === 'zh-CN' ? `${formatLayoutDirectionLabel('▲', layout, { includeSymbol: true })} 流向` : `${formatLayoutDirectionLabel('▲', layout, { includeSymbol: true })} flow`, nb, layout, line.color, line.id, '▲')}${renderFlowLane(state.language === 'zh-CN' ? `${formatLayoutDirectionLabel('▼', layout, { includeSymbol: true })} 流向` : `${formatLayoutDirectionLabel('▼', layout, { includeSymbol: true })} flow`, sb, layout, line.color, line.id, '▼')}</div><div class="insight-exceptions"><div class="insight-exceptions-header"><p class="headway-chart-title">${state.language === 'zh-CN' ? '当前' : 'Now'}</p><p class="headway-chart-copy">${lineAlerts.length ? (state.language === 'zh-CN' ? `${lineAlerts.length} 条生效告警${impactedStopCount ? ` · 影响 ${impactedStopCount} 个站点` : ''}` : `${lineAlerts.length} active alert${lineAlerts.length === 1 ? '' : 's'}${impactedStopCount ? ` · ${impactedStopCount} impacted stops` : ''}`) : (state.language === 'zh-CN' ? '本线路当前没有生效告警' : 'No active alerts on this line')}</p></div>${exceptions.map((item) => `<div class="insight-exception insight-exception-${item.tone}${item.tone === 'info' && lineAlerts.length ? ' insights-clickable' : ''}"${item.tone === 'info' && lineAlerts.length ? ` data-alert-line-id="${line.id}" role="button" tabindex="0"` : ''}><p>${item.copy}</p></div>`).join('')}</div></div>
+      <div class="line-insights"><div class="metric-strip"><div class="metric-chip insights-clickable" data-insights-line-id="${line.id}" data-insights-type="inservice" role="button" tabindex="0"><p class="metric-chip-label">${copyValue('inServiceLabel')}</p><p class="metric-chip-value">${total}</p></div><div class="metric-chip insights-clickable" data-insights-line-id="${line.id}" data-insights-type="ontime" role="button" tabindex="0"><p class="metric-chip-label">${copyValue('onTimeRateLabel')}</p><p class="metric-chip-value">${formatPercent(delayBuckets.onTime, total)}</p></div><div class="metric-chip insights-clickable" data-insights-line-id="${line.id}" data-insights-type="gap" role="button" tabindex="0"><p class="metric-chip-label">${copyValue('worstGapLabel')}</p><p class="metric-chip-value">${worstGap != null ? `${worstGap} min` : '—'}</p></div><div class="metric-chip metric-chip-${balance.tone} insights-clickable" data-insights-line-id="${line.id}" data-insights-type="balance" role="button" tabindex="0"><p class="metric-chip-label">${copyValue('balanceChipLabel')}</p><p class="metric-chip-value">${balance.label}</p></div></div><div class="headway-health-grid">${renderHeadwaySummaryCard(formatLayoutDirectionLabel('▲', layout, { includeSymbol: true }), nbGaps, nb.length, line.id, 'nb')}${renderHeadwaySummaryCard(formatLayoutDirectionLabel('▼', layout, { includeSymbol: true }), sbGaps, sb.length, line.id, 'sb')}</div>${renderDelayDistribution(delayBuckets, total, line.id)}<div class="flow-grid">${renderFlowLane(copyValue('directionFlow', formatLayoutDirectionLabel('▲', layout, { includeSymbol: true })), nb, layout, line.color, line.id, '▲')}${renderFlowLane(copyValue('directionFlow', formatLayoutDirectionLabel('▼', layout, { includeSymbol: true })), sb, layout, line.color, line.id, '▼')}</div><div class="insight-exceptions"><div class="insight-exceptions-header"><p class="headway-chart-title">${copyValue('now')}</p><p class="headway-chart-copy">${lineAlerts.length ? copyValue('lineAlertsNote', lineAlerts.length, impactedStopCount) : copyValue('noAlertsOnLine')}</p></div>${exceptions.map((item) => `<div class="insight-exception insight-exception-${item.tone}${item.tone === 'info' && lineAlerts.length ? ' insights-clickable' : ''}"${item.tone === 'info' && lineAlerts.length ? ` data-alert-line-id="${line.id}" role="button" tabindex="0"` : ''}><p>${item.copy}</p></div>`).join('')}</div></div>
     `
   }
 
@@ -301,15 +362,14 @@ export function createInsightsRenderers(deps) {
           <article class="panel-card panel-card-wide">
             <header class="panel-header line-card-header"><div class="line-title"><span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span><div class="line-title-copy"><h2>${line.name}</h2><p>${copyValue('liveCount', vehicles.length, vehicles.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase())} · ${getTodayServiceSpan(line)}</p></div></div>${renderServiceReminderChip(line)}</header>
             ${renderServiceTimeline(line)}
-            ${insightsHtml || `<p class="train-readout muted">${state.language === 'zh-CN' ? `等待实时${vehicleLabel.toLowerCase()}数据…` : `Waiting for live ${vehicleLabel.toLowerCase()} data…`}</p>`}
+            ${insightsHtml || `<p class="train-readout muted">${copyValue('waitingForLiveData', vehicleLabel.toLowerCase())}</p>`}
           </article>
         `
       }).join('')}
     `
   }
 
-  function buildInsightsDetailContent(lineId, type) {
-    const isZh = state.language === 'zh-CN'
+  function buildInsightsDetailContent(lineId, type, options = {}) {
     const line = lineId ? state.lines.find((l) => l.id === lineId) : null
     const vehicles = lineId ? (state.vehiclesByLine.get(lineId) ?? []) : []
     const nb = vehicles.filter((v) => v.directionSymbol === '▲')
@@ -318,37 +378,37 @@ export function createInsightsRenderers(deps) {
     const layout = lineId ? state.layouts.get(lineId) : null
     const formatVehicleRow = (v) => {
       const delay = Number(v.scheduleDeviation ?? 0)
-      const delayText = delay > 300 ? (isZh ? `晚点 ${Math.round(delay / 60)} 分钟` : `${Math.round(delay / 60)} min late`) : delay < -60 ? (isZh ? '早点' : 'Early') : (isZh ? '准点' : 'On time')
+      const delayText = delay > 300 ? copyValue('delayMinutesText', Math.round(delay / 60)) : delay < -60 ? copyValue('earlyLabel') : copyValue('delayOnTimeChip')
       const tone = delay > 300 ? 'alert' : delay < -60 ? 'info' : 'healthy'
-      return `<div class="alert-dialog-item"><p class="alert-dialog-item-meta">${v.directionSymbol === '▲' ? (isZh ? '北行' : 'Northbound') : (isZh ? '南行' : 'Southbound')} · ${isZh ? '车辆' : 'Vehicle'} ${v.label}</p><p class="alert-dialog-item-title">${v.currentStopLabel ?? '—'}</p><p class="alert-dialog-item-copy insights-detail-tone-${tone}">${delayText}</p></div>`
+      return `<div class="alert-dialog-item"><p class="alert-dialog-item-meta">${v.directionSymbol === '▲' ? copyValue('northboundShort') : copyValue('southboundShort')} · ${copyValue('vehicleWord')} ${v.label}</p><p class="alert-dialog-item-title">${v.currentStopLabel ?? '—'}</p><p class="alert-dialog-item-copy insights-detail-tone-${tone}">${delayText}</p></div>`
     }
     const formatGapList = (gaps, dirLabel) => {
-      if (!gaps.length) return `<p class="train-readout muted">${isZh ? `${dirLabel} 暂无间隔数据` : `No gap data for ${dirLabel}`}</p>`
+      if (!gaps.length) return `<p class="train-readout muted">${copyValue('noGapDataFor', dirLabel)}</p>`
       return gaps.map((g, i) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta">${dirLabel} · Gap ${i + 1}</p><p class="alert-dialog-item-title">${g} min</p></div>`).join('')
     }
 
     if (type === 'inservice' && line) {
       const allV = [...nb, ...sb]
-      return { title: isZh ? `运营中 — ${line.name}` : `In Service — ${line.name}`, subtitle: isZh ? `共 ${allV.length} 辆` : `${allV.length} vehicles total`, body: allV.length ? allV.map(formatVehicleRow).join('') : `<p class="train-readout muted">${isZh ? '暂无车辆数据' : 'No vehicle data'}</p>` }
+      return { title: copyValue('detailInServiceTitle', line.name), subtitle: copyValue('vehiclesTotal', allV.length), body: allV.length ? allV.map(formatVehicleRow).join('') : `<p class="train-readout muted">${copyValue('noVehicleData')}</p>` }
     }
 
     if (type === 'ontime' && line) {
       const delayBuckets = getDelayBuckets(vehicles)
       const rate = vehicles.length ? Math.round((delayBuckets.onTime / vehicles.length) * 100) : null
-      return { title: isZh ? `准点率 — ${line.name}` : `On-Time Rate — ${line.name}`, subtitle: rate != null ? `${rate}%` : '—', body: `<div class="delay-distribution" style="margin-bottom:12px"><div class="delay-chip delay-chip-healthy"><p class="delay-chip-label">${isZh ? '准点' : 'On time'}</p><p class="delay-chip-value">${delayBuckets.onTime}</p><p class="delay-chip-copy">${formatPercent(delayBuckets.onTime, vehicles.length)}</p></div><div class="delay-chip delay-chip-warn"><p class="delay-chip-label">${isZh ? '晚点 2-5 分钟' : '2-5 min late'}</p><p class="delay-chip-value">${delayBuckets.minorLate}</p><p class="delay-chip-copy">${formatPercent(delayBuckets.minorLate, vehicles.length)}</p></div><div class="delay-chip delay-chip-alert"><p class="delay-chip-label">${isZh ? '晚点 5+ 分钟' : '5+ min late'}</p><p class="delay-chip-value">${delayBuckets.severeLate}</p><p class="delay-chip-copy">${formatPercent(delayBuckets.severeLate, vehicles.length)}</p></div></div>${vehicles.map(formatVehicleRow).join('')}` }
+      return { title: copyValue('detailOnTimeTitle', line.name), subtitle: rate != null ? `${rate}%` : '—', body: `<div class="delay-distribution" style="margin-bottom:12px"><div class="delay-chip delay-chip-healthy"><p class="delay-chip-label">${copyValue('delayOnTimeChip')}</p><p class="delay-chip-value">${delayBuckets.onTime}</p><p class="delay-chip-copy">${formatPercent(delayBuckets.onTime, vehicles.length)}</p></div><div class="delay-chip delay-chip-warn"><p class="delay-chip-label">${copyValue('delayMinorChip')}</p><p class="delay-chip-value">${delayBuckets.minorLate}</p><p class="delay-chip-copy">${formatPercent(delayBuckets.minorLate, vehicles.length)}</p></div><div class="delay-chip delay-chip-alert"><p class="delay-chip-label">${copyValue('delaySevereChip')}</p><p class="delay-chip-value">${delayBuckets.severeLate}</p><p class="delay-chip-copy">${formatPercent(delayBuckets.severeLate, vehicles.length)}</p></div></div>${vehicles.map(formatVehicleRow).join('')}` }
     }
 
     if (type === 'gap' && line) {
       const worstGap = [...nbGaps, ...sbGaps].length ? Math.max(...nbGaps, ...sbGaps) : null
       const nbLabel = formatLayoutDirectionLabel('▲', layout, { includeSymbol: true })
       const sbLabel = formatLayoutDirectionLabel('▼', layout, { includeSymbol: true })
-      return { title: isZh ? `间隔详情 — ${line.name}` : `Spacing — ${line.name}`, subtitle: worstGap != null ? (isZh ? `最大间隔 ${worstGap} 分钟` : `Worst gap: ${worstGap} min`) : (isZh ? '暂无间隔数据' : 'No gap data'), body: formatGapList(nbGaps, nbLabel) + formatGapList(sbGaps, sbLabel) }
+      return { title: copyValue('detailSpacingTitle', line.name), subtitle: worstGap != null ? copyValue('worstGapSubtitle', worstGap) : copyValue('noGapData'), body: formatGapList(nbGaps, nbLabel) + formatGapList(sbGaps, sbLabel) }
     }
 
     if (type === 'balance' && line) {
       const nbLabel = formatLayoutDirectionLabel('▲', layout, { includeSymbol: true })
       const sbLabel = formatLayoutDirectionLabel('▼', layout, { includeSymbol: true })
-      return { title: isZh ? `方向平衡 — ${line.name}` : `Direction Balance — ${line.name}`, subtitle: isZh ? `北行 ${nb.length} · 南行 ${sb.length}` : `${nbLabel}: ${nb.length} · ${sbLabel}: ${sb.length}`, body: `<div class="alert-dialog-item"><p class="alert-dialog-item-meta">${nbLabel}</p><p class="alert-dialog-item-title">${nb.length} ${isZh ? '辆' : 'vehicle' + (nb.length !== 1 ? 's' : '')}</p></div><div class="alert-dialog-item"><p class="alert-dialog-item-meta">${sbLabel}</p><p class="alert-dialog-item-title">${sb.length} ${isZh ? '辆' : 'vehicle' + (sb.length !== 1 ? 's' : '')}</p></div>` }
+      return { title: copyValue('detailBalanceTitle', line.name), subtitle: copyValue('directionVehicleCounts', nbLabel, nb.length, sbLabel, sb.length), body: `<div class="alert-dialog-item"><p class="alert-dialog-item-meta">${nbLabel}</p><p class="alert-dialog-item-title">${copyValue('vehicleCountUnit', nb.length)}</p></div><div class="alert-dialog-item"><p class="alert-dialog-item-meta">${sbLabel}</p><p class="alert-dialog-item-title">${copyValue('vehicleCountUnit', sb.length)}</p></div>` }
     }
 
     if ((type === 'headway-nb' || type === 'headway-sb') && line) {
@@ -357,7 +417,7 @@ export function createInsightsRenderers(deps) {
       const dirVehicles = isNb ? nb : sb
       const dirLabel = formatLayoutDirectionLabel(isNb ? '▲' : '▼', layout, { includeSymbol: true })
       const avg = gaps.length ? Math.round(gaps.reduce((s, g) => s + g, 0) / gaps.length) : null
-      return { title: isZh ? `${dirLabel} 间隔 — ${line.name}` : `${dirLabel} Spacing — ${line.name}`, subtitle: avg != null ? (isZh ? `平均 ${avg} 分钟` : `Average: ${avg} min`) : (isZh ? '暂无间隔数据' : 'No gap data'), body: gaps.length ? formatGapList(gaps, dirLabel) : `<p class="train-readout muted">${isZh ? '车辆不足，无法计算间隔' : 'Too few vehicles for a spacing read'}</p>${dirVehicles.map(formatVehicleRow).join('')}` }
+      return { title: copyValue('detailHeadwayTitle', dirLabel, line.name), subtitle: avg != null ? copyValue('averageMinutes', avg) : copyValue('noGapData'), body: gaps.length ? formatGapList(gaps, dirLabel) : `<p class="train-readout muted">${copyValue('tooFewVehiclesForSpacing')}</p>${dirVehicles.map(formatVehicleRow).join('')}` }
     }
 
     if ((type === 'delay-ontime' || type === 'delay-minor' || type === 'delay-severe') && line) {
@@ -368,8 +428,8 @@ export function createInsightsRenderers(deps) {
         if (bucket === 'minorLate') return d > 120 && d <= 300
         return d > 300
       })
-      const label = type === 'delay-ontime' ? (isZh ? '准点' : 'On Time') : type === 'delay-minor' ? (isZh ? '晚点 2-5 分钟' : '2-5 Min Late') : (isZh ? '晚点 5+ 分钟' : '5+ Min Late')
-      return { title: `${label} — ${line.name}`, subtitle: isZh ? `${filtered.length} 辆` : `${filtered.length} vehicle${filtered.length !== 1 ? 's' : ''}`, body: filtered.length ? filtered.map(formatVehicleRow).join('') : `<p class="train-readout muted">${isZh ? '本分类暂无车辆' : 'No vehicles in this category'}</p>` }
+      const label = type === 'delay-ontime' ? copyValue('delayOnTimeTitle') : type === 'delay-minor' ? copyValue('delayMinorTitle') : copyValue('delaySevereTitle')
+      return { title: `${label} — ${line.name}`, subtitle: copyValue('vehicleCountUnit', filtered.length), body: filtered.length ? filtered.map(formatVehicleRow).join('') : `<p class="train-readout muted">${copyValue('noVehiclesInCategory')}</p>` }
     }
 
     if (type === 'ranking' && line) {
@@ -379,11 +439,41 @@ export function createInsightsRenderers(deps) {
       const alertCount = getAlertsForLine(lineId).length
       const balanceDelta = Math.abs(nb.length - sb.length)
       const score = alertCount * 5 + severeLateCount * 3 + Math.max(0, worstGap - 10)
-      const attentionReasons = getLineAttentionReasons({ worstGap, severeLateCount, alertCount, balanceDelta, language: state.language })
+      const attentionReasons = getLineAttentionReasons({ worstGap, severeLateCount, alertCount, balanceDelta, copyValue })
       return {
-        title: isZh ? `关注评分 — ${line.name}` : `Attention Score — ${line.name}`,
-        subtitle: isZh ? `综合评分 ${score}` : `Score: ${score}`,
-        body: `<div class="alert-dialog-item"><p class="alert-dialog-item-meta">${isZh ? '综合评分' : 'Score'}</p><p class="alert-dialog-item-title">${score}</p></div><div class="alert-dialog-item"><p class="alert-dialog-item-meta">${isZh ? '最大间隔' : 'Worst Gap'}</p><p class="alert-dialog-item-title">${worstGap ? `${worstGap} min` : '—'}</p></div><div class="alert-dialog-item"><p class="alert-dialog-item-meta">${isZh ? '严重晚点' : 'Severe Late'}</p><p class="alert-dialog-item-title">${severeLateCount}</p></div><div class="alert-dialog-item"><p class="alert-dialog-item-meta">${isZh ? '活跃告警' : 'Active Alerts'}</p><p class="alert-dialog-item-title">${alertCount}</p></div>${attentionReasons.map((r) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta">${isZh ? '关注原因' : 'Reason'}</p><p class="alert-dialog-item-title insights-detail-tone-${r.tone}">${r.label}</p></div>`).join('')}`
+        title: copyValue('detailAttentionTitle', line.name),
+        subtitle: copyValue('scoreSubtitle', score),
+        body: `<div class="alert-dialog-item"><p class="alert-dialog-item-meta">${copyValue('scoreChipLabel')}</p><p class="alert-dialog-item-title">${score}</p></div><div class="alert-dialog-item"><p class="alert-dialog-item-meta">${copyValue('worstGapLabel')}</p><p class="alert-dialog-item-title">${worstGap ? `${worstGap} min` : '—'}</p></div><div class="alert-dialog-item"><p class="alert-dialog-item-meta">${copyValue('severeLateChipLabel')}</p><p class="alert-dialog-item-title">${severeLateCount}</p></div><div class="alert-dialog-item"><p class="alert-dialog-item-meta">${copyValue('activeAlertsChipLabel')}</p><p class="alert-dialog-item-title">${alertCount}</p></div>${attentionReasons.map((r) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta">${copyValue('reasonChipLabel')}</p><p class="alert-dialog-item-title insights-detail-tone-${r.tone}">${r.label}</p></div>`).join('')}`
+      }
+    }
+
+    if (type === 'station-hotspot' && options.stopId) {
+      const allVehiclesAtStop = state.lines.flatMap((l) => {
+        const lVehicles = state.vehiclesByLine.get(l.id) ?? []
+        return lVehicles
+          .filter((v) => v.currentStopId === options.stopId && v.isPredicted)
+          .map((v) => ({ ...v, lineName: l.name, lineColor: l.color }))
+      })
+      const stationLabel = allVehiclesAtStop[0]?.currentStopLabel ?? options.stopId
+      const avgDelay = allVehiclesAtStop.length ? Math.round(allVehiclesAtStop.reduce((s, v) => s + Number(v.scheduleDeviation ?? 0), 0) / allVehiclesAtStop.length) : 0
+      const avgMin = Math.round(avgDelay / 60)
+
+      const vehicleLabel = allVehiclesAtStop.length === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()
+
+      return {
+        title: copyValue('hotspotDetailTitle', stationLabel),
+        subtitle: copyValue('hotspotDetailSubtitle', allVehiclesAtStop.length, vehicleLabel, avgMin),
+        body: allVehiclesAtStop.length
+          ? allVehiclesAtStop
+            .sort((a, b) => Number(b.scheduleDeviation ?? 0) - Number(a.scheduleDeviation ?? 0))
+            .map((v) => {
+              const delay = Number(v.scheduleDeviation ?? 0)
+              const delayMin = Math.round(delay / 60)
+              const delayText = delay > 60 ? copyValue('hotspotDelayText', delayMin) : copyValue('onTime')
+              const tone = delay > 300 ? 'alert' : delay > 120 ? 'warn' : 'healthy'
+              return `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${v.lineColor}">${v.lineName} · ${v.directionSymbol === '▲' ? copyValue('northboundShort') : copyValue('southboundShort')} · ${copyValue('vehicleWord')} ${v.label}</p><p class="alert-dialog-item-title">${v.currentStopLabel}</p><p class="alert-dialog-item-copy insights-detail-tone-${tone}">${delayText}</p></div>`
+            }).join('')
+          : `<p class="train-readout muted">${copyValue('hotspotNoVehicles')}</p>`,
       }
     }
 
@@ -405,42 +495,42 @@ export function createInsightsRenderers(deps) {
 
     if (type === 'sys-healthy') {
       const healthy = allInsightsItems.filter((item) => !item.isUneven && !item.hasSevereLate)
-      return { title: isZh ? '健康线路' : 'Healthy Lines', subtitle: isZh ? `${healthy.length} 条线路运行稳定` : `${healthy.length} line${healthy.length !== 1 ? 's' : ''} running smoothly`, body: healthy.length ? healthy.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title">${item.vehicles.length} ${isZh ? '辆运营中' : 'in service'}</p><p class="alert-dialog-item-copy insights-detail-tone-healthy">${isZh ? '间隔和准点性均正常' : 'Spacing and punctuality normal'}</p></div>`).join('') : `<p class="train-readout muted">${isZh ? '当前没有完全健康的线路' : 'No fully healthy lines right now'}</p>` }
+      return { title: copyValue('healthyLinesLabel'), subtitle: copyValue('healthyLinesSubtitle', healthy.length), body: healthy.length ? healthy.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title">${copyValue('vehiclesInServiceText', item.vehicles.length)}</p><p class="alert-dialog-item-copy insights-detail-tone-healthy">${copyValue('spacingPunctualityNormal')}</p></div>`).join('') : `<p class="train-readout muted">${copyValue('noHealthyLines')}</p>` }
     }
 
     if (type === 'sys-vehicles') {
-      return { title: isZh ? `实时${getVehicleLabelPlural()}` : `Live ${getVehicleLabelPlural()}`, subtitle: isZh ? `全系统共 ${allInsightsItems.reduce((s, i) => s + i.vehicles.length, 0)} 辆` : `${allInsightsItems.reduce((s, i) => s + i.vehicles.length, 0)} total`, body: allInsightsItems.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title">${item.vehicles.length} ${isZh ? '辆' : 'vehicle' + (item.vehicles.length !== 1 ? 's' : '')}</p><p class="alert-dialog-item-copy">${isZh ? `北行 ${item.nb.length} · 南行 ${item.sb.length}` : `NB: ${item.nb.length} · SB: ${item.sb.length}`}</p></div>`).join('') }
+      return { title: copyValue('liveVehiclesLabel', getVehicleLabelPlural()), subtitle: copyValue('vehiclesSystemTotal', allInsightsItems.reduce((s, i) => s + i.vehicles.length, 0)), body: allInsightsItems.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title">${copyValue('vehicleCountUnit', item.vehicles.length)}</p><p class="alert-dialog-item-copy">${copyValue('nbSbCountsText', item.nb.length, item.sb.length)}</p></div>`).join('') }
     }
 
     if (type === 'sys-alerts') {
       const linesWithAlerts = allInsightsItems.filter((item) => item.alerts.length > 0)
-      return { title: isZh ? '活跃告警' : 'Active Alerts', subtitle: isZh ? `${linesWithAlerts.reduce((s, i) => s + i.alerts.length, 0)} 条告警影响 ${linesWithAlerts.length} 条线路` : `${linesWithAlerts.reduce((s, i) => s + i.alerts.length, 0)} alerts across ${linesWithAlerts.length} line${linesWithAlerts.length !== 1 ? 's' : ''}`, body: linesWithAlerts.length ? linesWithAlerts.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title">${item.alerts.length} ${isZh ? '条活跃告警' : `active alert${item.alerts.length !== 1 ? 's' : ''}`}</p>${item.alerts.map((a) => `<p class="alert-dialog-item-copy">${a.title || (isZh ? '服务告警' : 'Service alert')}</p>`).join('')}</div>`).join('') : `<p class="train-readout muted">${isZh ? '当前没有活跃告警' : 'No active alerts right now'}</p>` }
+      return { title: copyValue('activeAlertsChipLabel'), subtitle: copyValue('alertsDetailSubtitle', linesWithAlerts.reduce((s, i) => s + i.alerts.length, 0), linesWithAlerts.length), body: linesWithAlerts.length ? linesWithAlerts.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title">${copyValue('activeAlertCountText', item.alerts.length)}</p>${item.alerts.map((a) => `<p class="alert-dialog-item-copy">${a.title || copyValue('serviceAlert')}</p>`).join('')}</div>`).join('') : `<p class="train-readout muted">${copyValue('noActiveAlertsNow')}</p>` }
     }
 
     if (type === 'sys-attention') {
       const attention = allInsightsItems.filter((item) => item.isUneven || item.hasSevereLate)
-      return { title: isZh ? '需关注线路' : 'Lines Needing Attention', subtitle: isZh ? `${attention.length} 条线路` : `${attention.length} line${attention.length !== 1 ? 's' : ''}`, body: attention.length ? attention.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title">${item.worstGap ? (isZh ? `最大间隔 ${item.worstGap} 分钟` : `Gap ${item.worstGap} min`) : ''}</p><p class="alert-dialog-item-copy">${[item.hasSevereLate ? (isZh ? `${item.severeLate} 辆严重晚点` : `${item.severeLate} severely late`) : '', item.isUneven ? (isZh ? '间隔不均' : 'Uneven spacing') : ''].filter(Boolean).join(' · ')}</p></div>`).join('') : `<p class="train-readout muted">${isZh ? '当前没有需关注的线路' : 'No lines needing attention right now'}</p>` }
+      return { title: copyValue('linesNeedingAttention'), subtitle: copyValue('attentionLinesSubtitle', attention.length), body: attention.length ? attention.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title">${item.worstGap ? copyValue('gapMinSummary', item.worstGap) : ''}</p><p class="alert-dialog-item-copy">${[item.hasSevereLate ? copyValue('severelyLateVehicles', item.severeLate) : '', item.isUneven ? copyValue('unevenSpacingText') : ''].filter(Boolean).join(' · ')}</p></div>`).join('') : `<p class="train-readout muted">${copyValue('noAttentionLines')}</p>` }
     }
 
     if (type === 'sys-stops') {
       const allAlerts = allInsightsItems.flatMap((item) => item.alerts)
       const stopIds = [...new Set(allAlerts.flatMap((a) => a.stopIds ?? []))]
-      return { title: isZh ? '受影响站点' : 'Impacted Stops', subtitle: isZh ? `${stopIds.length} 个站点受告警影响` : `${stopIds.length} stop${stopIds.length !== 1 ? 's' : ''} affected`, body: stopIds.length ? stopIds.map((id) => `<div class="alert-dialog-item"><p class="alert-dialog-item-title">${id}</p></div>`).join('') : `<p class="train-readout muted">${isZh ? '当前没有受影响的站点' : 'No impacted stops right now'}</p>` }
+      return { title: copyValue('impactedStopsTitle'), subtitle: copyValue('stopsAffected', stopIds.length), body: stopIds.length ? stopIds.map((id) => `<div class="alert-dialog-item"><p class="alert-dialog-item-title">${id}</p></div>`).join('') : `<p class="train-readout muted">${copyValue('noImpactedStops')}</p>` }
     }
 
     if (type === 'sys-late-only') {
       const filtered = allInsightsItems.filter((item) => item.hasSevereLate && !item.isUneven)
-      return { title: isZh ? '仅晚点线路' : 'Late Only Lines', subtitle: isZh ? `${filtered.length} 条线路` : `${filtered.length} line${filtered.length !== 1 ? 's' : ''}`, body: filtered.length ? filtered.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title insights-detail-tone-warn">${item.severeLate} ${isZh ? '辆严重晚点' : `severely late vehicle${item.severeLate !== 1 ? 's' : ''}`}</p></div>`).join('') : `<p class="train-readout muted">${isZh ? '当前没有仅晚点的线路' : 'No late-only lines right now'}</p>` }
+      return { title: copyValue('lateOnlyLinesTitle'), subtitle: copyValue('lineCountText', filtered.length), body: filtered.length ? filtered.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title insights-detail-tone-warn">${copyValue('severelyLateVehicles', item.severeLate)}</p></div>`).join('') : `<p class="train-readout muted">${copyValue('noLateOnlyLines')}</p>` }
     }
 
     if (type === 'sys-spacing-only') {
       const filtered = allInsightsItems.filter((item) => item.isUneven && !item.hasSevereLate)
-      return { title: isZh ? '仅间隔不均线路' : 'Spacing Only Lines', subtitle: isZh ? `${filtered.length} 条线路` : `${filtered.length} line${filtered.length !== 1 ? 's' : ''}`, body: filtered.length ? filtered.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title insights-detail-tone-alert">${isZh ? `最大间隔 ${item.worstGap} 分钟` : `Gap ${item.worstGap} min`}</p></div>`).join('') : `<p class="train-readout muted">${isZh ? '当前没有仅间隔不均的线路' : 'No spacing-only lines right now'}</p>` }
+      return { title: copyValue('spacingOnlyLinesTitle'), subtitle: copyValue('lineCountText', filtered.length), body: filtered.length ? filtered.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title insights-detail-tone-alert">${copyValue('gapMinSummary', item.worstGap)}</p></div>`).join('') : `<p class="train-readout muted">${copyValue('noSpacingOnlyLines')}</p>` }
     }
 
     if (type === 'sys-both') {
       const filtered = allInsightsItems.filter((item) => item.hasSevereLate && item.isUneven)
-      return { title: isZh ? '晚点且间隔不均' : 'Both Issues', subtitle: isZh ? `${filtered.length} 条线路` : `${filtered.length} line${filtered.length !== 1 ? 's' : ''}`, body: filtered.length ? filtered.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title">${isZh ? `最大间隔 ${item.worstGap} 分钟 · ${item.severeLate} 辆严重晚点` : `Gap ${item.worstGap} min · ${item.severeLate} severely late`}</p></div>`).join('') : `<p class="train-readout muted">${isZh ? '当前没有两者都有问题的线路' : 'No lines with both issues right now'}</p>` }
+      return { title: copyValue('bothIssuesTitle'), subtitle: copyValue('lineCountText', filtered.length), body: filtered.length ? filtered.map((item) => `<div class="alert-dialog-item"><p class="alert-dialog-item-meta" style="color:${item.line.color}">${item.line.name}</p><p class="alert-dialog-item-title">${copyValue('bothIssuesSummary', item.worstGap, item.severeLate)}</p></div>`).join('') : `<p class="train-readout muted">${copyValue('noBothIssueLines')}</p>` }
     }
 
     return null

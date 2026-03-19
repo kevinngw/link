@@ -21,7 +21,7 @@ export function classifyVehicleStatus(rawVehicle) {
   return 'OK'
 }
 
-export function formatDelay(deviationSeconds, isPredicted, { language, copyValue }) {
+export function formatDelay(deviationSeconds, isPredicted, { copyValue }) {
   if (!isPredicted) {
     return { text: copyValue('scheduled'), colorClass: 'status-muted' }
   }
@@ -38,12 +38,12 @@ export function formatDelay(deviationSeconds, isPredicted, { language, copyValue
     } else if (deviationSeconds > 300) {
       colorClass = 'status-late-moderate'
     }
-    return { text: language === 'zh-CN' ? `晚点 ${minutes} 分钟` : `+${minutes} min late`, colorClass }
+    return { text: copyValue('lateMinutes', minutes), colorClass }
   }
 
   if (deviationSeconds < -60) {
     const minutes = Math.round(Math.abs(deviationSeconds) / 60)
-    return { text: language === 'zh-CN' ? `早到 ${minutes} 分钟` : `${minutes} min early`, colorClass: 'status-early' }
+    return { text: copyValue('earlyMinutes', minutes), colorClass: 'status-early' }
   }
 
   return { text: copyValue('unknown'), colorClass: 'status-muted' }

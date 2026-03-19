@@ -48,12 +48,12 @@ export function formatArrivalDestination(arrival, copyValue) {
   return copyValue('terminalFallback')
 }
 
-export function getArrivalServiceStatus(arrivalTime, scheduleDeviation, language) {
+export function getArrivalServiceStatus(arrivalTime, scheduleDeviation, copyValue) {
   const secondsUntilArrival = Math.floor((arrivalTime - Date.now()) / 1000)
 
   if (secondsUntilArrival <= 90) return 'ARR'
   if (scheduleDeviation >= 120) return 'DELAY'
-  return language === 'zh-CN' ? '准点' : 'ON TIME'
+  return copyValue('onTimeStatus')
 }
 
 export function getStatusTone(status) {
@@ -62,7 +62,7 @@ export function getStatusTone(status) {
   return 'ok'
 }
 
-export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationStopIds, copyValue, getLanguage }) {
+export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationStopIds, copyValue }) {
   async function fetchArrivalsForStop(stopId, signal) {
     const url = `${OBA_BASE_URL}/arrivals-and-departures-for-stop/${stopId}.json?key=${OBA_KEY}&minutesAfter=${ARRIVALS_LOOKAHEAD_MINUTES}`
     const payload = await fetchJsonWithRetry(url, 'Arrivals', signal)
@@ -181,6 +181,6 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
     getCachedArrivalsForStation,
     getArrivalsForStation,
     mergeArrivalBuckets,
-    getArrivalServiceStatus: (arrivalTime, scheduleDeviation) => getArrivalServiceStatus(arrivalTime, scheduleDeviation, getLanguage()),
+    getArrivalServiceStatus: (arrivalTime, scheduleDeviation) => getArrivalServiceStatus(arrivalTime, scheduleDeviation, copyValue),
   }
 }

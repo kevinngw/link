@@ -18,17 +18,12 @@ export function formatCurrentTime(language) {
   }).format(new Date())
 }
 
-export function formatArrivalTime(offsetSeconds, language, copyValue) {
+export function formatArrivalTime(offsetSeconds, copyValue) {
   if (offsetSeconds <= 0) return copyValue('arriving')
   const minutes = Math.floor(offsetSeconds / 60)
   const seconds = offsetSeconds % 60
-  if (language === 'zh-CN') {
-    if (minutes > 0) return `${minutes}分 ${seconds}秒`
-    return `${seconds}秒`
-  }
-
-  if (minutes > 0) return `${minutes}m ${seconds}s`
-  return `${seconds}s`
+  if (minutes > 0) return copyValue('arrivalMinSec', minutes, seconds)
+  return copyValue('arrivalSec', seconds)
 }
 
 export function getTodayDateKey() {
@@ -63,22 +58,16 @@ export function getServiceDateTime(dateKey, clockValue) {
   return new Date(year, month - 1, day, hours, minutes, seconds)
 }
 
-export function formatDurationFromMs(ms, language) {
+export function formatDurationFromMs(ms, copyValue) {
   const totalMinutes = Math.max(0, Math.round(ms / 60_000))
   const hours = Math.floor(totalMinutes / 60)
   const minutes = totalMinutes % 60
-  if (language === 'zh-CN') {
-    if (hours && minutes) return `${hours}小时${minutes}分钟`
-    if (hours) return `${hours}小时`
-    return `${minutes}分钟`
-  }
-
-  if (hours && minutes) return `${hours}h ${minutes}m`
-  if (hours) return `${hours}h`
-  return `${minutes}m`
+  if (hours && minutes) return copyValue('durationHoursMinutes', hours, minutes)
+  if (hours) return copyValue('durationHours', hours)
+  return copyValue('durationMinutes', minutes)
 }
 
-export function formatServiceClock(clockValue, language) {
+export function formatServiceClock(clockValue, language, copyValue) {
   if (!clockValue) return ''
   const [rawHours = '0', rawMinutes = '0'] = String(clockValue).split(':')
   const hours24 = Number(rawHours)
@@ -86,11 +75,7 @@ export function formatServiceClock(clockValue, language) {
   const normalizedHours = ((hours24 % 24) + 24) % 24
   const dayOffset = hours24 >= 24 ? Math.floor(hours24 / 24) : 0
 
-  const daySuffix = dayOffset > 0
-    ? language === 'zh-CN'
-      ? `（次日${dayOffset > 1 ? `+${dayOffset - 1}` : ''}）`
-      : ` (+${dayOffset}d)`
-    : ''
+  const daySuffix = dayOffset > 0 ? copyValue('nextDaySuffix', dayOffset) : ''
 
   if (language === 'zh-CN') {
     return `${String(normalizedHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}${daySuffix}`

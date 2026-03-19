@@ -105,7 +105,7 @@ export function createTrainRenderers(deps) {
                     <button class="train-focus-card train-list-item" data-train-id="${focusVehicle.id}" type="button" aria-label="${focusVehicle.lineName} ${vehicleLabel} ${focusVehicle.label}">
                       <div class="train-focus-header">
                         <div>
-                          <p class="train-focus-kicker">${state.language === 'zh-CN' ? '最近一班' : 'Next up'}</p>
+                          <p class="train-focus-kicker">${copyValue('nextUpKicker')}</p>
                           <p class="train-focus-title">${focusVehicle.lineName} ${vehicleLabel} ${focusVehicle.label}</p>
                           ${renderDirectionBadge(focusVehicle)}
                         </div>
@@ -126,7 +126,7 @@ export function createTrainRenderers(deps) {
                 queueVehicles.length
                   ? `
                     <div class="train-queue-list">
-                      <p class="train-queue-heading">${state.language === 'zh-CN' ? '后续车次' : 'Following vehicles'}</p>
+                      <p class="train-queue-heading">${copyValue('followingVehiclesHeading')}</p>
                       ${queueVehicles.map((v) => renderQueueItem(v, vehicleLabel)).join('')}
                     </div>
                   `

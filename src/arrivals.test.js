@@ -76,19 +76,21 @@ describe('arrivals', () => {
   })
 
   describe('getArrivalServiceStatus', () => {
+    const mockCopyValue = (key) => ({ onTimeStatus: 'ON TIME' })[key] ?? key
+
     it('returns ARR for imminent arrival', () => {
       const arrivalTime = Date.now() + 30000 // 30 seconds
-      expect(getArrivalServiceStatus(arrivalTime, 0, 'en')).toBe('ARR')
+      expect(getArrivalServiceStatus(arrivalTime, 0, mockCopyValue)).toBe('ARR')
     })
-    
+
     it('returns DELAY for late arrival', () => {
       const arrivalTime = Date.now() + 300000 // 5 minutes
-      expect(getArrivalServiceStatus(arrivalTime, 180, 'en')).toBe('DELAY')
+      expect(getArrivalServiceStatus(arrivalTime, 180, mockCopyValue)).toBe('DELAY')
     })
-    
+
     it('returns ON TIME for normal arrival', () => {
       const arrivalTime = Date.now() + 300000
-      expect(getArrivalServiceStatus(arrivalTime, 0, 'en')).toBe('ON TIME')
+      expect(getArrivalServiceStatus(arrivalTime, 0, mockCopyValue)).toBe('ON TIME')
     })
   })
 

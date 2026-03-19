@@ -62,23 +62,23 @@ export function formatPercent(value, total) {
   return `${Math.round((value / total) * 100)}%`
 }
 
-export function getLineAttentionReasons({ worstGap, severeLateCount, alertCount, balanceDelta, language }) {
+export function getLineAttentionReasons({ worstGap, severeLateCount, alertCount, balanceDelta, copyValue }) {
   const reasons = []
 
   if (worstGap >= HEADWAY.LARGE_GAP) {
-    reasons.push({ key: 'gap', tone: 'alert', label: language === 'zh-CN' ? '大间隔' : 'Large gap' })
+    reasons.push({ key: 'gap', tone: 'alert', label: copyValue('reasonLargeGap') })
   }
   if (severeLateCount > 0) {
-    reasons.push({ key: 'late', tone: 'warn', label: language === 'zh-CN' ? '严重晚点' : 'Severe late' })
+    reasons.push({ key: 'late', tone: 'warn', label: copyValue('reasonSevereLate') })
   }
   if (alertCount > 0) {
-    reasons.push({ key: 'alert', tone: 'info', label: language === 'zh-CN' ? '有告警' : 'Alerted' })
+    reasons.push({ key: 'alert', tone: 'info', label: copyValue('reasonAlerted') })
   }
   if (balanceDelta >= 2) {
-    reasons.push({ key: 'balance', tone: 'warn', label: language === 'zh-CN' ? '方向失衡' : 'Imbalanced' })
+    reasons.push({ key: 'balance', tone: 'warn', label: copyValue('reasonImbalanced') })
   }
   if (!reasons.length) {
-    reasons.push({ key: 'healthy', tone: 'healthy', label: language === 'zh-CN' ? '健康' : 'Healthy' })
+    reasons.push({ key: 'healthy', tone: 'healthy', label: copyValue('reasonHealthy') })
   }
 
   return reasons

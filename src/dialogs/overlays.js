@@ -92,7 +92,7 @@ export function createOverlayDialogs({
     const directionLabel = getDirectionBaseLabel(vehicle.directionSymbol)
 
     trainDialogTitle.textContent = `${vehicle.lineName} ${getVehicleLabel()} ${vehicle.label}`
-    trainDialogSubtitle.textContent = state.language === 'zh-CN' ? `${directionLabel} · ${copyValue('toDestination', destinationLabel)}` : `${directionLabel} to ${destinationLabel}`
+    trainDialogSubtitle.textContent = copyValue('directionTo', directionLabel, destinationLabel)
     trainDialogStatus.className = `train-detail-status train-list-status-${getStatusTone(vehicle.serviceStatus)}`
     trainDialogStatus.innerHTML = renderStatusPills(getVehicleStatusPills(vehicle))
     trainDialog.querySelector('.train-eta-panel')?.remove()
@@ -118,7 +118,7 @@ export function createOverlayDialogs({
       <div class="train-detail-stop is-current train-detail-stop-clickable" data-spine-station-id="${vehicle.currentStopId}" role="button" tabindex="0">
         <span class="train-detail-marker train-detail-marker-ghost"></span>
         <div>
-          <p class="train-detail-label">${currentLabel === 'Between' ? (state.language === 'zh-CN' ? '区间' : 'Between') : copyValue('now')}</p>
+          <p class="train-detail-label">${currentLabel === 'Between' ? copyValue('betweenLabel') : copyValue('now')}</p>
           <p class="train-detail-name">${currentName}</p>
         </div>
       </div>

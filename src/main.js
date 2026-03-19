@@ -526,7 +526,8 @@ boardElement.addEventListener('click', (e) => {
   if (insightsEl) {
     const lineId = insightsEl.dataset.insightsLineId ?? null
     const type = insightsEl.dataset.insightsType
-    const content = buildInsightsDetailContent(lineId, type)
+    const stopId = insightsEl.dataset.hotspotStopId ?? null
+    const content = buildInsightsDetailContent(lineId, type, { stopId })
     if (content) showInsightsDetail(content.title, content.subtitle, content.body, { type, lineId: lineId ?? '' })
     return
   }
@@ -724,7 +725,6 @@ const { buildArrivalsForLine, fetchArrivalsForStopIds, getCachedArrivalsForStati
   fetchJsonWithRetry,
   getStationStopIds: (...args) => getStationStopIds(...args),
   copyValue,
-  getLanguage: () => state.language,
 })
 
 function formatRelativeTime(dateString) {
@@ -736,15 +736,15 @@ function formatCurrentTime() {
 }
 
 function formatArrivalTime(offsetSeconds) {
-  return formatArrivalTimeValue(offsetSeconds, state.language, copyValue)
+  return formatArrivalTimeValue(offsetSeconds, copyValue)
 }
 
 function formatDurationFromMs(ms) {
-  return formatDurationFromMsValue(ms, state.language)
+  return formatDurationFromMsValue(ms, copyValue)
 }
 
 function formatServiceClock(clockValue) {
-  return formatServiceClockValue(clockValue, state.language)
+  return formatServiceClockValue(clockValue, state.language, copyValue)
 }
 
 function formatClockTime(timestamp) {
@@ -761,11 +761,11 @@ function getDirectionBaseLabel(directionSymbol, includeSymbol = false) {
     : ''
 
   if (directionSymbol === '▲') {
-    return `${symbolPrefix}${state.language === 'zh-CN' ? '北向' : 'Northbound'}`
+    return `${symbolPrefix}${copyValue('northboundLabel')}`
   }
 
   if (directionSymbol === '▼') {
-    return `${symbolPrefix}${state.language === 'zh-CN' ? '南向' : 'Southbound'}`
+    return `${symbolPrefix}${copyValue('southboundLabel')}`
   }
 
   return copyValue('active')
@@ -774,9 +774,7 @@ function getDirectionBaseLabel(directionSymbol, includeSymbol = false) {
 function formatDirectionLabel(directionSymbol, destination = '', { includeSymbol = false } = {}) {
   const baseLabel = getDirectionBaseLabel(directionSymbol, includeSymbol)
   if (!destination) return baseLabel
-  return state.language === 'zh-CN'
-    ? `${baseLabel} · 开往 ${destination}`
-    : `${baseLabel} to ${destination}`
+  return copyValue('directionTo', baseLabel, destination)
 }
 
 function getDirectionDestinationLabel(directionSymbol, layout) {
@@ -801,7 +799,7 @@ function summarizeDirectionDestinations(destinations) {
   if (!uniqueDestinations.length) return ''
   const labels = uniqueDestinations.slice(0, 2)
   if (uniqueDestinations.length > 2) {
-    labels.push(state.language === 'zh-CN' ? '等' : 'etc.')
+    labels.push(copyValue('etcLabel'))
   }
   return labels.join(' / ')
 }
@@ -1001,9 +999,9 @@ function getLosAngelesDateParts(date = new Date()) {
 
 function getTimelineBoundaryLabel(boundary) {
   if (boundary === 'start') {
-    return state.language === 'zh-CN' ? '00:00' : '12:00 AM'
+    return copyValue('midnightStartLabel')
   }
-  return state.language === 'zh-CN' ? '24:00' : '12:00 AM'
+  return copyValue('midnightEndLabel')
 }
 
 function getServiceTimelineData(line) {
@@ -1084,16 +1082,16 @@ function renderServiceTimeline(line) {
     <section class="service-timeline-card">
       <div class="service-timeline-header">
         <div>
-          <p class="headway-chart-title">${state.language === 'zh-CN' ? '今日运营时间带' : 'Today Service Window'}</p>
+          <p class="headway-chart-title">${copyValue('todayServiceWindowTitle')}</p>
           <p class="headway-chart-copy">${timeline.overflowLabel
-            ? (state.language === 'zh-CN' ? `今日覆盖到午夜，继续运营至 ${timeline.overflowLabel}` : `Covers today through midnight, then continues to ${timeline.overflowLabel}`)
-            : (state.language === 'zh-CN' ? '首末班与当前时刻' : 'First trip, last trip, and current time')}</p>
+            ? copyValue('serviceOverflowNote', timeline.overflowLabel)
+            : copyValue('serviceFirstLastNote')}</p>
         </div>
-        <span class="service-timeline-badge ${timeline.isLive ? 'is-live' : 'is-off'}">${timeline.isLive ? (state.language === 'zh-CN' ? '运营中' : 'In service') : (state.language === 'zh-CN' ? '未运营' : 'Off hours')}</span>
+        <span class="service-timeline-badge ${timeline.isLive ? 'is-live' : 'is-off'}">${timeline.isLive ? copyValue('inServiceBadge') : copyValue('offHoursBadge')}</span>
       </div>
       <div class="service-timeline-track">
         <div class="service-timeline-band" style="left:${startPercent}%; width:${Math.max(2, endPercent - startPercent)}%;"></div>
-        <div class="service-timeline-now" style="left:${nowPercent}%;" aria-label="${state.language === 'zh-CN' ? '当前时间' : 'Current time'}">
+        <div class="service-timeline-now" style="left:${nowPercent}%;" aria-label="${copyValue('currentTimeAria')}">
           <span class="service-timeline-now-line"></span>
           <span class="service-timeline-now-dot"></span>
         </div>
@@ -1145,7 +1143,7 @@ function renderInlineAlerts(lineAlerts, lineId) {
 
 function formatVehicleSegment(vehicle) {
   if (vehicle.fromLabel === vehicle.toLabel || vehicle.progress === 0) {
-    return state.language === 'zh-CN' ? `位于 ${vehicle.fromLabel}` : `At ${vehicle.fromLabel}`
+    return copyValue('vehicleAt', vehicle.fromLabel)
   }
 
   return `${vehicle.fromLabel} -> ${vehicle.toLabel}`
@@ -1153,12 +1151,10 @@ function formatVehicleSegment(vehicle) {
 
 function formatVehicleLocationSummary(vehicle) {
   if (vehicle.fromLabel === vehicle.toLabel || vehicle.progress === 0) {
-    return state.language === 'zh-CN' ? `当前位于 ${vehicle.fromLabel}` : `Currently at ${vehicle.fromLabel}`
+    return copyValue('vehicleCurrentlyAt', vehicle.fromLabel)
   }
 
-  return state.language === 'zh-CN'
-    ? `正从 ${vehicle.fromLabel} 开往 ${vehicle.toLabel}`
-    : `Running from ${vehicle.fromLabel} to ${vehicle.toLabel}`
+  return copyValue('vehicleRunningBetween', vehicle.fromLabel, vehicle.toLabel)
 }
 
 function getTrainTimelineEntries(vehicle, layout) {
@@ -1202,12 +1198,12 @@ function renderFocusMetrics(vehicle) {
   return `
     <div class="train-focus-metrics">
       <div class="train-focus-metric">
-        <p class="train-focus-metric-label">${state.language === 'zh-CN' ? '下一站' : 'Next stop'}</p>
+        <p class="train-focus-metric-label">${copyValue('nextStop')}</p>
         <p class="train-focus-metric-value">${nextStopName}</p>
         <p class="train-focus-metric-copy" data-vehicle-next-countdown="${vehicle.id}">${formatArrivalTime(getRealtimeOffset(vehicle.nextOffset ?? 0))}</p>
       </div>
       <div class="train-focus-metric">
-        <p class="train-focus-metric-label">${state.language === 'zh-CN' ? '终点' : 'Terminal'}</p>
+        <p class="train-focus-metric-label">${copyValue('terminal')}</p>
         <p class="train-focus-metric-value">${getVehicleDestinationLabel(vehicle, layout)}</p>
         <p class="train-focus-metric-copy" data-vehicle-terminal-countdown="${vehicle.id}">${formatArrivalTime(getRealtimeOffset(terminalEta))}</p>
       </div>
@@ -1608,7 +1604,7 @@ function computeSystemSummaryMetrics(insightsItems) {
         severeLateCount,
         alertCount: item.lineAlerts.length,
         balanceDelta,
-        language: state.language,
+        copyValue,
       })
 
       return {
@@ -1637,29 +1633,23 @@ function computeSystemSummaryMetrics(insightsItems) {
 
   let topIssue = {
     tone: 'healthy',
-    copy: state.language === 'zh-CN' ? '当前没有明显的主要问题。' : 'No major active issues right now.',
+    copy: copyValue('noMajorIssues'),
   }
   const topLine = rankedLines[0] ?? null
   if (topLine?.alertCount) {
     topIssue = {
       tone: 'info',
-      copy: state.language === 'zh-CN'
-        ? `${topLine.line.name} 当前有 ${topLine.alertCount} 条生效告警。`
-        : `${topLine.line.name} has ${topLine.alertCount} active alert${topLine.alertCount === 1 ? '' : 's'}.`,
+      copy: copyValue('topIssueAlerts', topLine.line.name, topLine.alertCount),
     }
   } else if (topLine?.worstGap >= 12) {
     topIssue = {
       tone: 'alert',
-      copy: state.language === 'zh-CN'
-        ? `当前最大实时间隔为空 ${topLine.line.name} 的 ${topLine.worstGap} 分钟。`
-        : `Largest live gap: ${topLine.worstGap} min on ${topLine.line.name}.`,
+      copy: copyValue('topIssueGap', topLine.line.name, topLine.worstGap),
     }
   } else if (topLine?.severeLateCount) {
     topIssue = {
       tone: 'warn',
-      copy: state.language === 'zh-CN'
-        ? `${topLine.line.name} 有 ${topLine.severeLateCount} 辆${topLine.severeLateCount === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()}晚点超过 5 分钟。`
-        : `${topLine.line.name} has ${topLine.severeLateCount} ${topLine.severeLateCount === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()} running 5+ min late.`,
+      copy: copyValue('topIssueLate', topLine.line.name, topLine.severeLateCount, topLine.severeLateCount === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()),
     }
   }
 
@@ -2097,7 +2087,7 @@ function refreshLiveMeta() {
   statusPillElement.classList.toggle('status-pill-error', Boolean(state.error))
   currentTimeElement.textContent = `${copyValue('nowPrefix')} ${formatCurrentTime()}`
   updatedAtElement.textContent = state.error
-    ? (state.language === 'zh-CN' ? '使用最近一次成功快照' : 'Using last successful snapshot')
+    ? copyValue('usingLastSnapshot')
     : formatRelativeTime(state.fetchedAt)
   dialogStatusPillElement.textContent = statusPillElement.textContent
   dialogStatusPillElement.classList.toggle('status-pill-error', Boolean(state.error))
