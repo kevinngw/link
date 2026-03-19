@@ -20,6 +20,7 @@ import { clearDialogParams, clearStationParam, getPageFromUrl, isOptionalNavigat
 import { createToast } from './toast'
 import { createVehicleDisplay } from './vehicle-display'
 import { createStationSearch } from './station-search'
+import { createFavoritesManager } from './favorites'
 
 const state = {
   fetchedAt: '',
@@ -110,7 +111,7 @@ document.querySelector('#app').innerHTML = `
       <section id="view-bar" class="tab-bar" aria-label="Board views">
         <button class="tab-button is-active" data-tab="map" type="button">Map</button>
         <button class="tab-button" data-tab="trains" type="button" id="tab-trains">Trains</button>
-
+        <button class="tab-button" data-tab="favorites" type="button">Favorites</button>
         <button class="tab-button" data-tab="insights" type="button">Insights</button>
       </section>
     </div>
@@ -136,8 +137,9 @@ document.querySelector('#app').innerHTML = `
           <p id="dialog-service-summary" class="dialog-service-summary">Service summary</p>
         </div>
         <div class="dialog-actions">
-<button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
-<button id="station-dialog-close" class="dialog-close" type="button" aria-label="Close station dialog">&times;</button>
+          <button id="dialog-favorite" class="dialog-close dialog-favorite-button" type="button" aria-label="Add to favorites">☆</button>
+          <button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
+          <button id="station-dialog-close" class="dialog-close" type="button" aria-label="Close station dialog">&times;</button>
         </div>
       </header>
       <div class="dialog-direction-bar">
@@ -302,6 +304,8 @@ const {
   insightsDetailBody,
   insightsDetailClose,
 } = dialogElements
+
+const dialogFavoriteButton = document.querySelector('#dialog-favorite')
 
 dialogDisplay.addEventListener('click', () => toggleDialogDisplayMode())
 
@@ -581,6 +585,81 @@ const {
   showStationDialog,
   switchSystem,
   setStationSearchParams,
+})
+
+const {
+  getFavorites,
+  isFavorite,
+  toggleFavorite,
+  getFavoriteDisplayData,
+  handleFavoriteClick,
+} = createFavoritesManager({
+  state,
+  showStationDialog,
+  switchSystem,
+})
+
+function updateFavoriteButton() {
+  if (!dialogFavoriteButton || !state.currentDialogStation) return
+  const dialogStations = getDialogStations(state.currentDialogStation)
+  const firstMatch = dialogStations[0]
+  if (!firstMatch) return
+  
+  const fav = isFavorite(firstMatch.station.id, firstMatch.line.id, state.activeSystemId)
+  dialogFavoriteButton.textContent = fav ? '★' : '☆'
+  dialogFavoriteButton.setAttribute('aria-label', fav ? copyValue('removeFavorite') : copyValue('addFavorite'))
+  dialogFavoriteButton.classList.toggle('is-favorite', fav)
+}
+
+function renderFavoritesView() {
+  const favorites = getFavoriteDisplayData()
+  
+  if (!favorites.length) {
+    return `
+      <section class="board" style="grid-template-columns: 1fr;">
+        <article class="panel-card">
+          <h2>${copyValue('favoritesTitle')}</h2>
+          <p class="muted">${copyValue('noFavorites')}</p>
+          <p class="muted">${copyValue('favoritesHint')}</p>
+        </article>
+      </section>
+    `
+  }
+
+  const items = favorites.map((fav) => {
+    const isCurrentSystem = fav.systemId === state.activeSystemId
+    return `
+      <div class="favorite-item ${fav.exists ? '' : 'favorite-item-missing'}" 
+           data-favorite-key="${fav.systemId}:${fav.lineId}:${fav.stationId}"
+           role="button" tabindex="0">
+        <span class="arrival-line-token" style="--line-color:${fav.lineColor};">${fav.lineName[0]}</span>
+        <div class="favorite-item-content">
+          <p class="favorite-item-title">${fav.stationName}</p>
+          <p class="favorite-item-meta">${fav.lineName}${isCurrentSystem ? '' : ` · ${fav.systemName}`}</p>
+        </div>
+        <span class="favorite-item-arrow">→</span>
+      </div>
+    `
+  }).join('')
+
+  return `
+    <article class="panel-card panel-card-wide">
+      <header class="panel-header">
+        <h2>${copyValue('favoritesTitle')}</h2>
+      </header>
+      <div class="favorites-list">
+        ${items}
+      </div>
+    </article>
+  `
+}
+
+boardElement.addEventListener('click', (e) => {
+  const favItem = e.target.closest('[data-favorite-key]')
+  if (!favItem) return
+  const key = favItem.dataset.favoriteKey
+  const fav = getFavorites().find((f) => `${f.systemId}:${f.lineId}:${f.stationId}` === key)
+  if (fav) handleFavoriteClick(fav)
 })
 
 function setArrivalsTitleHtml(element, text) {
@@ -1359,6 +1438,7 @@ async function syncDialogFromUrl() {
       }
       const vehicle = getAllVehicles().find((candidate) => candidate.id === requestedTrainId)
       if (!vehicle) {
+
         closeTrainDialog()
         return
       }
@@ -1711,6 +1791,7 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
   if (!dialog.open) dialog.showModal()
   if (updateUrl) setStationParam(station)
   startDialogAutoRefresh()
+  updateFavoriteButton()
   try {
     await refreshStationDialog(station, { requestId, skipCache: true })
   } catch (e) {
@@ -1722,6 +1803,19 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
     }
     console.warn('Station refresh failed:', e)
   }
+}
+
+if (dialogFavoriteButton) {
+  dialogFavoriteButton.addEventListener('click', () => {
+    if (!state.currentDialogStation) return
+    const dialogStations = getDialogStations(state.currentDialogStation)
+    const firstMatch = dialogStations[0]
+    if (!firstMatch) return
+    
+    const result = toggleFavorite(firstMatch.station, firstMatch.line, state.activeSystemId)
+    updateFavoriteButton()
+    showToast(copyValue(result.isFavorite ? 'favoriteAdded' : 'favoriteRemoved'))
+  })
 }
 
 const { renderLine } = createMapRenderer({
@@ -1910,6 +2004,7 @@ function renderDialogCopy() {
   trainDialogClose.setAttribute('aria-label', copyValue('closeTrainDialog'))
   alertDialogClose.setAttribute('aria-label', copyValue('closeAlertDialog'))
   alertDialogLink.textContent = copyValue('readOfficialAlert')
+  updateFavoriteButton()
   if (!dialog.open) {
     setDialogTitle(copyValue('station'))
     dialogServiceSummary.textContent = copyValue('serviceSummary')
@@ -1952,6 +2047,11 @@ function renderBoard() {
     return
   }
 
+  if (state.activeTab === 'favorites') {
+    boardElement.innerHTML = renderFavoritesView()
+    return
+  }
+
   if (state.activeTab === 'insights') {
     const visibleLines = getVisibleLines()
     boardElement.innerHTML = `${renderLineSwitcher()}${renderInsightsBoard(visibleLines)}`
@@ -1970,6 +2070,7 @@ function render() {
     button.classList.toggle('is-active', button.dataset.tab === state.activeTab)
     if (button.dataset.tab === 'map') button.textContent = copyValue('tabMap')
     if (button.dataset.tab === 'trains') button.textContent = getVehicleLabelPlural()
+    if (button.dataset.tab === 'favorites') button.textContent = copyValue('tabFavorites')
     if (button.dataset.tab === 'insights') button.textContent = copyValue('tabInsights')
   })
 
