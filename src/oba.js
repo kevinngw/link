@@ -1,8 +1,6 @@
 import {
   OBA_CACHE_TTL_MS,
   OBA_MAX_RETRIES,
-  OBA_RETRY_BASE_MS,
-  OBA_RATE_LIMIT_DELAY_MS,
 } from './config'
 
 const REQUEST_TIMEOUT_MS = 10_000
@@ -19,14 +17,6 @@ function classifyError(response, networkError, payload) {
 }
 
 /**
- * Compute retry delay with exponential backoff
- */
-function getRetryDelay(errorType, attempt) {
-  const base = errorType === 'rate-limit' ? OBA_RATE_LIMIT_DELAY_MS : OBA_RETRY_BASE_MS
-  return base * Math.pow(2, attempt)
-}
-
-/**
  * Create OBA API client with request deduplication, caching, and cancellation
  */
 export function createObaClient(state) {
@@ -34,6 +24,7 @@ export function createObaClient(state) {
   const queue = []
   let processing = false
   let currentController = null
+  let cancelled = false
 
   function isRateLimitedPayload(payload) {
     return payload?.code === 429 || /rate limit/i.test(payload?.text ?? '')
@@ -136,12 +127,11 @@ export function createObaClient(state) {
         continue
       }
 
-      // Exponential backoff before retry
-      const delay = getRetryDelay(errorType, attempt)
-      await new Promise(r => setTimeout(r, delay))
+      // Random delay before retry (0-100ms)
+      await new Promise(r => setTimeout(r, Math.random() * 100))
 
       // Re-check abort after delay
-      if (signal?.aborted) {
+      if (signal?.aborted || cancelled) {
         reject(new Error('Request cancelled'))
         if (item.waiting) {
           item.waiting.forEach(({ reject: r }) => r(new Error('Request cancelled')))
@@ -227,6 +217,8 @@ export function createObaClient(state) {
    * Clear queue and cancel pending requests
    */
   function clearQueue() {
+    cancelled = true
+
     // Abort current request if any
     if (currentController) {
       currentController.abort()
