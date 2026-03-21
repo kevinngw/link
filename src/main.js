@@ -138,6 +138,7 @@ document.querySelector('#app').innerHTML = `
         </div>
         <div class="dialog-actions">
           <button id="dialog-favorite" class="dialog-close dialog-favorite-button" type="button" aria-label="Add to favorites">☆</button>
+          <button id="dialog-share" class="dialog-close dialog-share-button" type="button" aria-label="Share arrivals">Share</button>
           <button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
           <button id="station-dialog-close" class="dialog-close" type="button" aria-label="Close station dialog">&times;</button>
         </div>
@@ -280,6 +281,7 @@ const {
   dialogServiceSummary,
   dialogStatusPillElement,
   dialogUpdatedAtElement,
+  dialogShare,
   dialogDisplay,
   dialogDirectionTabs,
   arrivalsTitleNb,
@@ -305,9 +307,18 @@ const {
   insightsDetailClose,
 } = dialogElements
 
+const dialogShareButton = document.querySelector('#dialog-share')
 const dialogFavoriteButton = document.querySelector('#dialog-favorite')
 
 dialogDisplay.addEventListener('click', () => toggleDialogDisplayMode())
+
+// Share button event listener
+if (dialogShareButton) {
+  dialogShareButton.addEventListener('click', () => {
+    if (!state.currentDialogStation) return
+    shareArrivals()
+  })
+}
 
 trainDialogClose.addEventListener('click', () => closeTrainDialog())
 alertDialogClose.addEventListener('click', () => closeAlertDialog())
@@ -1244,6 +1255,65 @@ const {
   getTrainTimelineEntries,
 })
 
+async function shareArrivals() {
+  if (!state.currentDialogStation) return
+  
+  const station = state.currentDialogStation
+  const dialogStations = getDialogStations(station)
+  
+  // Get cached arrivals for both directions
+  const arrivalsByLine = dialogStations.map(({ station: s, line }) => {
+    return getCachedArrivalsForStation(s, line) ?? { nb: [], sb: [] }
+  })
+  const arrivals = mergeArrivalBuckets(arrivalsByLine)
+  
+  // Format share text
+  const nbArrivals = arrivals.nb.slice(0, 3)
+  const sbArrivals = arrivals.sb.slice(0, 3)
+  
+  let shareText = `${station.name}\n`
+  
+  if (nbArrivals.length > 0) {
+    shareText += `\n${state.language === 'zh-CN' ? '北向' : 'Northbound'}:\n`
+    nbArrivals.forEach((a) => {
+      const timeStr = formatArrivalTime(Math.floor((a.arrivalTime - Date.now()) / 1000))
+      shareText += `• ${a.lineName} ${getVehicleLabel()} ${a.vehicleId}: ${timeStr}${a.destination ? ' to ' + a.destination : ''}\n`
+    })
+  }
+  
+  if (sbArrivals.length > 0) {
+    shareText += `\n${state.language === 'zh-CN' ? '南向' : 'Southbound'}:\n`
+    sbArrivals.forEach((a) => {
+      const timeStr = formatArrivalTime(Math.floor((a.arrivalTime - Date.now()) / 1000))
+      shareText += `• ${a.lineName} ${getVehicleLabel()} ${a.vehicleId}: ${timeStr}${a.destination ? ' to ' + a.destination : ''}\n`
+    })
+  }
+  
+  // Add app link
+  const baseUrl = window.location.origin + window.location.pathname
+  const stationParam = encodeURIComponent(station.name.toLowerCase().replace(/\s+/g, '-'))
+  shareText += `\n${baseUrl}?system=${state.activeSystemId}&station=${stationParam}`
+  
+  try {
+    if (navigator.share) {
+      await navigator.share({
+        title: `${station.name} - ${getActiveSystemMeta().title}`,
+        text: shareText,
+      })
+      showToast(copyValue('shareSuccess'))
+    } else if (navigator.clipboard) {
+      await navigator.clipboard.writeText(shareText)
+      showToast(copyValue('shareCopied'))
+    } else {
+      showToast(copyValue('shareFailed'))
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      showToast(copyValue('shareFailed'))
+    }
+  }
+}
+
 function renderSystemSwitcher() {
   return Object.values(SYSTEM_META)
     .filter((system) => state.systemsById.has(system.id))
@@ -1991,6 +2061,10 @@ function renderDialogCopy() {
   setArrivalsTitleHtml(arrivalsTitleSb, formatDirectionLabel('▼', getDialogDirectionSummary('▼'), { includeSymbol: true }))
   dialogDisplay.textContent = state.dialogDisplayMode ? copyValue('exit') : copyValue('board')
   dialogDisplay.setAttribute('aria-label', state.dialogDisplayMode ? copyValue('exit') : copyValue('board'))
+  if (dialogShare) {
+    dialogShare.textContent = copyValue('shareArrivals')
+    dialogShare.setAttribute('aria-label', copyValue('shareArrivalsAria'))
+  }
   trainDialogClose.setAttribute('aria-label', copyValue('closeTrainDialog'))
   alertDialogClose.setAttribute('aria-label', copyValue('closeAlertDialog'))
   alertDialogLink.textContent = copyValue('readOfficialAlert')
