@@ -145,14 +145,20 @@ export function createStationDialogDisplayController({
 
     if (!state.dialogDisplayMode) return
 
-    state.dialogDisplayTimer = window.setInterval(() => {
-      for (const [key, listElement] of [['nb', arrivalsNb], ['sb', arrivalsSb]]) {
-        const items = [...listElement.querySelectorAll('.arrival-item:not(.muted)')]
-        if (items.length <= 3) continue
+    // Snapshot visible item counts at scroll-start; re-query only on next syncDialogDisplayScroll
+    const visibleCounts = {
+      nb: arrivalsNb.querySelectorAll('.arrival-item:not(.muted)').length,
+      sb: arrivalsSb.querySelectorAll('.arrival-item:not(.muted)').length,
+    }
+    const listElements = { nb: arrivalsNb, sb: arrivalsSb }
 
-        const maxIndex = Math.max(0, items.length - 3)
+    state.dialogDisplayTimer = window.setInterval(() => {
+      for (const key of ['nb', 'sb']) {
+        if (visibleCounts[key] <= 3) continue
+
+        const maxIndex = Math.max(0, visibleCounts[key] - 3)
         state.dialogDisplayIndexes[key] = state.dialogDisplayIndexes[key] >= maxIndex ? 0 : state.dialogDisplayIndexes[key] + 1
-        applyDialogDisplayOffset(listElement, key)
+        applyDialogDisplayOffset(listElements[key], key)
       }
     }, DIALOG_DISPLAY_SCROLL_INTERVAL_MS)
   }
@@ -172,6 +178,15 @@ export function createStationDialogDisplayController({
     scheduleNextRefresh()
   }
 
+  function cleanupDialogState() {
+    stopDialogAutoRefresh()
+    stopDialogDisplayScroll()
+    stopDialogDirectionRotation()
+    stopDialogDirectionAnimation()
+    setDialogDisplayMode(false)
+    clearStationParam()
+  }
+
   function closeStationDialog() {
     state.activeDialogRequest += 1
     state.currentDialogStationId = ''
@@ -181,13 +196,10 @@ export function createStationDialogDisplayController({
       dialog.addEventListener('animationend', () => {
         dialog.classList.remove('is-closing')
         dialog.close()
+        cleanupDialogState()
       }, { once: true })
     } else {
-      stopDialogAutoRefresh()
-      stopDialogDisplayScroll()
-      stopDialogDirectionRotation()
-      setDialogDisplayMode(false)
-      clearStationParam()
+      cleanupDialogState()
     }
   }
 
@@ -238,6 +250,7 @@ export function createStationDialogDisplayController({
     applyDialogDisplayOffset,
     syncDialogDisplayScroll,
     startDialogAutoRefresh,
+    cleanupDialogState,
     closeStationDialog,
     setDialogTitle,
     syncDialogTitleMarquee,

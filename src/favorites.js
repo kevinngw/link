@@ -4,7 +4,7 @@ const FAVORITES_MAX_COUNT = 20
 /**
  * Create favorites manager
  */
-export function createFavoritesManager({ state, showStationDialog, switchSystem }) {
+export function createFavoritesManager({ state, showStationDialog, switchSystem, showToast }) {
   function getFavorites() {
     try {
       const raw = window.localStorage.getItem(FAVORITES_STORAGE_KEY)
@@ -89,6 +89,8 @@ export function createFavoritesManager({ state, showStationDialog, switchSystem 
     const station = line?.stops?.find((s) => s.id === fav.stationId)
     if (station) {
       await showStationDialog(station)
+    } else {
+      showToast?.(`"${fav.stationName}" is no longer available`, { tone: 'warn' })
     }
   }
 

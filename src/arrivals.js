@@ -7,6 +7,7 @@ import {
 import { normalizeName } from './utils'
 
 const ARRIVALS_LOOKAHEAD_MINUTES = 60
+const ARRIVALS_CACHE_MAX_SIZE = 50
 const ARRIVALS_LOOKAHEAD_MS = ARRIVALS_LOOKAHEAD_MINUTES * 60 * 1000
 const MAX_ARRIVALS_PER_DIRECTION = 4
 
@@ -158,6 +159,10 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
     const arrivalFeed = prefetchedFeed ?? (await fetchArrivalsForStopIds(stopIds))
     const arrivals = buildArrivalsForLine(arrivalFeed, line, stopIds)
     state.arrivalsCache.set(cacheKey, { fetchedAt: Date.now(), value: arrivals })
+    if (state.arrivalsCache.size > ARRIVALS_CACHE_MAX_SIZE) {
+      const oldest = [...state.arrivalsCache.entries()].sort((a, b) => a[1].fetchedAt - b[1].fetchedAt)[0][0]
+      state.arrivalsCache.delete(oldest)
+    }
     return arrivals
   }
 
