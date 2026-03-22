@@ -1424,6 +1424,7 @@ function getStationStopIds(station, line) {
   const baseId = station.id.replace(/-T\d+$/, '')
   candidates.add(baseId.startsWith(`${line.agencyId}_`) ? baseId : `${line.agencyId}_${baseId}`)
 
+  console.debug(`[getStationStopIds] station=${station.id} aliases=${JSON.stringify([...aliases])} candidates=${JSON.stringify([...candidates])}`)
   return [...candidates]
 }
 
@@ -1839,9 +1840,11 @@ async function refreshStationDialog(station, { requestId = state.activeDialogReq
   }
   
   // Single fetch for all unique stop IDs
+  console.debug(`[refreshStationDialog] Fetching arrivals for stopIds:`, [...allStopIds])
   let arrivalFeed = []
   try {
     arrivalFeed = await fetchArrivalsForStopIds([...allStopIds], signal)
+    console.debug(`[refreshStationDialog] Got ${arrivalFeed.length} arrivals from ${allStopIds.size} stops`)
   } catch (error) {
     if (error.message?.includes('cancelled') || error.name === 'AbortError') {
       console.debug(`[refreshStationDialog] Request cancelled for ${station.name}`)
@@ -1864,10 +1867,14 @@ async function refreshStationDialog(station, { requestId = state.activeDialogReq
   // Build arrivals for each line using the shared feed
   const arrivalsByLine = dialogStations.map(({ station: matchedStation, line }) => {
     const stopIds = lineStopIdMap.get(line)
-    return buildArrivalsForLine(arrivalFeed, line, stopIds)
+    const result = buildArrivalsForLine(arrivalFeed, line, stopIds)
+    console.debug(`[refreshStationDialog] Line ${line.name}: nb=${result.nb.length}, sb=${result.sb.length}, stopIds=`, stopIds)
+    return result
   })
-  
-  renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
+
+  const merged = mergeArrivalBuckets(arrivalsByLine)
+  console.debug(`[refreshStationDialog] Merged: nb=${merged.nb.length}, sb=${merged.sb.length}`)
+  renderArrivalLists(merged)
   renderDialogDirectionView()
   syncDialogTitleMarquee()
 }
