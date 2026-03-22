@@ -2,6 +2,8 @@
  * Create toast notification manager
  */
 export function createToast(toastRegionElement) {
+  toastRegionElement.setAttribute('aria-live', 'polite')
+  toastRegionElement.setAttribute('aria-atomic', 'true')
   let toastHideTimer = 0
   let lastToastMessage = ''
   let lastToastAt = 0
@@ -28,7 +30,7 @@ export function createToast(toastRegionElement) {
 
     lastToastMessage = message
     lastToastAt = now
-    toastRegionElement.innerHTML = `<div class="toast toast-${tone}" role="status">${message}</div>`
+    toastRegionElement.innerHTML = `<div class="toast toast-${tone}">${message}</div>`
     window.clearTimeout(toastHideTimer)
     toastHideTimer = window.setTimeout(() => {
       hideToast()

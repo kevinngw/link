@@ -11,7 +11,6 @@ export function createStationDialogRenderers({
   getArrivalServiceStatus,
   getAllVehicles,
   syncDialogDisplayScroll,
-  attachDialogArrivalClickHandlers,
 }) {
   const {
     arrivalsNbPinned,
@@ -121,7 +120,6 @@ export function createStationDialogRenderers({
       </span>
     `
 
-    attachDialogArrivalClickHandlers()
     syncDialogDisplayScroll()
   }
 

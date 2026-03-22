@@ -42,8 +42,10 @@ const state = {
   activeDialogRequest: 0,
   isSyncingFromUrl: false,
   currentDialogStation: null,
+  dialogOpenerElement: null,
   dialogRefreshTimer: 0,
   liveRefreshTimer: 0,
+  liveMetaTimer: 0,
   dialogDisplayMode: false,
   dialogDisplayDirection: 'both',
   dialogDisplayAutoPhase: 'nb',
@@ -390,6 +392,8 @@ dialog.addEventListener('close', () => {
   if (!state.isSyncingFromUrl) {
     clearDialogParams({ keepPage: true, keepSystem: true })
   }
+  state.dialogOpenerElement?.focus()
+  state.dialogOpenerElement = null
 })
 tabButtons.forEach((button) => {
   button.addEventListener('click', () => {
@@ -501,6 +505,15 @@ function findStationAndLineByStopId(stopId) {
   return null
 }
 
+// Board: activate role=button elements with keyboard (Enter/Space)
+boardElement.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return
+  const activatable = e.target.closest('[role="button"]')
+  if (!activatable) return
+  e.preventDefault()
+  activatable.click()
+})
+
 // Board: handles line-switch, train, alert, station, insights, terminal clicks
 boardElement.addEventListener('click', (e) => {
   const lineSwitchBtn = e.target.closest('[data-line-switch]')
@@ -611,6 +624,7 @@ const {
   state,
   showStationDialog,
   switchSystem,
+  showToast,
 })
 
 function updateFavoriteButton() {
@@ -1850,7 +1864,11 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
   renderStationServiceSummary(station)
   clearStationDialogContent()
   renderArrivalLists({ nb: [], sb: [] }, true)
-  if (!dialog.open) dialog.showModal()
+  if (!dialog.open) {
+    state.dialogOpenerElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    dialog.showModal()
+    dialog.querySelector('#station-dialog-close')?.focus()
+  }
   if (updateUrl) setStationParam(station)
   startDialogAutoRefresh()
   updateFavoriteButton()
@@ -1954,15 +1972,6 @@ const { renderArrivalLists } = createStationDialogRenderers({
   getArrivalServiceStatus,
   getAllVehicles,
   syncDialogDisplayScroll,
-  attachDialogArrivalClickHandlers: () => {
-    const buttons = dialog.querySelectorAll('[data-arrival-vehicle-id]')
-    buttons.forEach((button) => {
-      button.addEventListener('click', () => {
-        const vehicle = getAllVehicles().find((v) => v.id === button.dataset.arrivalVehicleId)
-        if (vehicle) renderTrainDialog(vehicle)
-      })
-    })
-  },
 })
 
 
@@ -2319,6 +2328,7 @@ const handleViewportResize = () => {
 
 state.activeTab = getPageFromUrl()
 const init = bootstrapApp({
+  state,
   getPreferredLanguage,
   getPreferredTheme,
   handleViewportResize,

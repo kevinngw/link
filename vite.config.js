@@ -5,6 +5,20 @@ const base = process.env.VITE_BASE ?? '/link/'
 
 export default defineConfig({
   base,
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'transit-api': ['./src/oba.js', './src/arrivals.js'],
+          'transit-data': ['./src/static-data.js', './src/vehicles.js', './src/insights.js'],
+        },
+      },
+    },
+    minify: 'terser',
+    terserOptions: {
+      compress: { drop_console: true },
+    },
+  },
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',

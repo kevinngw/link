@@ -130,6 +130,7 @@ export async function loadSystemDataById(state, systemId) {
 }
 
 export function bootstrapApp({
+  state,
   getPreferredLanguage,
   getPreferredTheme,
   handleViewportResize,
@@ -172,7 +173,7 @@ export function bootstrapApp({
 
     startLiveRefreshLoop()
     startInsightsTickerRotation()
-    window.setInterval(() => {
+    state.liveMetaTimer = window.setInterval(() => {
       refreshLiveMeta()
       refreshArrivalCountdowns()
       refreshVehicleStatusMessages()

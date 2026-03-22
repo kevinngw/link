@@ -201,7 +201,7 @@ export function createObaClient(state) {
         if (signal) {
           signal.addEventListener('abort', () => {
             reject(new Error('Request cancelled'))
-          })
+          }, { once: true })
         }
       })
     }
