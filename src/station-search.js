@@ -15,6 +15,7 @@ export function createStationSearch({
   switchSystem,
   setStationSearchParams,
   getRecentStations,
+  loadSystemDataById,
 }) {
   const {
     stationSearchDialog,
@@ -27,6 +28,22 @@ export function createStationSearch({
 
   let _stationSearchEntriesCache = null
   let _stationSearchEntriesSystemKey = ''
+  let _allSystemsLoaded = false
+
+  async function ensureAllSystemsLoaded() {
+    if (_allSystemsLoaded) return
+    const loadPromises = []
+    for (const [systemId, system] of state.systemsById) {
+      if (!system.lines) {
+        loadPromises.push(loadSystemDataById(state, systemId).catch(() => {}))
+      }
+    }
+    if (loadPromises.length) {
+      await Promise.all(loadPromises)
+      _stationSearchEntriesCache = null
+    }
+    _allSystemsLoaded = true
+  }
 
   function getRecentSearches() {
     try {
@@ -311,7 +328,7 @@ export function createStationSearch({
     })
   }
 
-  function openStationSearch(prefill = '', { updateUrl = true } = {}) {
+  async function openStationSearch(prefill = '', { updateUrl = true } = {}) {
     state.stationSearchQuery = prefill
     state.highlightedStationSearchIndex = 0
     state.highlightedNearbyStationIndex = 0
@@ -329,6 +346,8 @@ export function createStationSearch({
       stationSearchInput.focus()
       stationSearchInput.select()
     })
+    await ensureAllSystemsLoaded()
+    renderStationSearchResults()
   }
 
   function closeStationSearch() {

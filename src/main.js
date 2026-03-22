@@ -37,6 +37,7 @@ const state = {
   lines: [],
   layouts: new Map(),
   vehiclesByLine: new Map(),
+  directionFilterByLine: new Map(),
   rawVehicles: [],
   arrivalsCache: new Map(),
   activeDialogRequest: 0,
@@ -100,13 +101,13 @@ document.querySelector('#app').innerHTML = `
         <p id="screen-kicker" class="screen-kicker">SEATTLE LIGHT RAIL</p>
         <h1 id="screen-title">LINK PULSE</h1>
       </div>
-      <div class="screen-meta">
+      <div class="screen-pills">
         <button id="station-search-toggle" class="theme-toggle station-search-toggle" type="button" aria-label="Open station search">Search</button>
         <button id="language-toggle" class="theme-toggle" type="button" aria-label="Switch to Chinese">中文</button>
         <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">Light</button>
         <p id="status-pill" class="status-pill">SYNC</p>
-        <p id="current-time" class="updated-at">Now --:--</p>
-        <p id="updated-at" class="updated-at">Waiting for snapshot</p>
+        <span id="current-time" class="dot-matrix-clock" aria-label="Current time">--:--</span>
+        <p id="updated-at" class="status-pill updated-at-pill">Waiting for snapshot</p>
       </div>
     </header>
     <div class="switcher-stack">
@@ -523,6 +524,15 @@ boardElement.addEventListener('click', (e) => {
     return
   }
 
+  const dirFilterBtn = e.target.closest('[data-direction-filter]')
+  if (dirFilterBtn) {
+    const lineId = dirFilterBtn.dataset.directionLine
+    const direction = dirFilterBtn.dataset.directionFilter
+    state.directionFilterByLine.set(lineId, direction)
+    render()
+    return
+  }
+
   const trainItem = e.target.closest('[data-train-id]')
   if (trainItem) {
     const vehicle = getAllVehicles().find((c) => c.id === trainItem.dataset.trainId)
@@ -612,6 +622,7 @@ const {
   switchSystem,
   setStationSearchParams,
   getRecentStations,
+  loadSystemDataById,
 })
 
 const {
@@ -1217,13 +1228,19 @@ function getTrainTimelineEntries(vehicle, layout) {
   return entries
 }
 
-function renderFocusMetrics(vehicle) {
+function renderFocusMetrics(vehicle, extraContent = '') {
   const layout = state.layouts.get(vehicle.lineId)
   const terminalEta = Math.max(0, (getTrainTimelineEntries(vehicle, layout).at(-1)?.etaSeconds) ?? (vehicle.nextOffset ?? 0))
   const nextStopName = vehicle.upcomingLabel || vehicle.toLabel || vehicle.currentStopLabel
 
+  const currentLocationName = vehicle.currentLabel || vehicle.fromLabel
+
   return `
     <div class="train-focus-metrics">
+      <div class="train-focus-metric">
+        <p class="train-focus-metric-label">${copyValue('currentLocation')}</p>
+        <p class="train-focus-metric-value">${currentLocationName}</p>
+      </div>
       <div class="train-focus-metric">
         <p class="train-focus-metric-label">${copyValue('nextStop')}</p>
         <p class="train-focus-metric-value">${nextStopName}</p>
@@ -1234,6 +1251,7 @@ function renderFocusMetrics(vehicle) {
         <p class="train-focus-metric-value">${getVehicleDestinationLabel(vehicle, layout)}</p>
         <p class="train-focus-metric-copy" data-vehicle-terminal-countdown="${vehicle.id}">${formatArrivalTime(getRealtimeOffset(terminalEta))}</p>
       </div>
+      ${extraContent}
     </div>
   `
 }
@@ -2173,7 +2191,10 @@ function startInsightsTickerRotation() {
 function refreshLiveMeta() {
   statusPillElement.textContent = state.error ? copyValue('statusHold') : copyValue('statusSync')
   statusPillElement.classList.toggle('status-pill-error', Boolean(state.error))
-  currentTimeElement.textContent = `${copyValue('nowPrefix')} ${formatCurrentTime()}`
+  const timeStr = formatCurrentTime()
+  currentTimeElement.innerHTML = timeStr.split('').map((ch) =>
+    ch === ':' ? '<span class="dot-matrix-colon">:</span>' : `<span class="dot-matrix-digit">${ch}</span>`
+  ).join('')
   updatedAtElement.textContent = state.error
     ? copyValue('usingLastSnapshot')
     : formatRelativeTime(state.fetchedAt)
