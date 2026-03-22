@@ -59,7 +59,7 @@ export function createStationDialogRenderers({
             </span>
           </span>
           <span class="arrival-side">
-            <span class="arrival-status arrival-status-${serviceTone}">${serviceStatus}</span>
+            <span class="arrival-status arrival-status-${serviceTone}">${serviceStatus === 'ARR' ? copyValue('arrivingStatus') : serviceStatus === 'DELAY' ? copyValue('delayedStatus') : serviceStatus}</span>
             <span class="arrival-time">
               <span class="arrival-countdown">${timeStr}</span>
               <span class="arrival-precision">${precisionInfo}</span>

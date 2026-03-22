@@ -198,7 +198,7 @@ export function createVehicleDisplay({ state, copyValue, formatArrivalTime, form
       const serviceTone = getStatusTone(serviceStatus)
 
       countdownElement.textContent = formatArrivalTime(diffSeconds)
-      statusElement.textContent = serviceStatus
+      statusElement.textContent = formatServiceStatus(serviceStatus)
       statusElement.className = `arrival-status arrival-status-${serviceTone}`
     })
   }
