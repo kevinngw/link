@@ -14,6 +14,7 @@ export function createStationSearch({
   showStationDialog,
   switchSystem,
   setStationSearchParams,
+  getRecentStations,
 }) {
   const {
     stationSearchDialog,
@@ -213,12 +214,30 @@ export function createStationSearch({
     }))
   }
 
+  function getRecentStationResults() {
+    if (!getRecentStations) return []
+    const recents = getRecentStations()
+    if (!recents.length) return []
+    return recents.map((recent) => ({
+      key: `${recent.systemId}:${recent.lineId}:${recent.stationId}`,
+      systemId: recent.systemId,
+      lineId: recent.lineId,
+      stationId: recent.stationId,
+      stationName: recent.stationName,
+      normalizedStationName: normalizeName(recent.stationName),
+      lineName: recent.lineName,
+      lineColor: recent.lineColor,
+    }))
+  }
+
   function renderStationSearchResults() {
     const hasQuery = Boolean(state.stationSearchQuery.trim())
     const nearbyResults = getNearbyStationResults()
-    const recentResults = !hasQuery && !nearbyResults.length ? getRecentSearchResults() : []
-    const results = hasQuery ? getStationSearchResults() : (nearbyResults.length ? nearbyResults : recentResults)
-    const isShowingRecents = !hasQuery && !nearbyResults.length && recentResults.length > 0
+    const recentStationResults = !hasQuery && !nearbyResults.length ? getRecentStationResults() : []
+    const recentResults = !hasQuery && !nearbyResults.length && !recentStationResults.length ? getRecentSearchResults() : []
+    const results = hasQuery ? getStationSearchResults() : (nearbyResults.length ? nearbyResults : (recentStationResults.length ? recentStationResults : recentResults))
+    const isShowingRecentStations = !hasQuery && !nearbyResults.length && recentStationResults.length > 0
+    const isShowingRecents = !hasQuery && !nearbyResults.length && !recentStationResults.length && recentResults.length > 0
 
     state.stationSearchResults = hasQuery ? results : []
     state.highlightedStationSearchIndex = Math.min(state.highlightedStationSearchIndex, Math.max(0, (hasQuery ? results.length : 0) - 1))
@@ -234,16 +253,18 @@ export function createStationSearch({
     stationSearchMetaElement.textContent = results.length
       ? (hasQuery
         ? `${copyValue('stationSearchResults', results.length)} · ${copyValue('searchKeyboardHint')}`
-        : isShowingRecents
-          ? copyValue('recentSearches')
-          : copyValue('nearbyStationsFound', results.length))
+        : isShowingRecentStations
+          ? copyValue('recentlyViewed')
+          : isShowingRecents
+            ? copyValue('recentSearches')
+            : copyValue('nearbyStationsFound', results.length))
       : (hasQuery
         ? copyValue('noStationSearchResults')
         : (state.geolocationError || state.geolocationStatus || copyValue('nearbyStationsHint')))
 
     stationSearchResultsElement.innerHTML = results.length
       ? results.map((result, index) => {
-          const isNearby = !hasQuery && !isShowingRecents
+          const isNearby = !hasQuery && !isShowingRecentStations && !isShowingRecents
           const isActive = hasQuery
             ? index === state.highlightedStationSearchIndex
             : index === state.highlightedNearbyStationIndex
@@ -277,7 +298,7 @@ export function createStationSearch({
     const buttons = stationSearchResultsElement.querySelectorAll('[data-station-search-index]')
     buttons.forEach((button) => {
       const selectResult = async () => {
-        const source = hasQuery ? state.stationSearchResults : (nearbyResults.length ? state.nearbyStations : recentResults)
+        const source = hasQuery ? state.stationSearchResults : (nearbyResults.length ? state.nearbyStations : (recentStationResults.length ? recentStationResults : recentResults))
         const selected = source[Number(button.dataset.stationSearchIndex)]
         if (selected) await handleStationSearchSelection(selected)
       }

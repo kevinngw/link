@@ -21,6 +21,7 @@ import { createToast } from './toast'
 import { createVehicleDisplay } from './vehicle-display'
 import { createStationSearch } from './station-search'
 import { createFavoritesManager } from './favorites'
+import { createRecentStationsManager } from './recent-stations'
 
 const state = {
   fetchedAt: '',
@@ -572,7 +573,7 @@ dialog.addEventListener('click', (e) => {
 
 const { showToast, hideToast } = createToast(toastRegionElement)
 
-
+const { getRecentStations, addRecentStation } = createRecentStationsManager()
 
 const {
   getActiveStationSearchResults,
@@ -597,6 +598,7 @@ const {
   showStationDialog,
   switchSystem,
   setStationSearchParams,
+  getRecentStations,
 })
 
 const {
@@ -1852,6 +1854,9 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
   if (updateUrl) setStationParam(station)
   startDialogAutoRefresh()
   updateFavoriteButton()
+  const dialogStations = getDialogStations(station)
+  const firstMatch = dialogStations[0]
+  if (firstMatch) addRecentStation(firstMatch.station, firstMatch.line, state.activeSystemId)
   try {
     await refreshStationDialog(station, { requestId, skipCache: true })
   } catch (e) {
