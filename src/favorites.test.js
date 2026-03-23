@@ -1,6 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createFavoritesManager } from './favorites.js'
 
+function createLocalStorageMock() {
+  let store = {}
+  return {
+    getItem(key) {
+      return Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null
+    },
+    setItem(key, value) {
+      store[key] = String(value)
+    },
+    removeItem(key) {
+      delete store[key]
+    },
+    clear() {
+      store = {}
+    },
+  }
+}
+
 function makeState(systemsById = new Map()) {
   return {
     activeSystemId: 'system-a',
@@ -26,7 +44,15 @@ function makeSystem() {
 
 describe('createFavoritesManager', () => {
   beforeEach(() => {
-    localStorage.clear()
+    const storage = createLocalStorageMock()
+    Object.defineProperty(window, 'localStorage', {
+      value: storage,
+      configurable: true,
+    })
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: storage,
+      configurable: true,
+    })
     vi.restoreAllMocks()
   })
 
@@ -182,7 +208,7 @@ describe('createFavoritesManager', () => {
 
   describe('localStorage error handling', () => {
     it('returns empty array when localStorage read fails', () => {
-      vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
+      vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
         throw new Error('QuotaExceededError')
       })
 
@@ -197,7 +223,7 @@ describe('createFavoritesManager', () => {
     })
 
     it('does not throw when localStorage write fails', () => {
-      vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
         throw new Error('QuotaExceededError')
       })
 

@@ -4415,7 +4415,7 @@ dialog.is-closing::backdrop {
 
 .favorite-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   padding: 14px 16px;
   border: 1px solid var(--border-color);
@@ -4449,6 +4449,78 @@ dialog.is-closing::backdrop {
 .favorite-item-content {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.favorite-item-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.favorite-arrivals-preview {
+  margin-top: 12px;
+}
+
+.favorite-arrivals-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.favorite-arrival-lane {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 90%, transparent);
+  background: color-mix(in srgb, var(--surface) 55%, var(--surface-soft));
+}
+
+.favorite-arrival-direction {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.favorite-arrival-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.favorite-arrival-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--surface-active);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.favorite-arrival-chip.is-live {
+  background: color-mix(in srgb, var(--status-ok) 18%, var(--surface-active));
+}
+
+.favorite-arrival-chip-badge {
+  color: var(--status-ok);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+}
+
+.favorite-arrival-status,
+.favorite-arrival-empty {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.favorite-arrival-updated {
+  margin-top: 8px;
 }
 
 .favorite-item-title {
@@ -4489,11 +4561,17 @@ dialog.is-closing::backdrop {
     padding: 12px 14px;
   }
 
+  .favorite-arrivals-grid {
+    grid-template-columns: 1fr;
+  }
+
   .favorite-item-title {
     font-size: 0.92rem;
   }
 
-  .favorite-item-meta {
+  .favorite-item-meta,
+  .favorite-arrival-status,
+  .favorite-arrival-empty {
     font-size: 0.74rem;
   }
 }

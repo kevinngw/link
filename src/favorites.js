@@ -69,11 +69,13 @@ export function createFavoritesManager({ state, showStationDialog, switchSystem,
     const favorites = getFavorites()
     return favorites.map((fav) => {
       const system = state.systemsById.get(fav.systemId)
+      const hasLoadedSystemData = Boolean(system?.lines)
       const line = system?.lines?.find((l) => l.id === fav.lineId)
       const station = line?.stops?.find((s) => s.id === fav.stationId)
       return {
         ...fav,
-        exists: Boolean(station),
+        exists: hasLoadedSystemData ? Boolean(station) : true,
+        hasLoadedSystemData,
         station,
         line,
         system,
