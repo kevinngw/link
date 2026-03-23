@@ -1734,8 +1734,8 @@ button.train-list-item {
   color: var(--text-secondary);
   font-size: 0.68rem;
   letter-spacing: 0.08em;
-  white-space: nowrap;
-  flex: 0 0 auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .train-list-status {
@@ -1763,6 +1763,10 @@ button.train-list-item {
   align-items: start;
   justify-content: space-between;
   gap: 18px;
+}
+
+.train-focus-header > div:first-child {
+  min-width: 0;
 }
 
 .train-focus-kicker,
