@@ -36,6 +36,11 @@ export function classifyArrivalDirection(arrival, line) {
 
   if (/Lynnwood|Downtown Redmond/i.test(headsign)) return 'nb'
   if (/Federal Way|South Bellevue/i.test(headsign)) return 'sb'
+
+  const directionId = String(arrival.directionId ?? '')
+  if (directionId === '1') return 'nb'
+  if (directionId === '0') return 'sb'
+
   return ''
 }
 
@@ -70,7 +75,15 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
     if (payload.code !== 200) {
       throw new Error(payload.text || `Arrivals request failed for ${stopId}`)
     }
-    return payload.data?.entry?.arrivalsAndDepartures ?? []
+    const arrivals = payload.data?.entry?.arrivalsAndDepartures ?? []
+    const trips = payload.data?.references?.trips ?? []
+    const tripDirectionMap = new Map(trips.map((t) => [t.id, String(t.directionId ?? '')]))
+    for (const arrival of arrivals) {
+      if (arrival.directionId == null && arrival.tripId) {
+        arrival.directionId = tripDirectionMap.get(arrival.tripId) ?? ''
+      }
+    }
+    return arrivals
   }
 
   async function fetchArrivalsForStopIds(stopIds, signal) {

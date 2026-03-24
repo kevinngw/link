@@ -86,11 +86,12 @@ export function formatServiceClock(clockValue, language, copyValue) {
 }
 
 export function formatClockTime(timestamp, language) {
-  return new Date(timestamp).toLocaleTimeString(language === 'zh-CN' ? 'zh-CN' : 'en-US', {
+  return new Intl.DateTimeFormat(language === 'zh-CN' ? 'zh-CN' : 'en-US', {
+    timeZone: 'America/Los_Angeles',
     hour: 'numeric',
     minute: '2-digit',
     hour12: language !== 'zh-CN',
-  })
+  }).format(new Date(timestamp))
 }
 
 export function formatEtaClockFromNow(offsetSeconds, language) {

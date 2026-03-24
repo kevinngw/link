@@ -138,6 +138,8 @@ async function buildSystemFromOBA(systemConfig) {
     const dir0Group = grouping?.stopGroups?.find((group) => group.id === '0')
     const representativeGroup = dir0Group ?? dir1Group
     const representativeStopIds = representativeGroup?.stopIds ?? entry.stopIds
+    const oppositeGroup = representativeGroup === dir0Group ? dir1Group : dir0Group
+    const oppositeStopIds = oppositeGroup?.stopIds ?? []
 
     const nbTerminusPrefix = (dir1Group?.name?.name ?? '').split('/')[0].toLowerCase()
     const sbTerminusPrefix = (dir0Group?.name?.name ?? '').split('/')[0].toLowerCase()
@@ -165,6 +167,29 @@ async function buildSystemFromOBA(systemConfig) {
       })
       .filter(Boolean)
 
+    // Build stationAliases: pair each stop with its nearest opposite-direction stop
+    const oppositeStops = oppositeStopIds.map((id) => stopsById.get(id)).filter(Boolean)
+    const stationAliases = {}
+    for (const stop of stops) {
+      const aliases = [stop.id]
+      if (oppositeStops.length) {
+        let nearest = null
+        let nearestDist = Infinity
+        for (const opp of oppositeStops) {
+          const dist = haversineKm(stop.lat, stop.lon, opp.lat, opp.lon)
+          if (dist < nearestDist) {
+            nearestDist = dist
+            nearest = opp
+          }
+        }
+        // Pair if within 500m
+        if (nearest && nearestDist < 0.6) {
+          aliases.push(nearest.id)
+        }
+      }
+      stationAliases[stop.id] = aliases
+    }
+
     const allPoints = []
     for (const pl of entry.polylines ?? []) {
       if (pl.points) allPoints.push(...decodePolyline(pl.points))
@@ -182,7 +207,7 @@ async function buildSystemFromOBA(systemConfig) {
       sbTerminusPrefix,
       headsign: (dir1Group?.name?.name) || config.name,
       serviceSpansByDate: {},
-      stationAliases: Object.fromEntries(stops.map((stop) => [stop.id, [stop.id]])),
+      stationAliases,
       stops,
       shapePoints: simplifyPoints(allPoints),
     })
@@ -429,6 +454,14 @@ async function buildSystem(systemConfig) {
     list.push(stop.stop_id)
     stopIdsByName.set(stop.stop_name, list)
   }
+  // Also index by normalized name (strip NB/SB direction suffix) for BRT stop pairing
+  const stopIdsByNormalizedName = new Map()
+  for (const stop of stops) {
+    const normalized = stop.stop_name.replace(/\s+(NB|SB|EB|WB)\s+/i, ' ')
+    const list = stopIdsByNormalizedName.get(normalized) ?? []
+    list.push(stop.stop_id)
+    stopIdsByNormalizedName.set(normalized, list)
+  }
 
   const shapesById = new Map()
   for (const shape of shapes) {
@@ -486,9 +519,48 @@ async function buildSystem(systemConfig) {
       systemConfig.agencyId,
     )
 
+    // Build stationAliases: pair each stop with opposite-direction stops
+    const lineStopIds = new Set(line.stops.map((s) => s.id))
+    const repDirection = representativeTrip.direction_id ?? '0'
+    const oppositeTrips = routeTrips.filter((t) => String(t.direction_id ?? '0') !== String(repDirection))
+    const oppositeStopIds = new Set()
+    for (const trip of oppositeTrips) {
+      for (const st of stopTimesByTrip.get(trip.trip_id) ?? []) {
+        if (!lineStopIds.has(st.stop_id)) oppositeStopIds.add(st.stop_id)
+      }
+    }
+    const oppositeStopsGeo = [...oppositeStopIds].map((id) => stopsById.get(id)).filter(Boolean)
+
+    const oppositeStopNames = {}
     line.stationAliases = Object.fromEntries(
-      line.stops.map((stop) => [stop.id, stopIdsByName.get(stop.name) ?? [stop.id]]),
+      line.stops.map((stop) => {
+        const exactMatch = stopIdsByName.get(stop.name) ?? []
+        const normalizedName = stop.name.replace(/\s+(NB|SB|EB|WB)\s+/i, ' ')
+        const normalizedMatch = stopIdsByNormalizedName.get(normalizedName) ?? []
+        const allIds = [...new Set([...exactMatch, ...normalizedMatch])]
+        // If no opposite-direction match found by name, use geo-proximity
+        const hasOpposite = allIds.some((id) => !lineStopIds.has(id))
+        if (!hasOpposite && oppositeStopsGeo.length) {
+          let nearest = null
+          let nearestDist = Infinity
+          for (const opp of oppositeStopsGeo) {
+            const dist = haversineKm(stop.lat, stop.lon, Number(opp.stop_lat), Number(opp.stop_lon))
+            if (dist < nearestDist) { nearestDist = dist; nearest = opp }
+          }
+          if (nearest && nearestDist < 0.6) allIds.push(nearest.stop_id)
+        }
+        // Record opposite-direction stop name if different
+        const oppositeIds = allIds.filter((id) => id !== stop.id)
+        if (oppositeIds.length) {
+          const oppStop = stopsById.get(oppositeIds[0])
+          if (oppStop && oppStop.stop_name !== stop.name) {
+            oppositeStopNames[stop.id] = oppStop.stop_name
+          }
+        }
+        return [stop.id, allIds.length ? allIds : [stop.id]]
+      }),
     )
+    line.oppositeStopNames = Object.keys(oppositeStopNames).length ? oppositeStopNames : undefined
 
     return line
   })

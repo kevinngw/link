@@ -12,9 +12,17 @@ export function buildLayout(line) {
   const stationIndexByStopId = new Map()
 
   const stations = orderedStops.map((stop, index) => {
+    const oppName = line.oppositeStopNames?.[stop.id]
+    const hasOppositeStop = (line.stationAliases?.[stop.id] ?? []).some((id) => id !== stop.id)
+    const stripDir = (s) => s.replace(/\s+(NB|SB|EB|WB)\b/i, '')
+    const mainLabel = hasOppositeStop ? stripDir(normalizeName(stop.name)) : normalizeName(stop.name)
+    const oppLabel = oppName ? stripDir(normalizeName(oppName)) : null
+    const label = oppLabel && oppLabel !== mainLabel
+      ? `${mainLabel} / ${oppLabel}`
+      : mainLabel
     const station = {
       ...stop,
-      label: normalizeName(stop.name),
+      label,
       y: topPadding + index * stationGap,
       index,
       isTerminal: index === 0 || index === orderedStops.length - 1,
