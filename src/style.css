@@ -3312,6 +3312,14 @@ button.arrival-item {
   color: #ffd166;
 }
 
+.arrival-clock {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .arrival-precision {
   font-size: 0.72rem;
   font-weight: 400;

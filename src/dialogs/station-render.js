@@ -3,6 +3,7 @@ export function createStationDialogRenderers({
   elements,
   copyValue,
   formatArrivalTime,
+  formatClockTime,
   formatDirectionLabel,
   getDialogDirectionSummary,
   getVehicleLabel,
@@ -41,6 +42,8 @@ export function createStationDialogRenderers({
         precisionInfo = ` • ${distanceStr} • ${stopsStr}`
       }
 
+      const clockTime = diffSec > 0 ? formatClockTime(arrivalMs) : ''
+
       const liveVehicle = arrival.rawVehicleId
         ? getAllVehicles().find((vehicle) => vehicle.id === arrival.rawVehicleId)
         : null
@@ -62,6 +65,7 @@ export function createStationDialogRenderers({
             <span class="arrival-status arrival-status-${serviceTone}">${serviceStatus === 'ARR' ? copyValue('arrivingStatus') : serviceStatus === 'DELAY' ? copyValue('delayedStatus') : serviceStatus}</span>
             <span class="arrival-time">
               <span class="arrival-countdown">${timeStr}</span>
+              ${clockTime ? `<span class="arrival-clock">${clockTime}</span>` : ''}
               <span class="arrival-precision">${precisionInfo}</span>
             </span>
             <span class="arrival-source arrival-source-${arrival.isRealtime ? 'live' : 'sched'}">${arrival.isRealtime ? copyValue('realtimeBadge') : copyValue('scheduleBadge')}</span>

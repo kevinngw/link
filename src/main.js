@@ -2087,6 +2087,7 @@ const { renderArrivalLists } = createStationDialogRenderers({
   elements: dialogElements,
   copyValue,
   formatArrivalTime,
+  formatClockTime,
   formatDirectionLabel,
   getDialogDirectionSummary,
   getVehicleLabel,
