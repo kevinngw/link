@@ -1511,6 +1511,24 @@ function getStationStopIds(station, line) {
   return [...candidates]
 }
 
+function getDialogStationTitle(station) {
+  const stripDir = (s) => s.replace(/\s+(NB|SB|EB|WB)\b/gi, '')
+  const stripBay = (s) => s.replace(/\s*[-–]\s*Bay\s+\S+$/i, '')
+  const mainName = normalizeName(station.name)
+  for (const line of state.lines) {
+    const oppName = line.oppositeStopNames?.[station.id]
+    if (!oppName) continue
+    const oppNormalized = normalizeName(oppName)
+    const mainClean = stripDir(mainName)
+    const oppClean = stripDir(oppNormalized)
+    if (mainClean === oppClean) return mainClean
+    // If only Bay number differs, use base name
+    if (stripBay(mainClean) === stripBay(oppClean)) return stripBay(mainClean)
+    return `${mainClean} / ${oppClean}`
+  }
+  return mainName
+}
+
 function getDialogStations(station) {
   const exactMatches = state.lines
     .map((line) => {
@@ -1968,7 +1986,7 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
   state.activeDialogRequest = requestId
   state.currentDialogStation = station
   state.currentDialogStationId = station.id
-  setDialogTitle(station.name)
+  setDialogTitle(getDialogStationTitle(station))
   renderStationServiceSummary(station)
   clearStationDialogContent()
   renderArrivalLists({ nb: [], sb: [] }, true)
