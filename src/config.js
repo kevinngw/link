@@ -227,6 +227,9 @@ export const UI_COPY = {
     stationRequestFailed: 'Station arrivals request failed.',
     stationRateLimited: 'Station request rate limited. Retrying…',
     startupRequestFailed: 'Initial data request failed.',
+    refreshingData: 'Refreshing data...',
+    dataRefreshed: 'Data refreshed',
+    manualRefresh: 'Refresh data',
 
     hotspotTitle: 'Station Hotspots',
     hotspotNotableDelays: (count) => `${count} station${count === 1 ? '' : 's'} with notable delays`,
@@ -559,6 +562,9 @@ export const UI_COPY = {
     stationRequestFailed: '获取到站信息失败。',
     stationRateLimited: '站点请求频率受限，正在重试…',
     startupRequestFailed: '初始数据请求失败。',
+    refreshingData: '正在刷新数据...',
+    dataRefreshed: '数据已刷新',
+    manualRefresh: '刷新数据',
 
     hotspotTitle: '延误热点',
     hotspotNotableDelays: (count) => `${count} 个站点延误较高`,

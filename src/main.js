@@ -108,7 +108,7 @@ document.querySelector('#app').innerHTML = `
         <button id="station-search-toggle" class="theme-toggle station-search-toggle" type="button" aria-label="Open station search">Search</button>
         <button id="language-toggle" class="theme-toggle" type="button" aria-label="Switch to Chinese">中文</button>
         <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">Light</button>
-        <p id="status-pill" class="status-pill">SYNC</p>
+        <button id="status-pill" class="status-pill" type="button" aria-label="Refresh data">SYNC</button>
         <span id="current-time" class="dot-matrix-clock" aria-label="Current time">--:--</span>
         <p id="updated-at" class="status-pill updated-at-pill">Waiting for snapshot</p>
       </div>
@@ -137,7 +137,7 @@ document.querySelector('#app').innerHTML = `
               </span>
             </h3>
             <div id="dialog-meta" class="dialog-meta">
-              <p id="dialog-status-pill" class="status-pill">SYNC</p>
+              <button id="dialog-status-pill" class="status-pill" type="button" aria-label="Refresh data">SYNC</button>
               <p id="dialog-updated-at" class="updated-at">Waiting for snapshot</p>
             </div>
           </div>
@@ -494,6 +494,20 @@ document.addEventListener('visibilitychange', () => {
 })
 window.addEventListener('focus', () => {
   refreshVisibleRealtime().catch(console.error)
+})
+
+statusPillElement.addEventListener('click', async () => {
+  statusPillElement.textContent = '...'
+  showToast(copyValue('refreshingData'))
+  await refreshVisibleRealtime()
+  showToast(copyValue('dataRefreshed'))
+})
+
+dialogStatusPillElement.addEventListener('click', async () => {
+  dialogStatusPillElement.textContent = '...'
+  showToast(copyValue('refreshingData'))
+  await refreshVisibleRealtime()
+  showToast(copyValue('dataRefreshed'))
 })
 
 // ---------------------------------------------------------------------------

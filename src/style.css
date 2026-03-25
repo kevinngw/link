@@ -372,6 +372,15 @@ h1 {
   font-size: 0.74rem;
   line-height: 1;
   box-shadow: inset 0 0 0 1px rgba(141, 240, 184, 0.08);
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.status-pill:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-color);
 }
 
 .status-pill::before {
