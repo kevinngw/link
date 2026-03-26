@@ -152,10 +152,10 @@ document.querySelector('#app').innerHTML = `
       </header>
       <div class="dialog-direction-bar">
         <div id="dialog-direction-tabs" class="dialog-direction-tabs" aria-label="Board direction view">
-          <button class="dialog-direction-tab is-active" data-dialog-direction="both" type="button">Both</button>
+          <button id="dir-tab-both" class="dialog-direction-tab is-active" data-dialog-direction="both" type="button">Both</button>
           <button class="dialog-direction-tab" data-dialog-direction="nb" type="button">NB</button>
           <button class="dialog-direction-tab" data-dialog-direction="sb" type="button">SB</button>
-          <button class="dialog-direction-tab" data-dialog-direction="auto" type="button">Auto</button>
+          <button id="dir-tab-auto" class="dialog-direction-tab" data-dialog-direction="auto" type="button">Auto</button>
         </div>
       </div>
       <div id="station-alerts-container"></div>
@@ -1405,15 +1405,15 @@ async function shareArrivals() {
   let shareText = `${station.name}\n`
   
   if (nbArrivals.length > 0) {
-    shareText += `\n${state.language === 'zh-CN' ? '北向' : 'Northbound'}:\n`
+    shareText += `\n${copyValue('northboundLabel')}:\n`
     nbArrivals.forEach((a) => {
       const timeStr = formatArrivalTime(Math.floor((a.arrivalTime - Date.now()) / 1000))
       shareText += `• ${a.lineName} ${getVehicleLabel()} ${a.vehicleId}: ${timeStr}${a.destination ? ' to ' + a.destination : ''}\n`
     })
   }
-  
+
   if (sbArrivals.length > 0) {
-    shareText += `\n${state.language === 'zh-CN' ? '南向' : 'Southbound'}:\n`
+    shareText += `\n${copyValue('southboundLabel')}:\n`
     sbArrivals.forEach((a) => {
       const timeStr = formatArrivalTime(Math.floor((a.arrivalTime - Date.now()) / 1000))
       shareText += `• ${a.lineName} ${getVehicleLabel()} ${a.vehicleId}: ${timeStr}${a.destination ? ' to ' + a.destination : ''}\n`
@@ -2221,12 +2221,19 @@ function renderShellCopy() {
   themeToggleButton.textContent = state.theme === 'dark' ? copyValue('themeLight') : copyValue('themeDark')
   themeToggleButton.setAttribute('aria-label', copyValue('themeToggleAria'))
 
+  statusPillElement.setAttribute('aria-label', copyValue('manualRefresh'))
+  dialogStatusPillElement.setAttribute('aria-label', copyValue('manualRefresh'))
+
   systemBarElement.setAttribute('aria-label', copyValue('transitSystems'))
   viewBarElement.setAttribute('aria-label', copyValue('boardViews'))
 }
 
 function renderDialogCopy() {
   document.querySelector('#dialog-direction-tabs')?.setAttribute('aria-label', copyValue('boardDirectionView'))
+  const dirTabBoth = document.querySelector('#dir-tab-both')
+  const dirTabAuto = document.querySelector('#dir-tab-auto')
+  if (dirTabBoth) dirTabBoth.textContent = copyValue('both')
+  if (dirTabAuto) dirTabAuto.textContent = copyValue('auto')
   setArrivalsTitleHtml(arrivalsTitleNb, formatDirectionLabel('▲', getDialogDirectionSummary('▲'), { includeSymbol: true }))
   setArrivalsTitleHtml(arrivalsTitleSb, formatDirectionLabel('▼', getDialogDirectionSummary('▼'), { includeSymbol: true }))
   dialogDisplay.textContent = state.dialogDisplayMode ? copyValue('exit') : copyValue('board')

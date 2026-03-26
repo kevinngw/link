@@ -621,7 +621,12 @@ async function main() {
   await writeOutputFile(systems)
 }
 
-main().catch((error) => {
-  console.error(error)
-  process.exitCode = 1
+main().catch(async (error) => {
+  const indexExists = await fs.access(INDEX_FILE).then(() => true, () => false)
+  if (indexExists) {
+    console.warn(`Warning: data build failed (${error.cause?.code ?? error.message}), using cached data files`)
+  } else {
+    console.error(error)
+    process.exitCode = 1
+  }
 })
