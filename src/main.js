@@ -646,6 +646,8 @@ const {
   getFavorites,
   isFavorite,
   toggleFavorite,
+  moveFavorite,
+  removeFavorite,
   getFavoriteDisplayData,
   handleFavoriteClick,
 } = createFavoritesManager({
@@ -767,9 +769,13 @@ function renderFavoritesView() {
               <p class="favorite-item-title">${fav.stationName}</p>
               <p class="favorite-item-meta">${fav.lineName}${isCurrentSystem ? '' : ` · ${fav.systemName}`}</p>
             </div>
-            <span class="favorite-item-arrow">→</span>
           </div>
           ${renderFavoriteArrivalPreview(fav, snapshot)}
+          <div class="favorite-item-actions">
+            <button type="button" class="favorite-action-btn" data-fav-move="up" data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('moveUp')}">▲ ${copyValue('moveUp')}</button>
+            <button type="button" class="favorite-action-btn" data-fav-move="down" data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('moveDown')}">▼ ${copyValue('moveDown')}</button>
+            <button type="button" class="favorite-action-btn favorite-action-remove" data-fav-remove data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('removeFavorite')}">× ${copyValue('removeFavorite')}</button>
+          </div>
         </div>
       </div>
     `
@@ -791,6 +797,21 @@ function renderFavoritesView() {
 }
 
 boardElement.addEventListener('click', (e) => {
+  const moveBtn = e.target.closest('[data-fav-move]')
+  if (moveBtn) {
+    e.stopPropagation()
+    moveFavorite(moveBtn.dataset.favStation, moveBtn.dataset.favLine, moveBtn.dataset.favSystem, moveBtn.dataset.favMove)
+    renderBoard()
+    return
+  }
+  const removeBtn = e.target.closest('[data-fav-remove]')
+  if (removeBtn) {
+    e.stopPropagation()
+    removeFavorite(removeBtn.dataset.favStation, removeBtn.dataset.favLine, removeBtn.dataset.favSystem)
+    showToast(copyValue('favoriteRemoved'))
+    renderBoard()
+    return
+  }
   const favItem = e.target.closest('[data-favorite-key]')
   if (!favItem) return
   const key = favItem.dataset.favoriteKey

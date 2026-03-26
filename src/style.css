@@ -2039,6 +2039,15 @@ button.train-list-item {
   font-size: 0.8rem;
 }
 
+.train-focus-next-stop {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .train-queue-list {
   display: grid;
   gap: 10px;
@@ -4598,6 +4607,40 @@ dialog.is-closing::backdrop {
 .favorite-item:hover .favorite-item-arrow {
   transform: translateX(3px);
   color: var(--text-primary);
+}
+
+.favorite-item-actions {
+  display: flex;
+  gap: 4px;
+  padding: 6px 0 0;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+
+.favorite-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.favorite-action-btn:hover {
+  background: var(--surface-hover, rgba(255, 255, 255, 0.06));
+  color: var(--text-primary);
+}
+
+.favorite-action-remove:hover {
+  color: var(--danger, #e53e3e);
 }
 
 @media (max-width: 700px) {
