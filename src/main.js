@@ -1533,6 +1533,12 @@ function getStationStopIds(station, line) {
   const aliases = new Set(line.stationAliases?.[station.id] ?? [])
   aliases.add(station.id)
 
+  // Include sibling platform IDs (e.g. E19-T1 → also E19-T2 for the opposite-direction platform)
+  const platformMatch = station.id.match(/^(.+)-T(\d+)$/)
+  if (platformMatch) {
+    aliases.add(`${platformMatch[1]}-T${platformMatch[2] === '1' ? '2' : '1'}`)
+  }
+
   const candidates = new Set()
   for (const alias of aliases) {
     const normalized = alias.startsWith(`${line.agencyId}_`) ? alias : `${line.agencyId}_${alias}`
