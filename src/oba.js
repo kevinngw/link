@@ -1,6 +1,5 @@
 import {
   OBA_CACHE_TTL_MS,
-  OBA_RATE_LIMIT_DELAY_MS,
   OBA_RETRY_BASE_MS,
 } from './config'
 
@@ -128,9 +127,9 @@ export function createObaClient(state) {
         continue
       }
 
-      // Delay before retry: longer backoff for rate-limit errors
+      // Delay before retry: short fixed delay for rate-limit, exponential backoff for others
       const retryDelay = errorType === 'rate-limit'
-        ? OBA_RATE_LIMIT_DELAY_MS
+        ? 200
         : Math.min(OBA_RETRY_BASE_MS * 2 ** attempt, 30_000)
       await new Promise(r => setTimeout(r, retryDelay))
 
