@@ -148,9 +148,18 @@ export function createTrainRenderers(deps) {
       .map((line) => {
         const lineVehicles = vehicles.filter((vehicle) => vehicle.lineId === line.id)
         const lineAlerts = getAlertsForLine(line.id)
-        const sortedLineVehicles = [...lineVehicles].sort(
-          (left, right) => left.minutePosition - right.minutePosition,
-        )
+        const sortedLineVehicles = [...lineVehicles].sort((left, right) => {
+          // Group NB (▲) before SB (▼)
+          if (left.directionSymbol !== right.directionSymbol) {
+            if (left.directionSymbol === '▲') return -1
+            if (right.directionSymbol === '▲') return 1
+            return 0
+          }
+          // Within NB: descending position (lead/northernmost train first)
+          if (left.directionSymbol === '▲') return right.minutePosition - left.minutePosition
+          // Within SB: ascending position (lead/southernmost train first)
+          return left.minutePosition - right.minutePosition
+        })
 
         const directionFilter = state.directionFilterByLine.get(line.id) || 'all'
         const filteredVehicles = directionFilter === 'all'
