@@ -872,7 +872,7 @@ function copyValue(key, ...args) {
 }
 
 function isPageRequestContextActive() {
-  return document.visibilityState === 'visible' && document.hasFocus()
+  return document.visibilityState === 'visible'
 }
 
 const { fetchJsonWithRetry, clearQueue: clearObaQueue } = createObaClient(state)
