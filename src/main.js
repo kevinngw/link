@@ -108,7 +108,7 @@ document.querySelector('#app').innerHTML = `
         <button id="station-search-toggle" class="theme-toggle station-search-toggle" type="button" aria-label="Open station search">Search</button>
         <button id="language-toggle" class="theme-toggle" type="button" aria-label="Switch to Chinese">中文</button>
         <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">Light</button>
-        <p id="status-pill" class="status-pill">SYNC</p>
+        <button id="status-pill" class="status-pill" type="button" aria-label="Refresh data">SYNC</button>
         <span id="current-time" class="dot-matrix-clock" aria-label="Current time">--:--</span>
         <p id="updated-at" class="status-pill updated-at-pill">Waiting for snapshot</p>
       </div>
@@ -137,7 +137,7 @@ document.querySelector('#app').innerHTML = `
               </span>
             </h3>
             <div id="dialog-meta" class="dialog-meta">
-              <p id="dialog-status-pill" class="status-pill">SYNC</p>
+              <button id="dialog-status-pill" class="status-pill" type="button" aria-label="Refresh data">SYNC</button>
               <p id="dialog-updated-at" class="updated-at">Waiting for snapshot</p>
             </div>
           </div>
@@ -152,10 +152,10 @@ document.querySelector('#app').innerHTML = `
       </header>
       <div class="dialog-direction-bar">
         <div id="dialog-direction-tabs" class="dialog-direction-tabs" aria-label="Board direction view">
-          <button class="dialog-direction-tab is-active" data-dialog-direction="both" type="button">Both</button>
+          <button id="dir-tab-both" class="dialog-direction-tab is-active" data-dialog-direction="both" type="button">Both</button>
           <button class="dialog-direction-tab" data-dialog-direction="nb" type="button">NB</button>
           <button class="dialog-direction-tab" data-dialog-direction="sb" type="button">SB</button>
-          <button class="dialog-direction-tab" data-dialog-direction="auto" type="button">Auto</button>
+          <button id="dir-tab-auto" class="dialog-direction-tab" data-dialog-direction="auto" type="button">Auto</button>
         </div>
       </div>
       <div id="station-alerts-container"></div>
@@ -496,6 +496,20 @@ window.addEventListener('focus', () => {
   refreshVisibleRealtime().catch(console.error)
 })
 
+statusPillElement.addEventListener('click', async () => {
+  statusPillElement.textContent = '...'
+  showToast(copyValue('refreshingData'))
+  await refreshVisibleRealtime()
+  showToast(copyValue('dataRefreshed'))
+})
+
+dialogStatusPillElement.addEventListener('click', async () => {
+  dialogStatusPillElement.textContent = '...'
+  showToast(copyValue('refreshingData'))
+  await refreshVisibleRealtime()
+  showToast(copyValue('dataRefreshed'))
+})
+
 // ---------------------------------------------------------------------------
 // Event delegation — set up once; no re-attachment on every render
 // ---------------------------------------------------------------------------
@@ -632,6 +646,8 @@ const {
   getFavorites,
   isFavorite,
   toggleFavorite,
+  moveFavorite,
+  removeFavorite,
   getFavoriteDisplayData,
   handleFavoriteClick,
 } = createFavoritesManager({
@@ -753,9 +769,13 @@ function renderFavoritesView() {
               <p class="favorite-item-title">${fav.stationName}</p>
               <p class="favorite-item-meta">${fav.lineName}${isCurrentSystem ? '' : ` · ${fav.systemName}`}</p>
             </div>
-            <span class="favorite-item-arrow">→</span>
           </div>
           ${renderFavoriteArrivalPreview(fav, snapshot)}
+          <div class="favorite-item-actions">
+            <button type="button" class="favorite-action-btn" data-fav-move="up" data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('moveUp')}">▲ ${copyValue('moveUp')}</button>
+            <button type="button" class="favorite-action-btn" data-fav-move="down" data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('moveDown')}">▼ ${copyValue('moveDown')}</button>
+            <button type="button" class="favorite-action-btn favorite-action-remove" data-fav-remove data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('removeFavorite')}">× ${copyValue('removeFavorite')}</button>
+          </div>
         </div>
       </div>
     `
@@ -777,6 +797,21 @@ function renderFavoritesView() {
 }
 
 boardElement.addEventListener('click', (e) => {
+  const moveBtn = e.target.closest('[data-fav-move]')
+  if (moveBtn) {
+    e.stopPropagation()
+    moveFavorite(moveBtn.dataset.favStation, moveBtn.dataset.favLine, moveBtn.dataset.favSystem, moveBtn.dataset.favMove)
+    renderBoard()
+    return
+  }
+  const removeBtn = e.target.closest('[data-fav-remove]')
+  if (removeBtn) {
+    e.stopPropagation()
+    removeFavorite(removeBtn.dataset.favStation, removeBtn.dataset.favLine, removeBtn.dataset.favSystem)
+    showToast(copyValue('favoriteRemoved'))
+    renderBoard()
+    return
+  }
   const favItem = e.target.closest('[data-favorite-key]')
   if (!favItem) return
   const key = favItem.dataset.favoriteKey
@@ -1391,15 +1426,15 @@ async function shareArrivals() {
   let shareText = `${station.name}\n`
   
   if (nbArrivals.length > 0) {
-    shareText += `\n${state.language === 'zh-CN' ? '北向' : 'Northbound'}:\n`
+    shareText += `\n${copyValue('northboundLabel')}:\n`
     nbArrivals.forEach((a) => {
       const timeStr = formatArrivalTime(Math.floor((a.arrivalTime - Date.now()) / 1000))
       shareText += `• ${a.lineName} ${getVehicleLabel()} ${a.vehicleId}: ${timeStr}${a.destination ? ' to ' + a.destination : ''}\n`
     })
   }
-  
+
   if (sbArrivals.length > 0) {
-    shareText += `\n${state.language === 'zh-CN' ? '南向' : 'Southbound'}:\n`
+    shareText += `\n${copyValue('southboundLabel')}:\n`
     sbArrivals.forEach((a) => {
       const timeStr = formatArrivalTime(Math.floor((a.arrivalTime - Date.now()) / 1000))
       shareText += `• ${a.lineName} ${getVehicleLabel()} ${a.vehicleId}: ${timeStr}${a.destination ? ' to ' + a.destination : ''}\n`
@@ -2207,12 +2242,19 @@ function renderShellCopy() {
   themeToggleButton.textContent = state.theme === 'dark' ? copyValue('themeLight') : copyValue('themeDark')
   themeToggleButton.setAttribute('aria-label', copyValue('themeToggleAria'))
 
+  statusPillElement.setAttribute('aria-label', copyValue('manualRefresh'))
+  dialogStatusPillElement.setAttribute('aria-label', copyValue('manualRefresh'))
+
   systemBarElement.setAttribute('aria-label', copyValue('transitSystems'))
   viewBarElement.setAttribute('aria-label', copyValue('boardViews'))
 }
 
 function renderDialogCopy() {
   document.querySelector('#dialog-direction-tabs')?.setAttribute('aria-label', copyValue('boardDirectionView'))
+  const dirTabBoth = document.querySelector('#dir-tab-both')
+  const dirTabAuto = document.querySelector('#dir-tab-auto')
+  if (dirTabBoth) dirTabBoth.textContent = copyValue('both')
+  if (dirTabAuto) dirTabAuto.textContent = copyValue('auto')
   setArrivalsTitleHtml(arrivalsTitleNb, formatDirectionLabel('▲', getDialogDirectionSummary('▲'), { includeSymbol: true }))
   setArrivalsTitleHtml(arrivalsTitleSb, formatDirectionLabel('▼', getDialogDirectionSummary('▼'), { includeSymbol: true }))
   dialogDisplay.textContent = state.dialogDisplayMode ? copyValue('exit') : copyValue('board')

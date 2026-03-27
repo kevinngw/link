@@ -96,6 +96,7 @@ export function createTrainRenderers(deps) {
           <div class="train-focus-side">
             <p class="train-focus-time" data-vehicle-next-countdown="${vehicle.id}">${formatArrivalTime(nextOffset)}</p>
             <p class="train-focus-clock" data-vehicle-next-clock="${vehicle.id}">${formatEtaClockFromNow(nextOffset)}</p>
+            ${vehicle.upcomingLabel ? `<p class="train-focus-next-stop">${copyValue('nextStop')}: ${vehicle.upcomingLabel}</p>` : ''}
           </div>
         </div>
         ${renderFocusMetrics(vehicle, renderMiniProgressBar(vehicle))}

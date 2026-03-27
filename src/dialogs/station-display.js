@@ -3,6 +3,7 @@ import {
   DIALOG_DISPLAY_DIRECTION_ROTATE_MS,
   DIALOG_DISPLAY_SCROLL_INTERVAL_MS,
   DIALOG_REFRESH_INTERVAL_MS,
+  OBA_RATE_LIMIT_DELAY_MS,
 } from '../config'
 
 export function createStationDialogDisplayController({
@@ -167,12 +168,21 @@ export function createStationDialogDisplayController({
     stopDialogAutoRefresh()
     if (!state.currentDialogStation) return
 
-    const scheduleNextRefresh = () => {
+    const scheduleNextRefresh = (delay = DIALOG_REFRESH_INTERVAL_MS) => {
       state.dialogRefreshTimer = window.setTimeout(async () => {
         if (!dialog.open || !state.currentDialogStation) return
-        await refreshStationDialog(state.currentDialogStation).catch(console.error)
-        scheduleNextRefresh()
-      }, DIALOG_REFRESH_INTERVAL_MS)
+        try {
+          await refreshStationDialog(state.currentDialogStation)
+          scheduleNextRefresh()
+        } catch (error) {
+          console.error(error)
+          // Retry sooner if rate-limited, otherwise use normal interval
+          const nextDelay = error?.errorType === 'rate-limit'
+            ? OBA_RATE_LIMIT_DELAY_MS
+            : DIALOG_REFRESH_INTERVAL_MS
+          scheduleNextRefresh(nextDelay)
+        }
+      }, delay)
     }
 
     scheduleNextRefresh()

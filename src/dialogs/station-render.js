@@ -93,15 +93,28 @@ export function createStationDialogRenderers({
         return
       }
 
-      const pinnedItems = state.dialogDisplayMode ? bucket.slice(0, 2) : []
-      const scrollingItems = state.dialogDisplayMode ? bucket.slice(2) : bucket
-
-      pinnedElement.innerHTML = pinnedItems.map(renderArrival).join('')
-      listElement.innerHTML = scrollingItems.length
-        ? scrollingItems.map(renderArrival).join('')
-        : state.dialogDisplayMode
-          ? `<div class="arrivals-empty">${copyValue('noAdditionalVehicles', getVehicleLabelPlural().toLowerCase())}</div>`
-          : ''
+      if (state.dialogDisplayMode) {
+        const pinnedItems = bucket.slice(0, 2)
+        const scrollingItems = bucket.slice(2)
+        pinnedElement.innerHTML = pinnedItems.map(renderArrival).join('')
+        listElement.innerHTML = scrollingItems.length
+          ? scrollingItems.map(renderArrival).join('')
+          : `<div class="arrivals-empty">${copyValue('noAdditionalVehicles', getVehicleLabelPlural().toLowerCase())}</div>`
+      } else if (bucket.length >= 2) {
+        const nextUp = bucket.slice(0, 1)
+        const following = bucket.slice(1)
+        pinnedElement.innerHTML =
+          `<p class="arrivals-pinned-kicker">${copyValue('nextUpKicker')}</p>` +
+          nextUp.map(renderArrival).join('')
+        listElement.innerHTML =
+          `<p class="arrivals-following-heading">${copyValue('followingVehiclesHeading')}</p>` +
+          following.map(renderArrival).join('')
+      } else {
+        pinnedElement.innerHTML =
+          `<p class="arrivals-pinned-kicker">${copyValue('nextUpKicker')}</p>` +
+          bucket.map(renderArrival).join('')
+        listElement.innerHTML = ''
+      }
     }
 
     renderBucket(arrivals.nb, arrivalsNbPinned, arrivalsNb)

@@ -255,6 +255,16 @@
   text-transform: uppercase;
 }
 
+.station-search-nearby-badge {
+  padding: 2px 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent-strong) 15%, transparent);
+  color: var(--accent-strong);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
 body {
   margin: 0;
   background:
@@ -348,6 +358,7 @@ h1 {
 
 .theme-toggle {
   margin: 0;
+  min-width: 5.2em;
   padding: 6px 10px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-pill);
@@ -357,6 +368,7 @@ h1 {
   font-size: 0.74rem;
   line-height: 1;
   letter-spacing: 0.08em;
+  text-align: center;
 }
 
 .status-pill {
@@ -364,6 +376,7 @@ h1 {
   align-items: center;
   gap: 8px;
   margin: 0;
+  min-width: 5.2em;
   padding: 6px 10px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-pill);
@@ -371,7 +384,17 @@ h1 {
   color: var(--accent-strong);
   font-size: 0.74rem;
   line-height: 1;
+  letter-spacing: 0.08em;
   box-shadow: inset 0 0 0 1px rgba(141, 240, 184, 0.08);
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.status-pill:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-color);
 }
 
 .status-pill::before {
@@ -2016,6 +2039,15 @@ button.train-list-item {
   font-size: 0.8rem;
 }
 
+.train-focus-next-stop {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .train-queue-list {
   display: grid;
   gap: 10px;
@@ -2775,7 +2807,8 @@ button.train-list-item {
   align-items: center;
   gap: 6px;
   margin-top: 0;
-  padding: 4px 10px;
+  height: 44px;
+  padding: 0 10px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   background: var(--surface-strong);
@@ -2785,7 +2818,7 @@ button.train-list-item {
 
 .dialog-title-wrap .dialog-meta .status-pill {
   padding: 4px 8px;
-  font-size: 0.7rem;
+  font-size: 0.76rem;
 }
 
 .dialog-title-wrap .dialog-meta .updated-at {
@@ -2903,8 +2936,8 @@ button.train-list-item {
 }
 
 .dialog-close {
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
   background: var(--surface-soft);
@@ -2919,7 +2952,7 @@ button.train-list-item {
 .dialog-mode-button {
   width: auto;
   min-width: 72px;
-  height: 48px;
+  height: 44px;
   padding: 0 12px;
   font-size: 0.82rem;
   letter-spacing: 0.08em;
@@ -2960,8 +2993,8 @@ button.train-list-item {
   }
 
   .dialog-title-wrap .dialog-meta .status-pill {
-    padding: 3px 6px;
-    font-size: 0.65rem;
+    padding: 6px 10px;
+    font-size: 0.72rem;
   }
 
   .dialog-title-wrap .dialog-meta .updated-at {
@@ -3169,6 +3202,20 @@ button.train-list-item {
   display: grid;
   gap: 8px;
   margin-bottom: 8px;
+}
+
+.arrivals-pinned-kicker,
+.arrivals-following-heading {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.arrivals-following-heading {
+  margin-top: 4px;
 }
 
 .arrivals-title {
@@ -4391,13 +4438,13 @@ dialog.is-closing::backdrop {
 /* ─── Favorites feature styles ─── */
 
 .dialog-favorite-button {
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
   background: var(--surface-soft);
   color: var(--text-secondary);
-  font-size: 1.6rem;
+  font-size: 1.4rem;
   line-height: 1;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -4560,6 +4607,40 @@ dialog.is-closing::backdrop {
 .favorite-item:hover .favorite-item-arrow {
   transform: translateX(3px);
   color: var(--text-primary);
+}
+
+.favorite-item-actions {
+  display: flex;
+  gap: 4px;
+  padding: 6px 0 0;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+
+.favorite-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.favorite-action-btn:hover {
+  background: var(--surface-hover, rgba(255, 255, 255, 0.06));
+  color: var(--text-primary);
+}
+
+.favorite-action-remove:hover {
+  color: var(--danger, #e53e3e);
 }
 
 @media (max-width: 700px) {

@@ -65,6 +65,19 @@ export function createFavoritesManager({ state, showStationDialog, switchSystem,
     }
   }
 
+  function moveFavorite(stationId, lineId, systemId, direction) {
+    const favorites = getFavorites()
+    const index = favorites.findIndex((f) => f.stationId === stationId && f.lineId === lineId && f.systemId === systemId)
+    if (index < 0) return favorites
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    if (targetIndex < 0 || targetIndex >= favorites.length) return favorites
+    const temp = favorites[index]
+    favorites[index] = favorites[targetIndex]
+    favorites[targetIndex] = temp
+    saveFavorites(favorites)
+    return favorites
+  }
+
   function getFavoriteDisplayData() {
     const favorites = getFavorites()
     return favorites.map((fav) => {
@@ -103,6 +116,7 @@ export function createFavoritesManager({ state, showStationDialog, switchSystem,
     addFavorite,
     removeFavorite,
     toggleFavorite,
+    moveFavorite,
     getFavoriteDisplayData,
     handleFavoriteClick,
   }

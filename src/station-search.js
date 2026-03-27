@@ -305,7 +305,7 @@ export function createStationSearch({
                 </span>
               </span>
               <span class="station-search-result-actions">
-
+                ${isNearby ? `<span class="station-search-nearby-badge">${copyValue('nearbyStationBadge')}</span>` : ''}
               </span>
             </div>
           `
