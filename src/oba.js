@@ -211,6 +211,7 @@ export function createObaClient(state) {
     }
 
     return new Promise((resolve, reject) => {
+      cancelled = false
       queue.push({ url, label, attempt: 0, resolve, reject, signal })
       processQueue()
     })
