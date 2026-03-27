@@ -18,7 +18,29 @@
       "Bash(pkill -f \"vite\" 2>/dev/null; sleep 1; echo \"killed old servers\")",
       "Bash(npx vite:*)",
       "Bash(git add:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git checkout:*)",
+      "Bash(git commit:*)",
+      "Bash(jq .system.lines[0:5] /Users/kevinwu/Workspaces/link/public/pulse-data-swift.json)",
+      "Bash(ls:*)",
+      "Bash(jq:*)",
+      "Bash(python3 -c \":*)",
+      "Bash(node:*)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s \"https://api.pugetsound.onebusaway.org/api/where/stops-for-route/29_702.json?key=TEST\")",
+      "Bash(curl -s \"https://api.pugetsound.onebusaway.org/api/where/stops-for-route/29_701.json?key=TEST\")",
+      "Bash(npm test:*)",
+      "Bash(curl -s \"https://api.pugetsound.onebusaway.org/api/where/arrivals-and-departures-for-stop/29_3047.json?key=TEST&minutesAfter=60\")",
+      "Bash(find public:*)",
+      "Bash(curl -s \"https://api.pugetsound.onebusaway.org/api/where/arrivals-and-departures-for-stop/29_3028.json?key=TEST&minutesAfter=60\")",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)",
+      "Bash(npm ls:*)",
+      "Bash(curl -s https://api.github.com/repos/actions/checkout/releases/latest)",
+      "Bash(python3 -c \"import json,sys; print\\(json.load\\(sys.stdin\\).get\\(''''tag_name'''',''''?''''\\)\\)\")",
+      "Bash(curl -s https://api.github.com/repos/actions/setup-node/releases/latest)",
+      "Bash(curl -s https://api.github.com/repos/peaceiris/actions-gh-pages/releases/latest)",
+      "mcp__Claude_Preview__preview_start"
     ]
   }
 }
