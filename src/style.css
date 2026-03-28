@@ -3012,7 +3012,7 @@ button.train-list-item {
   }
 
   .dialog-actions {
-    flex-direction: column;
+    flex-direction: row;
     gap: 6px;
   }
 
@@ -3053,6 +3053,12 @@ button.train-list-item {
     height: 36px;
     padding: 0 10px;
     font-size: 0.74rem;
+  }
+
+  .dialog-actions > .dialog-close {
+    width: 36px;
+    height: 36px;
+    font-size: 1.2rem;
   }
 
   .dialog-meta {
@@ -4645,9 +4651,9 @@ dialog.is-closing::backdrop {
 
 @media (max-width: 700px) {
   .dialog-favorite-button {
-    width: 40px;
-    height: 40px;
-    font-size: 1.3rem;
+    width: 36px;
+    height: 36px;
+    font-size: 1.2rem;
   }
 
   .favorite-item {
@@ -4694,7 +4700,7 @@ dialog.is-closing::backdrop {
 @media (max-width: 700px) {
   .dialog-share-button {
     min-width: 60px;
-    height: 40px;
+    height: 36px;
     padding: 0 10px;
     font-size: 0.74rem;
   }
@@ -4728,7 +4734,7 @@ dialog.is-closing::backdrop {
 @media (max-width: 700px) {
   .dialog-share-button {
     min-width: 60px;
-    height: 40px;
+    height: 36px;
     padding: 0 10px;
     font-size: 0.74rem;
   }
