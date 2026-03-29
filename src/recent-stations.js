@@ -20,14 +20,14 @@ export function createRecentStationsManager() {
     } catch {}
   }
 
-  function addRecentStation(station, line, systemId) {
+  function addRecentStation(station, line, systemId, systemName) {
     const recent = getRecentStations()
-    
+
     // Remove existing entry if present (to move to front)
     const filtered = recent.filter(
       (r) => !(r.stationId === station.id && r.lineId === line.id && r.systemId === systemId)
     )
-    
+
     // Add new entry at front
     filtered.unshift({
       stationId: station.id,
@@ -36,6 +36,7 @@ export function createRecentStationsManager() {
       lineName: line.name,
       lineColor: line.color,
       systemId,
+      systemName,
       viewedAt: Date.now(),
     })
     

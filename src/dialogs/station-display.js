@@ -125,15 +125,27 @@ export function createStationDialogDisplayController({
     }
   }
 
+  function getVisibleItemCount(listElement) {
+    const items = listElement.querySelectorAll('.arrival-item:not(.muted)')
+    if (!items.length) return 0
+    const viewport = listElement.closest('.arrivals-viewport')
+    if (!viewport) return items.length
+    const vpHeight = viewport.getBoundingClientRect().height
+    const rowGap = Number.parseFloat(window.getComputedStyle(listElement).rowGap || '0') || 0
+    const itemHeight = items[0].getBoundingClientRect().height + rowGap
+    return itemHeight > 0 ? Math.max(1, Math.floor(vpHeight / itemHeight)) : items.length
+  }
+
   function applyDialogDisplayOffset(listElement, key) {
     const items = [...listElement.querySelectorAll('.arrival-item:not(.muted)')]
     listElement.style.transform = 'translateY(0)'
 
-    if (!state.dialogDisplayMode || items.length <= 3) return
+    const visibleCount = getVisibleItemCount(listElement)
+    if (!state.dialogDisplayMode || items.length <= visibleCount) return
 
     const rowGap = Number.parseFloat(window.getComputedStyle(listElement).rowGap || '0') || 0
     const itemHeight = items[0].getBoundingClientRect().height + rowGap
-    const maxIndex = Math.max(0, items.length - 3)
+    const maxIndex = Math.max(0, items.length - visibleCount)
     const safeIndex = Math.min(state.dialogDisplayIndexes[key], maxIndex)
     listElement.style.transform = `translateY(-${safeIndex * itemHeight}px)`
   }
@@ -153,11 +165,16 @@ export function createStationDialogDisplayController({
     }
     const listElements = { nb: arrivalsNb, sb: arrivalsSb }
 
+    const fitCounts = {
+      nb: getVisibleItemCount(arrivalsNb),
+      sb: getVisibleItemCount(arrivalsSb),
+    }
+
     state.dialogDisplayTimer = window.setInterval(() => {
       for (const key of ['nb', 'sb']) {
-        if (visibleCounts[key] <= 3) continue
+        if (visibleCounts[key] <= fitCounts[key]) continue
 
-        const maxIndex = Math.max(0, visibleCounts[key] - 3)
+        const maxIndex = Math.max(0, visibleCounts[key] - fitCounts[key])
         state.dialogDisplayIndexes[key] = state.dialogDisplayIndexes[key] >= maxIndex ? 0 : state.dialogDisplayIndexes[key] + 1
         applyDialogDisplayOffset(listElements[key], key)
       }

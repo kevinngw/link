@@ -872,7 +872,7 @@ function copyValue(key, ...args) {
 }
 
 function isPageRequestContextActive() {
-  return document.visibilityState === 'visible' && document.hasFocus()
+  return document.visibilityState === 'visible'
 }
 
 const { fetchJsonWithRetry, clearQueue: clearObaQueue } = createObaClient(state)
@@ -1533,6 +1533,12 @@ function getStationStopIds(station, line) {
   const aliases = new Set(line.stationAliases?.[station.id] ?? [])
   aliases.add(station.id)
 
+  // Include sibling platform IDs (e.g. E19-T1 → also E19-T2 for the opposite-direction platform)
+  const platformMatch = station.id.match(/^(.+)-T(\d+)$/)
+  if (platformMatch) {
+    aliases.add(`${platformMatch[1]}-T${platformMatch[2] === '1' ? '2' : '1'}`)
+  }
+
   const candidates = new Set()
   for (const alias of aliases) {
     const normalized = alias.startsWith(`${line.agencyId}_`) ? alias : `${line.agencyId}_${alias}`
@@ -2035,7 +2041,7 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
   updateFavoriteButton()
   const dialogStations = getDialogStations(station)
   const firstMatch = dialogStations[0]
-  if (firstMatch) addRecentStation(firstMatch.station, firstMatch.line, state.activeSystemId)
+  if (firstMatch) addRecentStation(firstMatch.station, firstMatch.line, state.activeSystemId, getActiveSystemMeta().label)
   try {
     await refreshStationDialog(station, { requestId, skipCache: true })
   } catch (e) {

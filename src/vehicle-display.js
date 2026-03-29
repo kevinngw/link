@@ -198,7 +198,12 @@ export function createVehicleDisplay({ state, copyValue, formatArrivalTime, form
       const serviceTone = getStatusTone(serviceStatus)
 
       countdownElement.textContent = formatArrivalTime(diffSeconds)
-      statusElement.textContent = formatServiceStatus(serviceStatus)
+      const statusLabel = serviceStatus === 'ARR'
+        ? (copyValue('arrivingStatus') || 'ARRIVING')
+        : serviceStatus === 'DELAY'
+          ? (copyValue('delayedStatus') || 'DELAYED')
+          : serviceStatus
+      statusElement.textContent = statusLabel
       statusElement.className = `arrival-status arrival-status-${serviceTone}`
     })
   }

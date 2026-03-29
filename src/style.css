@@ -2142,13 +2142,13 @@ button.train-list-item {
 /* iPhone portrait specific fixes (≤430px) */
 @media (max-width: 430px) {
   .station-dialog {
-    --dialog-max-height: calc(100dvh - 16px);
+    --dialog-max-height: calc(100dvh - 16px - var(--safe-area-top));
     width: 96vw;
     border-radius: var(--radius-lg);
   }
 
   .dialog-content {
-    padding: 12px 14px 16px;
+    padding: calc(12px + var(--safe-area-top)) 14px 16px;
   }
 
   .dialog-header {
@@ -2232,7 +2232,7 @@ button.train-list-item {
     font-size: 0.72rem;
   }
 
-  .arrival-time {
+  .arrival-countdown {
     font-size: 0.88rem;
     gap: 1px;
   }
@@ -2814,6 +2814,7 @@ button.train-list-item {
   background: var(--surface-strong);
   font-size: 0.75rem;
   white-space: nowrap;
+  width: fit-content;
 }
 
 .dialog-title-wrap .dialog-meta .status-pill {
@@ -2990,6 +2991,9 @@ button.train-list-item {
   .dialog-title-wrap .dialog-meta {
     padding: 3px 8px;
     font-size: 0.7rem;
+    display: flex;
+    min-width: unset;
+    width: fit-content;
   }
 
   .dialog-title-wrap .dialog-meta .status-pill {
@@ -3012,8 +3016,24 @@ button.train-list-item {
   }
 
   .dialog-actions {
-    flex-direction: column;
-    gap: 6px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .dialog-actions .dialog-share-button,
+  .dialog-actions .dialog-mode-button {
+    padding: 0 10px;
+    font-size: 0.72rem;
+    min-width: unset;
+    width: auto;
+    height: 36px;
+    letter-spacing: 0.04em;
+  }
+
+  .dialog-actions .dialog-favorite-button {
+    width: 36px;
+    height: 36px;
   }
 
   .dialog-direction-bar {
@@ -3053,6 +3073,12 @@ button.train-list-item {
     height: 36px;
     padding: 0 10px;
     font-size: 0.74rem;
+  }
+
+  .dialog-actions > .dialog-close:not(.dialog-share-button):not(.dialog-mode-button):not(.dialog-favorite-button) {
+    width: 36px;
+    height: 36px;
+    font-size: 1.2rem;
   }
 
   .dialog-meta {
@@ -3099,54 +3125,30 @@ button.train-list-item {
   }
 
   .arrival-item {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
-    gap: 10px 12px;
-    padding: 12px;
+    padding: 8px 10px;
+    gap: 3px;
   }
 
-  .arrival-meta {
-    align-items: start;
+  .arrival-row-mid,
+  .arrival-row-bottom {
+    padding-left: 30px;
   }
 
   .arrival-line-token {
-    width: 24px;
-    height: 24px;
-    margin-top: 1px;
-  }
-
-  .arrival-copy {
-    gap: 5px;
-  }
-
-  .arrival-vehicle {
-    white-space: normal;
-    text-wrap: balance;
-  }
-
-  .arrival-destination {
-    white-space: normal;
-  }
-
-  .arrival-side {
-    justify-items: end;
-    align-self: stretch;
-    min-width: 74px;
+    width: 22px;
+    height: 22px;
   }
 
   .arrival-status {
     font-size: 0.64rem;
   }
 
-  .arrival-time {
+  .arrival-countdown {
     font-size: 1.02rem;
   }
 
   .arrival-precision {
-    max-width: 12ch;
     font-size: 0.68rem;
-    text-wrap: pretty;
   }
 }
 
@@ -3238,15 +3240,39 @@ button.train-list-item {
 }
 
 .arrival-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
   background: var(--surface-soft);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   min-width: 0;
+}
+
+.arrival-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.arrival-row-mid {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-left: 32px;
+}
+
+.arrival-row-mid .arrival-status {
+  margin-right: auto;
+}
+
+.arrival-row-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 32px;
 }
 
 button.arrival-item {
@@ -3275,16 +3301,10 @@ button.arrival-item {
 .arrival-meta {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   flex: 1 1 0;
   overflow: hidden;
-}
-
-.arrival-copy {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
 }
 
 .arrival-line-token {
@@ -3300,7 +3320,7 @@ button.arrival-item {
   box-shadow: 0 0 14px color-mix(in srgb, var(--line-color) 60%, transparent);
 }
 
-.arrival-vehicle {
+.arrival-destination {
   font-size: 0.88rem;
   font-weight: 600;
   line-height: 1.25;
@@ -3308,36 +3328,26 @@ button.arrival-item {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 0;
 }
 
-.arrival-destination {
-  font-size: 0.78rem;
+.arrival-vehicle {
+  font-size: 0.72rem;
   line-height: 1.35;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 0;
 }
 
-.arrival-time {
-  display: grid;
-  gap: 2px;
+.arrival-countdown {
   font-size: 0.96rem;
   font-weight: 700;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.arrival-side {
-  display: grid;
-  justify-items: end;
-  gap: 6px;
-  flex: 0 0 auto;
-  text-align: right;
-}
-
-.arrival-countdown {
   white-space: nowrap;
 }
 
@@ -3371,9 +3381,8 @@ button.arrival-item {
   font-size: 0.72rem;
   font-weight: 400;
   color: var(--text-muted);
-  margin-left: 0;
-  display: block;
-  white-space: normal;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 /* Clean loading and empty states - no double borders */
@@ -3567,10 +3576,11 @@ button.arrival-item {
 
 .station-dialog.is-display-mode .arrivals-section {
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto minmax(0, auto) minmax(0, 1fr);
   min-height: 0;
   padding: 22px;
   transform-origin: center center;
+  overflow: hidden;
 }
 
 .station-dialog.is-display-mode .arrivals-pinned {
@@ -3668,7 +3678,7 @@ button.arrival-item {
   font-size: 1.15rem;
 }
 
-.station-dialog.is-display-mode .arrival-time {
+.station-dialog.is-display-mode .arrival-countdown {
   font-size: 2rem;
   white-space: nowrap;
 }
@@ -3679,6 +3689,16 @@ button.arrival-item {
 
 .station-dialog.is-display-mode .arrival-status {
   font-size: 1rem;
+}
+
+.station-dialog.is-display-mode .arrival-source {
+  font-size: 0.85rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.station-dialog.is-display-mode .arrival-clock {
+  font-size: 1.1rem;
 }
 
 @keyframes wave {
@@ -3868,7 +3888,7 @@ button.arrival-item {
 
   .tab-bar {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     width: 100%;
   }
 
@@ -4033,12 +4053,21 @@ button.arrival-item {
     font-size: 0.86rem;
   }
 
-  .station-dialog.is-display-mode .arrival-time {
+  .station-dialog.is-display-mode .arrival-countdown {
     font-size: 1.2rem;
   }
 
   .station-dialog.is-display-mode .arrival-status {
     font-size: 0.78rem;
+  }
+
+  .station-dialog.is-display-mode .arrival-source {
+    font-size: 0.72rem;
+    padding: 3px 8px;
+  }
+
+  .station-dialog.is-display-mode .arrival-clock {
+    font-size: 0.82rem;
   }
 }
 
@@ -4250,7 +4279,7 @@ dialog.is-closing::backdrop {
     font-size: 0.82rem;
   }
 
-  .station-dialog .arrival-time {
+  .station-dialog .arrival-countdown {
     font-size: 1.02rem;
   }
 
@@ -4645,9 +4674,9 @@ dialog.is-closing::backdrop {
 
 @media (max-width: 700px) {
   .dialog-favorite-button {
-    width: 40px;
-    height: 40px;
-    font-size: 1.3rem;
+    width: 36px;
+    height: 36px;
+    font-size: 1.2rem;
   }
 
   .favorite-item {
@@ -4665,37 +4694,6 @@ dialog.is-closing::backdrop {
   .favorite-item-meta,
   .favorite-arrival-status,
   .favorite-arrival-empty {
-    font-size: 0.74rem;
-  }
-}
-.dialog-share-button {
-  width: auto;
-  min-width: 72px;
-  height: 48px;
-  padding: 0 14px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: var(--surface-soft);
-  color: var(--text-secondary);
-  font-size: 0.82rem;
-  letter-spacing: 0.08em;
-  line-height: 1;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  flex: 0 0 auto;
-}
-
-.dialog-share-button:hover {
-  background: var(--surface-active);
-  color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--status-info) 40%, var(--border-color));
-}
-
-@media (max-width: 700px) {
-  .dialog-share-button {
-    min-width: 60px;
-    height: 40px;
-    padding: 0 10px;
     font-size: 0.74rem;
   }
 }
@@ -4723,13 +4721,4 @@ dialog.is-closing::backdrop {
   background: var(--surface-active);
   color: var(--text-primary);
   border-color: color-mix(in srgb, var(--status-info) 40%, var(--border-color));
-}
-
-@media (max-width: 700px) {
-  .dialog-share-button {
-    min-width: 60px;
-    height: 40px;
-    padding: 0 10px;
-    font-size: 0.74rem;
-  }
 }
