@@ -10,6 +10,7 @@
  * that can be called from hooks or intervals.
  */
 
+import { useAppStore } from '../store/useAppStore'
 import { OBA_BASE_URL, OBA_KEY, SYSTEM_META, DEFAULT_SYSTEM_ID, UI_COPY } from '../config'
 import { GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS } from '../config'
 import { appState } from './appState'
@@ -254,8 +255,6 @@ function computeSystemSummaryMetrics(insightsItems) {
 export async function refreshVehicles() {
   if (!isPageRequestContextActive()) return
 
-  // Lazy import to avoid circular dependency at module evaluation time
-  const { useAppStore } = await import('../store/useAppStore')
   const store = useAppStore.getState()
 
   try {

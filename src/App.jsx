@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useAppStore } from './store/useAppStore'
+import { refreshVehicles } from './lib/refreshVehicles'
 import { useVehicleRefresh } from './hooks/useVehicleRefresh'
 import { useCompactLayout } from './hooks/useCompactLayout'
 import Header from './components/Header'
@@ -74,10 +75,7 @@ export default function App() {
       getPreferredTheme,
       handleViewportResize,
       loadStaticData: () => loadStaticData({ state: appState, getSystemIdFromUrl }),
-      refreshVehicles: async () => {
-        const { refreshVehicles } = await import('./lib/refreshVehicles')
-        await refreshVehicles()
-      },
+      refreshVehicles,
       render: () => syncFromAppState(),
       refreshLiveMeta: () => {},
       refreshArrivalCountdowns: () => {},
