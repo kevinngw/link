@@ -3576,10 +3576,11 @@ button.arrival-item {
 
 .station-dialog.is-display-mode .arrivals-section {
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto minmax(0, auto) minmax(0, 1fr);
   min-height: 0;
   padding: 22px;
   transform-origin: center center;
+  overflow: hidden;
 }
 
 .station-dialog.is-display-mode .arrivals-pinned {

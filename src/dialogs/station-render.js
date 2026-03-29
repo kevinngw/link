@@ -98,8 +98,8 @@ export function createStationDialogRenderers({
       }
 
       if (state.dialogDisplayMode) {
-        const pinnedItems = bucket.slice(0, 2)
-        const scrollingItems = bucket.slice(2)
+        const pinnedItems = bucket.slice(0, 1)
+        const scrollingItems = bucket.slice(1)
         pinnedElement.innerHTML = pinnedItems.map(renderArrival).join('')
         listElement.innerHTML = scrollingItems.length
           ? scrollingItems.map(renderArrival).join('')
