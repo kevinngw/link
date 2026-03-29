@@ -18,7 +18,6 @@ import { parseVehicle } from '../vehicles'
 import {
   classifyHeadwayHealth,
   computeLineHeadways,
-  formatPercent,
   getDelayBuckets,
   getLineAttentionReasons,
 } from '../insights'
