@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import react from '@vitejs/plugin-react'
 
 const base = process.env.VITE_BASE ?? '/link/'
 
@@ -9,6 +10,8 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          'state-vendor': ['zustand'],
           'transit-api': ['./src/oba.js', './src/arrivals.js'],
           'transit-data': ['./src/static-data.js', './src/vehicles.js', './src/insights.js'],
         },
@@ -20,6 +23,7 @@ export default defineConfig({
     },
   },
   plugins: [
+    react(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: [
