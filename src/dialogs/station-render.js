@@ -52,23 +52,27 @@ export function createStationDialogRenderers({
         ? ` type="button" data-arrival-vehicle-id="${liveVehicle.id}" aria-label="${arrival.lineName} ${getVehicleLabel()} ${arrival.vehicleId}"`
         : ''
 
+      const statusLabel = serviceStatus === 'ARR' ? (copyValue('arrivingStatus') || 'ARRIVING') : serviceStatus === 'DELAY' ? (copyValue('delayedStatus') || 'DELAYED') : 'ON TIME'
+      const sourceBadge = arrival.isRealtime ? copyValue('realtimeBadge') : copyValue('scheduleBadge')
+      const sourceClass = arrival.isRealtime ? 'live' : 'sched'
+
       return `
         <${wrapperTag} class="arrival-item${liveVehicle ? ' arrival-item-clickable' : ''}" data-arrival-time="${arrival.arrivalTime}" data-schedule-deviation="${arrival.scheduleDeviation ?? 0}"${interactiveAttrs}>
-          <span class="arrival-meta">
-            <span class="arrival-line-token" style="--line-color:${arrival.lineColor};">${arrival.lineToken}</span>
-            <span class="arrival-copy">
-              <span class="arrival-vehicle">${arrival.lineName} ${getVehicleLabel()} ${arrival.vehicleId}</span>
-              <span class="arrival-destination">${copyValue('toDestination', arrival.destination)}</span>
+          <span class="arrival-row arrival-row-top">
+            <span class="arrival-meta">
+              <span class="arrival-line-token" style="--line-color:${arrival.lineColor};">${arrival.lineToken}</span>
+              <span class="arrival-destination">${arrival.destination}</span>
             </span>
+            <span class="arrival-source arrival-source-${sourceClass}">${sourceBadge}</span>
           </span>
-          <span class="arrival-side">
-            <span class="arrival-status arrival-status-${serviceTone}">${serviceStatus === 'ARR' ? copyValue('arrivingStatus') : serviceStatus === 'DELAY' ? copyValue('delayedStatus') : serviceStatus}</span>
-            <span class="arrival-time">
-              <span class="arrival-countdown">${timeStr}</span>
-              ${clockTime ? `<span class="arrival-clock">${clockTime}</span>` : ''}
-              <span class="arrival-precision">${precisionInfo}</span>
-            </span>
-            <span class="arrival-source arrival-source-${arrival.isRealtime ? 'live' : 'sched'}">${arrival.isRealtime ? copyValue('realtimeBadge') : copyValue('scheduleBadge')}</span>
+          <span class="arrival-row arrival-row-mid">
+            ${statusLabel ? `<span class="arrival-status arrival-status-${serviceTone}">${statusLabel}</span>` : ''}
+            ${clockTime ? `<span class="arrival-clock">${clockTime}</span>` : ''}
+            <span class="arrival-countdown">${timeStr}</span>
+          </span>
+          <span class="arrival-row arrival-row-bottom">
+            <span class="arrival-vehicle">${arrival.lineName} ${getVehicleLabel()} ${arrival.vehicleId}</span>
+            ${precisionInfo ? `<span class="arrival-precision">${precisionInfo}</span>` : ''}
           </span>
         </${wrapperTag}>
       `

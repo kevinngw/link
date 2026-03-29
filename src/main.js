@@ -2041,7 +2041,7 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
   updateFavoriteButton()
   const dialogStations = getDialogStations(station)
   const firstMatch = dialogStations[0]
-  if (firstMatch) addRecentStation(firstMatch.station, firstMatch.line, state.activeSystemId)
+  if (firstMatch) addRecentStation(firstMatch.station, firstMatch.line, state.activeSystemId, getActiveSystemMeta().label)
   try {
     await refreshStationDialog(station, { requestId, skipCache: true })
   } catch (e) {

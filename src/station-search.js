@@ -238,6 +238,7 @@ export function createStationSearch({
     return recents.map((recent) => ({
       key: `${recent.systemId}:${recent.lineId}:${recent.stationId}`,
       systemId: recent.systemId,
+      systemName: recent.systemName,
       lineId: recent.lineId,
       stationId: recent.stationId,
       stationName: recent.stationName,
