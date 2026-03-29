@@ -3690,6 +3690,16 @@ button.arrival-item {
   font-size: 1rem;
 }
 
+.station-dialog.is-display-mode .arrival-source {
+  font-size: 0.85rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.station-dialog.is-display-mode .arrival-clock {
+  font-size: 1.1rem;
+}
+
 @keyframes wave {
   0% {
     opacity: 0.9;
@@ -4048,6 +4058,15 @@ button.arrival-item {
 
   .station-dialog.is-display-mode .arrival-status {
     font-size: 0.78rem;
+  }
+
+  .station-dialog.is-display-mode .arrival-source {
+    font-size: 0.72rem;
+    padding: 3px 8px;
+  }
+
+  .station-dialog.is-display-mode .arrival-clock {
+    font-size: 0.82rem;
   }
 }
 
