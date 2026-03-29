@@ -2142,13 +2142,13 @@ button.train-list-item {
 /* iPhone portrait specific fixes (≤430px) */
 @media (max-width: 430px) {
   .station-dialog {
-    --dialog-max-height: calc(100dvh - 16px);
+    --dialog-max-height: calc(100dvh - 16px - var(--safe-area-top));
     width: 96vw;
     border-radius: var(--radius-lg);
   }
 
   .dialog-content {
-    padding: 12px 14px 16px;
+    padding: calc(12px + var(--safe-area-top)) 14px 16px;
   }
 
   .dialog-header {
