@@ -2021,7 +2021,9 @@ button.train-list-item {
 .train-focus-side,
 .train-queue-side {
   text-align: right;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 100px;
+  max-width: 40%;
 }
 
 .train-focus-time,
