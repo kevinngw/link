@@ -1555,7 +1555,7 @@ function getStationStopIds(station, line) {
 
 function getDialogStationTitle(station) {
   const stripDir = (s) => s.replace(/\s+(NB|SB|EB|WB)\b/gi, '')
-  const stripBay = (s) => s.replace(/\s*[-–]\s*Bay\s+\S+$/i, '')
+  const stripBay = (s) => s.replace(/\s*[-–]?\s*Bay\s+\S+$/i, '')
   const mainName = normalizeName(station.name)
   for (const line of state.lines) {
     const oppName = line.oppositeStopNames?.[station.id]
