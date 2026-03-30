@@ -6,6 +6,11 @@
       "agencyId": "40"
     },
     {
+      "id": "rapidride",
+      "name": "RapidRide",
+      "agencyId": "1"
+    },
+    {
       "id": "swift",
       "name": "Swift",
       "agencyId": "29"
