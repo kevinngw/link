@@ -875,7 +875,8 @@ function isPageRequestContextActive() {
   return document.visibilityState === 'visible'
 }
 
-const { fetchJsonWithRetry, clearQueue: clearObaQueue } = createObaClient(state)
+const obaClient = createObaClient(state)
+const { fetchJsonWithRetry, clearQueue: clearObaQueue } = obaClient
 const { buildArrivalsForLine, fetchArrivalsForStopIds, getCachedArrivalsForStation, getArrivalsForStation, mergeArrivalBuckets, getArrivalServiceStatus } = createArrivalsHelpers({
   state,
   fetchJsonWithRetry,
@@ -2052,8 +2053,24 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
       showToast(copyValue('stationRequestFailed'))
     }
     console.warn('Station refresh failed:', e)
+    // Retry once after a short delay on non-rate-limit failures
+    if (e.errorType !== 'rate-limit') {
+      setTimeout(async () => {
+        if (state.activeDialogRequest !== requestId || !dialog.open) return
+        try {
+          await refreshStationDialog(station, { requestId, skipCache: true })
+        } catch { /* auto-refresh will handle further retries */ }
+      }, 3000)
+    }
   }
 }
+
+// Re-render open station dialog when OBA background revalidation completes
+obaClient.setOnBackgroundUpdate(() => {
+  if (dialog.open && state.currentDialogStation) {
+    refreshStationDialog(state.currentDialogStation).catch(console.error)
+  }
+})
 
 if (dialogFavoriteButton) {
   dialogFavoriteButton.addEventListener('click', () => {

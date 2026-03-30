@@ -25,6 +25,7 @@ export function createObaClient(state) {
   let processing = false
   let currentController = null
   let cancelled = false
+  let onBackgroundUpdate = null
 
   function isRateLimitedPayload(payload) {
     return payload?.code === 429 || /rate limit/i.test(payload?.text ?? '')
@@ -185,7 +186,7 @@ export function createObaClient(state) {
           url,
           label,
           attempt: 0,
-          resolve: () => {}, // No-op, we already returned
+          resolve: () => { onBackgroundUpdate?.() },
           reject: () => {},
           signal,
           background: true // Mark as background request
@@ -287,5 +288,6 @@ export function createObaClient(state) {
     clearQueue,
     clearExpiredCache,
     prefetch,
+    setOnBackgroundUpdate(callback) { onBackgroundUpdate = callback },
   }
 }
