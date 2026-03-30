@@ -35,7 +35,7 @@ const SYSTEM_CONFIG = {
   rapidride: {
     id: 'rapidride',
     name: 'RapidRide',
-    gtfsUrl: 'https://metro.kingcounty.gov/GTFS/google_transit.zip',
+    gtfsUrl: 'https://www.soundtransit.org/GTFS-KCM/google_transit.zip',
     agencyId: '1',
     lineOrder: ['A Line', 'B Line', 'C Line', 'D Line', 'E Line', 'F Line', 'G Line', 'H Line'],
     lineFilter(route) {
