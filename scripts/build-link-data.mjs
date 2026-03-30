@@ -222,14 +222,26 @@ async function buildSystemFromOBA(systemConfig) {
   }
 }
 
-async function loadZipBuffer(url) {
-  const response = await fetch(url)
-
-  if (!response.ok) {
-    throw new Error(`Failed to download GTFS: ${response.status} ${response.statusText}`)
+async function loadZipBuffer(url, retries = 4) {
+  let lastError
+  for (let attempt = 0; attempt < retries; attempt++) {
+    if (attempt > 0) {
+      const delayMs = 3000 * attempt
+      console.warn(`Retrying GTFS download (attempt ${attempt + 1}/${retries}) after ${delayMs}ms...`)
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+    try {
+      const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(`Failed to download GTFS: ${response.status} ${response.statusText}`)
+      }
+      return Buffer.from(await response.arrayBuffer())
+    } catch (error) {
+      lastError = error
+      console.warn(`GTFS download attempt ${attempt + 1} failed: ${error.cause?.code ?? error.message}`)
+    }
   }
-
-  return Buffer.from(await response.arrayBuffer())
+  throw lastError
 }
 
 function readCsv(zip, entryName) {
