@@ -2196,7 +2196,10 @@ const overlayDialogs = createOverlayDialogs({
   onStationClick: (stationId, lineId) => {
     const line = state.lines.find((l) => l.id === lineId)
     const station = line?.stops?.find((s) => s.id === stationId)
-    if (station) showStationDialog(station)
+    if (station) {
+      closeTrainDialog()
+      showStationDialog(station)
+    }
   },
 })
 
