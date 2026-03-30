@@ -637,8 +637,7 @@ async function main() {
       if (hasCached) {
         console.warn(`Warning: ${gtfsConfigs[i].id} build failed (${result.reason.cause?.code ?? result.reason.message}), using cached data`)
       } else {
-        console.error(`Error: ${gtfsConfigs[i].id} build failed with no cached fallback:`, result.reason.message)
-        process.exitCode = 1
+        console.warn(`Warning: ${gtfsConfigs[i].id} build failed with no cached fallback (${result.reason.cause?.code ?? result.reason.message}), skipping`)
       }
     }
   }
@@ -651,15 +650,18 @@ async function main() {
       if (hasCached) {
         console.warn(`Warning: ${obaConfigs[i].id} build failed (${result.reason.cause?.code ?? result.reason.message}), using cached data`)
       } else {
-        console.error(`Error: ${obaConfigs[i].id} build failed with no cached fallback:`, result.reason.message)
-        process.exitCode = 1
+        console.warn(`Warning: ${obaConfigs[i].id} build failed with no cached fallback (${result.reason.cause?.code ?? result.reason.message}), skipping`)
       }
     }
   }
 
-  if (systems.length) {
-    await writeOutputFile(systems)
+  if (!systems.length) {
+    console.error('Error: all system builds failed, no data to write')
+    process.exitCode = 1
+    return
   }
+
+  await writeOutputFile(systems)
 }
 
 main()
