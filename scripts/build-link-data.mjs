@@ -496,7 +496,7 @@ async function buildSystem(systemConfig) {
           config,
         }))
       : routes
-          .filter((route) => systemConfig.lineFilter(route))
+          .filter((route) => route.agency_id === systemConfig.agencyId && systemConfig.lineFilter(route))
           .sort(
             (left, right) =>
               systemConfig.lineOrder.indexOf(left.route_short_name) - systemConfig.lineOrder.indexOf(right.route_short_name),
