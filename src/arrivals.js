@@ -90,8 +90,9 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
     const dedupedStopIds = [...new Set(stopIds)]
     const results = []
     const arrivals = []
-    for (let index = 0; index < dedupedStopIds.length; index += concurrency.value) {
-      const batch = dedupedStopIds.slice(index, index + concurrency.value)
+    for (let index = 0; index < dedupedStopIds.length;) {
+      const batchSize = concurrency.value
+      const batch = dedupedStopIds.slice(index, index + batchSize)
       const batchResults = await Promise.allSettled(
         batch.map((stopId, i) => {
           const jitter = i === 0 ? 0 : Math.random() * 50
@@ -99,7 +100,8 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
         })
       )
       results.push(...batchResults)
-      
+      index += batch.length
+
       // Adjust concurrency based on batch success rate
       const successCount = batchResults.filter(r => r.status === 'fulfilled').length
       concurrency.adjust(successCount === batch.length)

@@ -197,18 +197,21 @@ export function createObaClient(state) {
     }
 
     // Check if there's already a pending request for this URL
-    const existingItem = queue.find((item) => item.url === url)
-    if (existingItem) {
-      return new Promise((resolve, reject) => {
-        if (!existingItem.waiting) existingItem.waiting = []
-        existingItem.waiting.push({ resolve, reject })
+    // Skip dedup when forceFresh — don't piggyback on background/stale requests
+    if (!forceFresh) {
+      const existingItem = queue.find((item) => item.url === url)
+      if (existingItem) {
+        return new Promise((resolve, reject) => {
+          if (!existingItem.waiting) existingItem.waiting = []
+          existingItem.waiting.push({ resolve, reject })
 
-        if (signal) {
-          signal.addEventListener('abort', () => {
-            reject(new Error('Request cancelled'))
-          }, { once: true })
-        }
-      })
+          if (signal) {
+            signal.addEventListener('abort', () => {
+              reject(new Error('Request cancelled'))
+            }, { once: true })
+          }
+        })
+      }
     }
 
     return new Promise((resolve, reject) => {
