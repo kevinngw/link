@@ -69,6 +69,7 @@ const state = {
   currentInsightsDetailType: '',
   currentInsightsLineId: '',
   dialogAbortController: null,
+  dialogFreshFetchActive: false,
 
   nearbyStations: [],
   highlightedNearbyStationIndex: 0,
@@ -875,7 +876,8 @@ function isPageRequestContextActive() {
   return document.visibilityState === 'visible'
 }
 
-const { fetchJsonWithRetry, clearQueue: clearObaQueue } = createObaClient(state)
+const obaClient = createObaClient(state)
+const { fetchJsonWithRetry, clearQueue: clearObaQueue } = obaClient
 const { buildArrivalsForLine, fetchArrivalsForStopIds, getCachedArrivalsForStation, getArrivalsForStation, mergeArrivalBuckets, getArrivalServiceStatus } = createArrivalsHelpers({
   state,
   fetchJsonWithRetry,
@@ -1548,7 +1550,6 @@ function getStationStopIds(station, line) {
   const baseId = station.id.replace(/-T\d+$/, '')
   candidates.add(baseId.startsWith(`${line.agencyId}_`) ? baseId : `${line.agencyId}_${baseId}`)
 
-  console.debug(`[getStationStopIds] station=${station.id} aliases=${JSON.stringify([...aliases])} candidates=${JSON.stringify([...candidates])}`)
   return [...candidates]
 }
 
@@ -1936,6 +1937,9 @@ function canRefreshStationDialog(station, requestId = state.activeDialogRequest)
 async function refreshStationDialog(station, { requestId = state.activeDialogRequest, skipCache = false } = {}) {
   if (!station) return
 
+  // Don't interrupt a fresh (forceFresh) fetch with a lower-priority background refresh
+  if (!skipCache && state.dialogFreshFetchActive) return
+
   const dialogStations = getDialogStations(station)
 
   // Phase 1: render stale cached arrivals immediately (zero wait) - skip for fresh opens
@@ -1982,40 +1986,35 @@ async function refreshStationDialog(station, { requestId = state.activeDialogReq
   }
   
   // Single fetch for all unique stop IDs
-  console.debug(`[refreshStationDialog] Fetching arrivals for stopIds:`, [...allStopIds])
+  if (skipCache) state.dialogFreshFetchActive = true
   let arrivalFeed = []
   try {
-    arrivalFeed = await fetchArrivalsForStopIds([...allStopIds], signal)
-    console.debug(`[refreshStationDialog] Got ${arrivalFeed.length} arrivals from ${allStopIds.size} stops`)
+    arrivalFeed = await fetchArrivalsForStopIds([...allStopIds], signal, skipCache)
   } catch (error) {
     if (error.message?.includes('cancelled') || error.name === 'AbortError') {
-      console.debug(`[refreshStationDialog] Request cancelled for ${station.name}`)
       return
     }
     console.warn(`Failed to fetch arrivals for station ${station.name}:`, error)
+  } finally {
+    if (skipCache) state.dialogFreshFetchActive = false
   }
   
   // Safeguard: abort if station changed during fetch
   if (state.currentDialogStationId !== station.id) {
-    console.debug(`[refreshStationDialog] Station changed during fetch, aborting render`)
     return
   }
   
   if (!isActiveStationDialogRequest(station, requestId)) {
-    console.debug(`[refreshStationDialog] Request ID mismatch, aborting render`)
     return
   }
   
   // Build arrivals for each line using the shared feed
   const arrivalsByLine = dialogStations.map(({ station: matchedStation, line }) => {
     const stopIds = lineStopIdMap.get(line)
-    const result = buildArrivalsForLine(arrivalFeed, line, stopIds)
-    console.debug(`[refreshStationDialog] Line ${line.name}: nb=${result.nb.length}, sb=${result.sb.length}, stopIds=`, stopIds)
-    return result
+    return buildArrivalsForLine(arrivalFeed, line, stopIds)
   })
 
   const merged = mergeArrivalBuckets(arrivalsByLine)
-  console.debug(`[refreshStationDialog] Merged: nb=${merged.nb.length}, sb=${merged.sb.length}`)
   renderArrivalLists(merged)
   renderDialogDirectionView()
   syncDialogTitleMarquee()
@@ -2052,8 +2051,28 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
       showToast(copyValue('stationRequestFailed'))
     }
     console.warn('Station refresh failed:', e)
+    // Retry once after a short delay on non-rate-limit failures
+    if (e.errorType !== 'rate-limit') {
+      setTimeout(async () => {
+        if (state.activeDialogRequest !== requestId || !dialog.open) return
+        try {
+          await refreshStationDialog(station, { requestId, skipCache: true })
+        } catch { /* auto-refresh will handle further retries */ }
+      }, 3000)
+    }
   }
 }
+
+// Re-render open station dialog when OBA background revalidation completes (debounced)
+let backgroundUpdateTimer = null
+obaClient.setOnBackgroundUpdate(() => {
+  if (dialog.open && state.currentDialogStation) {
+    clearTimeout(backgroundUpdateTimer)
+    backgroundUpdateTimer = setTimeout(() => {
+      refreshStationDialog(state.currentDialogStation).catch(console.error)
+    }, 500)
+  }
+})
 
 if (dialogFavoriteButton) {
   dialogFavoriteButton.addEventListener('click', () => {
