@@ -621,24 +621,45 @@ async function writeOutputFile(systems) {
 
 async function main() {
   const allConfigs = Object.values(SYSTEM_CONFIG)
-  const gtfsSystems = await Promise.all(
-    allConfigs.filter((c) => !c.useOBA).map((c) => buildSystem(c)),
-  )
-  const obaSystems = []
-  for (const config of allConfigs.filter((c) => c.useOBA)) {
-    obaSystems.push(await buildSystemFromOBA(config))
-  }
-  const systems = [...gtfsSystems, ...obaSystems]
+  const gtfsConfigs = allConfigs.filter((c) => !c.useOBA)
+  const obaConfigs = allConfigs.filter((c) => c.useOBA)
 
-  await writeOutputFile(systems)
+  const gtfsResults = await Promise.allSettled(gtfsConfigs.map((c) => buildSystem(c)))
+  const obaResults = await Promise.allSettled(obaConfigs.map((c) => buildSystemFromOBA(c)))
+
+  const systems = []
+  for (const [i, result] of gtfsResults.entries()) {
+    if (result.status === 'fulfilled') {
+      systems.push(result.value)
+    } else {
+      const cached = getSystemFilePath(gtfsConfigs[i].id)
+      const hasCached = await fs.access(cached).then(() => true, () => false)
+      if (hasCached) {
+        console.warn(`Warning: ${gtfsConfigs[i].id} build failed (${result.reason.cause?.code ?? result.reason.message}), using cached data`)
+      } else {
+        console.error(`Error: ${gtfsConfigs[i].id} build failed with no cached fallback:`, result.reason.message)
+        process.exitCode = 1
+      }
+    }
+  }
+  for (const [i, result] of obaResults.entries()) {
+    if (result.status === 'fulfilled') {
+      systems.push(result.value)
+    } else {
+      const cached = getSystemFilePath(obaConfigs[i].id)
+      const hasCached = await fs.access(cached).then(() => true, () => false)
+      if (hasCached) {
+        console.warn(`Warning: ${obaConfigs[i].id} build failed (${result.reason.cause?.code ?? result.reason.message}), using cached data`)
+      } else {
+        console.error(`Error: ${obaConfigs[i].id} build failed with no cached fallback:`, result.reason.message)
+        process.exitCode = 1
+      }
+    }
+  }
+
+  if (systems.length) {
+    await writeOutputFile(systems)
+  }
 }
 
-main().catch(async (error) => {
-  const indexExists = await fs.access(INDEX_FILE).then(() => true, () => false)
-  if (indexExists) {
-    console.warn(`Warning: data build failed (${error.cause?.code ?? error.message}), using cached data files`)
-  } else {
-    console.error(error)
-    process.exitCode = 1
-  }
-})
+main()

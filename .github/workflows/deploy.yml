@@ -31,6 +31,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Restore cached GTFS data
+        uses: actions/cache@v4
+        with:
+          path: |
+            public/pulse-data.json
+            public/pulse-data-*.json
+          key: gtfs-data-${{ github.ref_name }}-${{ hashFiles('scripts/build-link-data.mjs') }}
+          restore-keys: |
+            gtfs-data-${{ github.ref_name }}-
+            gtfs-data-
+
       - name: Set base path
         id: base
         run: |
