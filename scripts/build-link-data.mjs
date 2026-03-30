@@ -35,7 +35,7 @@ const SYSTEM_CONFIG = {
   rapidride: {
     id: 'rapidride',
     name: 'RapidRide',
-    gtfsUrl: 'https://www.soundtransit.org/GTFS-KCM/google_transit.zip',
+    gtfsUrl: 'https://gtfs.sound.obaweb.org/prod/gtfs_puget_sound_consolidated.zip',
     agencyId: '1',
     lineOrder: ['A Line', 'B Line', 'C Line', 'D Line', 'E Line', 'F Line', 'G Line', 'H Line'],
     lineFilter(route) {
