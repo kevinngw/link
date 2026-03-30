@@ -69,9 +69,9 @@ export function getStatusTone(status) {
 }
 
 export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationStopIds, copyValue }) {
-  async function fetchArrivalsForStop(stopId, signal) {
+  async function fetchArrivalsForStop(stopId, signal, forceFresh = false) {
     const url = `${OBA_BASE_URL}/arrivals-and-departures-for-stop/${stopId}.json?key=${OBA_KEY}&minutesAfter=${ARRIVALS_LOOKAHEAD_MINUTES}`
-    const payload = await fetchJsonWithRetry(url, 'Arrivals', signal)
+    const payload = await fetchJsonWithRetry(url, 'Arrivals', signal, forceFresh)
     if (payload.code !== 200) {
       throw new Error(payload.text || `Arrivals request failed for ${stopId}`)
     }
@@ -86,7 +86,7 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
     return arrivals
   }
 
-  async function fetchArrivalsForStopIds(stopIds, signal) {
+  async function fetchArrivalsForStopIds(stopIds, signal, forceFresh = false) {
     const dedupedStopIds = [...new Set(stopIds)]
     const results = []
     const arrivals = []
@@ -95,7 +95,7 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
       const batchResults = await Promise.allSettled(
         batch.map((stopId, i) => {
           const jitter = i === 0 ? 0 : Math.random() * 50
-          return new Promise(r => setTimeout(r, jitter)).then(() => fetchArrivalsForStop(stopId, signal))
+          return new Promise(r => setTimeout(r, jitter)).then(() => fetchArrivalsForStop(stopId, signal, forceFresh))
         })
       )
       results.push(...batchResults)

@@ -1986,7 +1986,7 @@ async function refreshStationDialog(station, { requestId = state.activeDialogReq
   console.debug(`[refreshStationDialog] Fetching arrivals for stopIds:`, [...allStopIds])
   let arrivalFeed = []
   try {
-    arrivalFeed = await fetchArrivalsForStopIds([...allStopIds], signal)
+    arrivalFeed = await fetchArrivalsForStopIds([...allStopIds], signal, skipCache)
     console.debug(`[refreshStationDialog] Got ${arrivalFeed.length} arrivals from ${allStopIds.size} stops`)
   } catch (error) {
     if (error.message?.includes('cancelled') || error.name === 'AbortError') {
