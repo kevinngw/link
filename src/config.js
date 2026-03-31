@@ -5,6 +5,7 @@ export const OBA_KEY = (import.meta.env.VITE_OBA_KEY || 'TEST').trim() || 'TEST'
 export const IS_PUBLIC_TEST_KEY = OBA_KEY === 'TEST'
 export const OBA_MAX_RETRIES = 3
 export const COMPACT_LAYOUT_BREAKPOINT = 1100
+export const SHARE_BASE_URL = (import.meta.env.VITE_SHARE_BASE_URL || 'https://kevinngw.github.io/link/').trim()
 
 const _TEST_PROFILE = {
   ARRIVALS_CACHE_TTL_MS: 120_000,

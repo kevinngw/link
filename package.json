@@ -4,10 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "predev": "node scripts/build-link-data.mjs",
     "dev": "vite",
-    "prebuild": "node scripts/build-link-data.mjs",
-    "build": "vite build",
+    "dev:refresh": "npm run refresh:data && vite",
+    "refresh:data": "node scripts/build-link-data.mjs",
+    "build": "npm run build:web",
+    "build:web": "VITE_TARGET=web vite build",
+    "build:native": "VITE_TARGET=native vite build",
+    "cap:sync": "npm run build:native && npx cap sync ios",
+    "ios:open": "npx cap open ios",
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",
@@ -15,12 +19,19 @@
     "test:run": "vitest run"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.0.0",
     "@vitest/ui": "^4.1.0",
     "jsdom": "^29.0.0",
     "vite": "^7.3.1",
     "vitest": "^4.1.0"
   },
   "dependencies": {
+    "@capacitor/clipboard": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/geolocation": "^8.0.0",
+    "@capacitor/ios": "^8.0.0",
+    "@capacitor/preferences": "^8.0.0",
+    "@capacitor/share": "^8.0.0",
     "adm-zip": "^0.5.16",
     "csv-parse": "^6.1.0",
     "vite-plugin-pwa": "^1.2.0"

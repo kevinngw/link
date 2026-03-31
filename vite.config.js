@@ -1,7 +1,9 @@
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
-const base = process.env.VITE_BASE ?? '/link/'
+const target = process.env.VITE_TARGET ?? 'web'
+const isNativeBuild = target === 'native'
+const base = process.env.VITE_BASE ?? (isNativeBuild ? '/' : '/link/')
 
 export default defineConfig({
   base,

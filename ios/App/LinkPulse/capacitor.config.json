@@ -1,0 +1,19 @@
+{
+	"appId": "io.kevinngw.linkpulse",
+	"appName": "LinkPulse",
+	"webDir": "dist",
+	"bundledWebRuntime": false,
+	"server": {
+		"androidScheme": "https"
+	},
+	"ios": {
+		"contentInset": "automatic",
+		"backgroundColor": "#08141f"
+	},
+	"packageClassList": [
+		"ClipboardPlugin",
+		"GeolocationPlugin",
+		"PreferencesPlugin",
+		"SharePlugin"
+	]
+}

@@ -1,6 +1,6 @@
 import './style.css'
 import { registerSW } from 'virtual:pwa-register'
-import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
+import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, SHARE_BASE_URL, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
 import { clamp, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
@@ -19,9 +19,12 @@ import { applySystemState, bootstrapApp, loadStaticData, loadSystemDataById } fr
 import { clearDialogParams, clearStationParam, getPageFromUrl, isOptionalNavigationEnabled, setAlertDialogParams, setInsightsDialogParams, setPageParam, setStationParam, setStationSearchParams, setSystemParam, setTrainDialogParams } from './url-state'
 import { createToast } from './toast'
 import { createVehicleDisplay } from './vehicle-display'
-import { createStationSearch } from './station-search'
-import { createFavoritesManager } from './favorites'
-import { createRecentStationsManager } from './recent-stations'
+import { RECENT_SEARCHES_KEY, createStationSearch } from './station-search'
+import { FAVORITES_STORAGE_KEY, createFavoritesManager } from './favorites'
+import { RECENT_STATIONS_KEY, createRecentStationsManager } from './recent-stations'
+import { shouldRegisterServiceWorker } from './native/platform'
+import { initializeAppStorage, getStoredString, setStoredString } from './native/storage'
+import { copyTextToClipboard, shareTextContent } from './native/share'
 
 const state = {
   fetchedAt: '',
@@ -91,27 +94,33 @@ function closeDialogAnimated(dialogEl) {
   }, { once: true })
 }
 
-const updateSW = registerSW({
-  immediate: true,
-  onNeedRefresh() {
-    updateSW(true)
-  },
-})
+if (shouldRegisterServiceWorker()) {
+  const updateSW = registerSW({
+    immediate: true,
+    onNeedRefresh() {
+      updateSW(true)
+    },
+  })
+}
 
 document.querySelector('#app').innerHTML = `
   <main class="screen">
     <header class="screen-header">
-      <div>
+      <div class="screen-heading">
         <p id="screen-kicker" class="screen-kicker">SEATTLE LIGHT RAIL</p>
         <h1 id="screen-title">LINK PULSE</h1>
       </div>
-      <div class="screen-pills">
-        <button id="station-search-toggle" class="theme-toggle station-search-toggle" type="button" aria-label="Open station search">Search</button>
-        <button id="language-toggle" class="theme-toggle" type="button" aria-label="Switch to Chinese">中文</button>
-        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">Light</button>
-        <button id="status-pill" class="status-pill" type="button" aria-label="Refresh data">SYNC</button>
-        <span id="current-time" class="dot-matrix-clock" aria-label="Current time">--:--</span>
-        <p id="updated-at" class="status-pill updated-at-pill">Waiting for snapshot</p>
+      <div class="screen-toolbar">
+        <div class="screen-actions-primary">
+          <button id="station-search-toggle" class="theme-toggle station-search-toggle" type="button" aria-label="Open station search">Search</button>
+          <button id="language-toggle" class="theme-toggle" type="button" aria-label="Switch to Chinese">中文</button>
+          <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">Light</button>
+          <button id="status-pill" class="status-pill" type="button" aria-label="Refresh data">SYNC</button>
+        </div>
+        <div class="screen-actions-secondary">
+          <span id="current-time" class="dot-matrix-clock" aria-label="Current time">--:--</span>
+          <p id="updated-at" class="status-pill updated-at-pill">Waiting for snapshot</p>
+        </div>
       </div>
     </header>
     <div class="switcher-stack">
@@ -977,13 +986,13 @@ function getDialogDirectionSummary(directionSymbol, arrivalsBucket = [], station
 }
 
 function getPreferredTheme() {
-  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
+  const storedTheme = getStoredString(THEME_STORAGE_KEY)
   if (storedTheme === 'light' || storedTheme === 'dark') return storedTheme
   return 'dark'
 }
 
 function getPreferredLanguage() {
-  const storedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY)
+  const storedLanguage = getStoredString(LANGUAGE_STORAGE_KEY)
   if (storedLanguage === 'en' || storedLanguage === 'zh-CN') return storedLanguage
 
   const browserLanguage = navigator.language?.toLowerCase() ?? ''
@@ -993,13 +1002,13 @@ function getPreferredLanguage() {
 function setTheme(theme) {
   state.theme = theme
   document.documentElement.dataset.theme = theme
-  window.localStorage.setItem(THEME_STORAGE_KEY, theme)
+  void setStoredString(THEME_STORAGE_KEY, theme).catch(() => {})
 }
 
 function setLanguage(language) {
   state.language = language === 'zh-CN' ? 'zh-CN' : 'en'
   document.documentElement.lang = state.language
-  window.localStorage.setItem(LANGUAGE_STORAGE_KEY, state.language)
+  void setStoredString(LANGUAGE_STORAGE_KEY, state.language).catch(() => {})
 }
 
 function updateViewportState() {
@@ -1444,22 +1453,25 @@ async function shareArrivals() {
   }
   
   // Add app link
-  const baseUrl = window.location.origin + window.location.pathname
-  const stationParam = encodeURIComponent(station.name.toLowerCase().replace(/\s+/g, '-'))
-  shareText += `\n${baseUrl}?system=${state.activeSystemId}&station=${stationParam}`
+  const stationParam = station.name.toLowerCase().replace(/\s+/g, '-')
+  const shareUrl = new URL(SHARE_BASE_URL)
+  shareUrl.searchParams.set('system', state.activeSystemId)
+  shareUrl.searchParams.set('station', stationParam)
+  shareText += `\n${shareUrl.toString()}`
   
   try {
-    if (navigator.share) {
-      await navigator.share({
-        title: `${station.name} - ${getActiveSystemMeta().title}`,
-        text: shareText,
-      })
-      showToast(copyValue('shareSuccess'))
-    } else if (navigator.clipboard) {
-      await navigator.clipboard.writeText(shareText)
+    const result = await shareTextContent({
+      title: `${station.name} - ${getActiveSystemMeta().title}`,
+      text: shareText,
+      url: shareUrl.toString(),
+    })
+    if (result.method === 'clipboard') {
       showToast(copyValue('shareCopied'))
+    } else if (result.method !== 'unavailable') {
+      showToast(copyValue('shareSuccess'))
     } else {
-      showToast(copyValue('shareFailed'))
+      const copied = await copyTextToClipboard(shareText)
+      showToast(copyValue(copied ? 'shareCopied' : 'shareFailed'))
     }
   } catch (err) {
     if (err.name !== 'AbortError') {
@@ -2645,6 +2657,17 @@ const handleViewportResize = () => {
 state.activeTab = getPageFromUrl()
 const init = bootstrapApp({
   state,
+  initializeStorage: () => initializeAppStorage({
+    persistentKeys: [
+      THEME_STORAGE_KEY,
+      LANGUAGE_STORAGE_KEY,
+      FAVORITES_STORAGE_KEY,
+      RECENT_SEARCHES_KEY,
+    ],
+    sessionKeys: [
+      RECENT_STATIONS_KEY,
+    ],
+  }),
   getPreferredLanguage,
   getPreferredTheme,
   handleViewportResize,

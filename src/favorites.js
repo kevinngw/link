@@ -1,23 +1,20 @@
+import { getStoredJSON, setStoredJSON } from './native/storage'
+
 const FAVORITES_STORAGE_KEY = 'link-pulse-favorites'
 const FAVORITES_MAX_COUNT = 20
+
+export { FAVORITES_STORAGE_KEY }
 
 /**
  * Create favorites manager
  */
 export function createFavoritesManager({ state, showStationDialog, switchSystem, showToast }) {
   function getFavorites() {
-    try {
-      const raw = window.localStorage.getItem(FAVORITES_STORAGE_KEY)
-      return raw ? JSON.parse(raw) : []
-    } catch {
-      return []
-    }
+    return getStoredJSON(FAVORITES_STORAGE_KEY, { fallback: [] })
   }
 
   function saveFavorites(favorites) {
-    try {
-      window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites.slice(0, FAVORITES_MAX_COUNT)))
-    } catch {}
+    void setStoredJSON(FAVORITES_STORAGE_KEY, favorites.slice(0, FAVORITES_MAX_COUNT)).catch(() => {})
   }
 
   function isFavorite(stationId, lineId, systemId) {
