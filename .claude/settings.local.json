@@ -60,7 +60,12 @@
       "Bash(git -C /Users/kevinwu/Workspaces/link log --oneline -20)",
       "Bash(git -C /Users/kevinwu/Workspaces/link log --oneline -1)",
       "Bash(git -C /Users/kevinwu/Workspaces/link show --stat)",
-      "Bash(git -C /Users/kevinwu/Workspaces/link show 9fe1df4 --stat)"
+      "Bash(git -C /Users/kevinwu/Workspaces/link show 9fe1df4 --stat)",
+      "Bash(find /Users/kevinwu/Workspace/link/.claude/worktrees/pensive-banzai -maxdepth 2 -type f -name package.json -o -name *.config.* -o -name tsconfig.json -o -name .env*)",
+      "Bash(npm install:*)",
+      "Bash(VITE_CAPACITOR=true VITE_BASE=/ npx vite build)",
+      "Bash(npx cap:*)",
+      "Bash(git branch:*)"
     ]
   }
 }
