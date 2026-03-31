@@ -1,6 +1,7 @@
 import { normalizeName, formatDistanceMeters, getDistanceMeters } from './utils'
 import { isNative } from './native/platform'
 import { getCurrentPosition } from './native/geolocation'
+import { getStoredJSON, setStoredJSON } from './native/storage'
 
 const RECENT_SEARCHES_KEY = 'link-pulse-recent-searches'
 const RECENT_SEARCHES_MAX = 5
@@ -48,10 +49,7 @@ export function createStationSearch({
   }
 
   function getRecentSearches() {
-    try {
-      const raw = window.localStorage.getItem(RECENT_SEARCHES_KEY)
-      return raw ? JSON.parse(raw) : []
-    } catch { return [] }
+    return getStoredJSON(RECENT_SEARCHES_KEY, { fallback: [] })
   }
 
   function addRecentSearch(result) {
@@ -61,7 +59,7 @@ export function createStationSearch({
       { key, systemId: result.systemId, lineId: result.lineId, stationId: result.stationId, stationName: result.stationName, lineName: result.lineName, lineColor: result.lineColor, systemName: result.systemName },
       ...recents.filter((item) => item.key !== key),
     ].slice(0, RECENT_SEARCHES_MAX)
-    try { window.localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated)) } catch {}
+    setStoredJSON(RECENT_SEARCHES_KEY, updated)
   }
 
   function highlightMatch(text, query) {

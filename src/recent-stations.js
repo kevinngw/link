@@ -1,3 +1,5 @@
+import { getStoredJSON, setStoredJSON, removeStoredItem } from './native/storage'
+
 const RECENT_STATIONS_KEY = 'link-pulse-recent-stations'
 const RECENT_STATIONS_MAX_COUNT = 10
 
@@ -6,18 +8,11 @@ const RECENT_STATIONS_MAX_COUNT = 10
  */
 export function createRecentStationsManager() {
   function getRecentStations() {
-    try {
-      const raw = window.sessionStorage.getItem(RECENT_STATIONS_KEY)
-      return raw ? JSON.parse(raw) : []
-    } catch {
-      return []
-    }
+    return getStoredJSON(RECENT_STATIONS_KEY, { scope: 'session', fallback: [] })
   }
 
   function saveRecentStations(stations) {
-    try {
-      window.sessionStorage.setItem(RECENT_STATIONS_KEY, JSON.stringify(stations.slice(0, RECENT_STATIONS_MAX_COUNT)))
-    } catch {}
+    setStoredJSON(RECENT_STATIONS_KEY, stations.slice(0, RECENT_STATIONS_MAX_COUNT), { scope: 'session' })
   }
 
   function addRecentStation(station, line, systemId, systemName) {
@@ -45,9 +40,7 @@ export function createRecentStationsManager() {
   }
 
   function clearRecentStations() {
-    try {
-      window.sessionStorage.removeItem(RECENT_STATIONS_KEY)
-    } catch {}
+    removeStoredItem(RECENT_STATIONS_KEY, { scope: 'session' })
   }
 
   return {

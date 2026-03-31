@@ -3,6 +3,7 @@ import { isNative } from './native/platform'
 import { lightImpact } from './native/haptics'
 import { hideSplashScreen } from './native/splash'
 import { getCurrentPosition } from './native/geolocation'
+import { initializeAppStorage, getStoredString, setStoredString } from './native/storage'
 import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
@@ -984,13 +985,13 @@ function getDialogDirectionSummary(directionSymbol, arrivalsBucket = [], station
 }
 
 function getPreferredTheme() {
-  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
+  const storedTheme = getStoredString(THEME_STORAGE_KEY)
   if (storedTheme === 'light' || storedTheme === 'dark') return storedTheme
   return 'dark'
 }
 
 function getPreferredLanguage() {
-  const storedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY)
+  const storedLanguage = getStoredString(LANGUAGE_STORAGE_KEY)
   if (storedLanguage === 'en' || storedLanguage === 'zh-CN') return storedLanguage
 
   const browserLanguage = navigator.language?.toLowerCase() ?? ''
@@ -1000,13 +1001,13 @@ function getPreferredLanguage() {
 function setTheme(theme) {
   state.theme = theme
   document.documentElement.dataset.theme = theme
-  window.localStorage.setItem(THEME_STORAGE_KEY, theme)
+  setStoredString(THEME_STORAGE_KEY, theme)
 }
 
 function setLanguage(language) {
   state.language = language === 'zh-CN' ? 'zh-CN' : 'en'
   document.documentElement.lang = state.language
-  window.localStorage.setItem(LANGUAGE_STORAGE_KEY, state.language)
+  setStoredString(LANGUAGE_STORAGE_KEY, state.language)
 }
 
 function updateViewportState() {
@@ -2651,6 +2652,13 @@ const handleViewportResize = () => {
 }
 
 state.activeTab = getPageFromUrl()
+
+// Pre-warm storage cache before first read
+await initializeAppStorage({
+  persistentKeys: ['link-pulse-favorites', 'link-pulse-recent-searches', THEME_STORAGE_KEY, LANGUAGE_STORAGE_KEY],
+  sessionKeys: ['link-pulse-recent-stations'],
+})
+
 const init = bootstrapApp({
   state,
   getPreferredLanguage,
