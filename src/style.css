@@ -4205,6 +4205,10 @@ button.arrival-item {
 }
 
 dialog[open] {
+  animation: none;
+}
+
+dialog[open] > .dialog-content {
   animation: dialogIn var(--duration-slow) var(--ease-out) both;
 }
 
@@ -4213,6 +4217,10 @@ dialog[open]::backdrop {
 }
 
 dialog.is-closing {
+  animation: none;
+}
+
+dialog.is-closing > .dialog-content {
   animation: dialogOut var(--duration-normal) var(--ease-in-out) both;
 }
 
@@ -4839,6 +4847,20 @@ dialog.is-closing::backdrop {
     margin: 0;
     box-sizing: border-box;
     transform: translateX(-50%);
+  }
+
+  .station-dialog > .dialog-content {
+    padding: 10px 12px calc(16px + var(--safe-area-bottom));
+  }
+
+  .station-dialog .dialog-header {
+    gap: 8px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+  }
+
+  .station-dialog .dialog-service-summary {
+    margin-top: 2px;
   }
 
   .train-dialog {
