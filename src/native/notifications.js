@@ -1,43 +1,94 @@
 import { isNative } from './platform'
 
-let LocalNotifications = null
+let notificationsPlugin = null
 
 async function getPlugin() {
-  if (!LocalNotifications) {
+  if (!notificationsPlugin) {
     const mod = await import('@capacitor/local-notifications')
-    LocalNotifications = mod.LocalNotifications
+    notificationsPlugin = mod.LocalNotifications
   }
-  return LocalNotifications
+  return notificationsPlugin
 }
 
-export async function requestNotificationPermission() {
-  if (!isNative()) return false
-  const plugin = await getPlugin()
-  const { display } = await plugin.requestPermissions()
-  return display === 'granted'
+function createNotificationId(seed) {
+  let hash = 0
+  const normalized = String(seed)
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash = Math.imul(31, hash) + normalized.charCodeAt(index) | 0
+  }
+  return Math.max(1, Math.abs(hash))
 }
 
-export async function scheduleArrivalAlert(stationName, lineName, etaMinutes) {
-  if (!isNative()) return
-  const plugin = await getPlugin()
+export function canScheduleLocalNotifications() {
+  return isNative()
+}
 
-  const { display } = await plugin.checkPermissions()
-  if (display !== 'granted') {
-    const result = await plugin.requestPermissions()
-    if (result.display !== 'granted') return
+export async function scheduleArrivalAlert({
+  stationName = '',
+  lineName = '',
+  destination = '',
+  vehicleId = '',
+  arrivalTimeMs,
+  leadSeconds = 60,
+  title = '',
+  body = '',
+} = {}) {
+  if (!canScheduleLocalNotifications()) {
+    return { status: 'unavailable' }
   }
 
-  const triggerMs = Math.max((etaMinutes - 1) * 60 * 1000, 5000)
+  if (!Number.isFinite(arrivalTimeMs)) {
+    return { status: 'invalid' }
+  }
 
-  await plugin.schedule({
-    notifications: [
-      {
-        id: Date.now(),
-        title: `${lineName} arriving soon`,
-        body: `Train arriving at ${stationName} in ~1 minute`,
-        schedule: { at: new Date(Date.now() + triggerMs) },
-        sound: 'default',
-      },
-    ],
-  })
+  try {
+    const plugin = await getPlugin()
+
+    let permissions = await plugin.checkPermissions()
+    if (permissions.display !== 'granted') {
+      permissions = await plugin.requestPermissions()
+    }
+
+    if (permissions.display !== 'granted') {
+      return { status: 'denied' }
+    }
+
+    const now = Date.now()
+    const triggerAtMs = Math.max(arrivalTimeMs - (leadSeconds * 1000), now + 5000)
+    const notificationTitle = title || `${lineName || 'Transit'} arriving soon`
+    const notificationBody = body || (
+      destination
+        ? `${destination} is due at ${stationName || 'your stop'} in about one minute.`
+        : `${lineName || 'Transit'} is due at ${stationName || 'your stop'} in about one minute.`
+    )
+
+    await plugin.schedule({
+      notifications: [
+        {
+          id: createNotificationId(`${stationName}|${lineName}|${vehicleId}|${arrivalTimeMs}`),
+          title: notificationTitle,
+          body: notificationBody,
+          schedule: { at: new Date(triggerAtMs) },
+          sound: 'default',
+          extra: {
+            stationName,
+            lineName,
+            destination,
+            vehicleId,
+            arrivalTimeMs,
+          },
+        },
+      ],
+    })
+
+    return {
+      status: 'scheduled',
+      triggerAtMs,
+    }
+  } catch (error) {
+    return {
+      status: 'failed',
+      error,
+    }
+  }
 }
