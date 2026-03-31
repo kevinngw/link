@@ -11,6 +11,7 @@ export function createStationDialogRenderers({
   getStatusTone,
   getArrivalServiceStatus,
   getAllVehicles,
+  supportsArrivalAlerts,
   syncDialogDisplayScroll,
 }) {
   const {
@@ -24,6 +25,12 @@ export function createStationDialogRenderers({
 
   function renderArrivalLists(arrivals, loading = false) {
     const now = Date.now()
+    const encodeDataValue = (value) => encodeURIComponent(String(value ?? ''))
+    const escapeAttribute = (value) => String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('"', '&quot;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
 
     const renderArrival = (arrival) => {
       const arrivalMs = arrival.arrivalTime
@@ -47,6 +54,7 @@ export function createStationDialogRenderers({
       const liveVehicle = arrival.rawVehicleId
         ? getAllVehicles().find((vehicle) => vehicle.id === arrival.rawVehicleId)
         : null
+      const canSetAlert = supportsArrivalAlerts && diffSec > 0
       const wrapperTag = liveVehicle ? 'button' : 'div'
       const interactiveAttrs = liveVehicle
         ? ` type="button" data-arrival-vehicle-id="${liveVehicle.id}" aria-label="${arrival.lineName} ${getVehicleLabel()} ${arrival.vehicleId}"`
@@ -57,24 +65,40 @@ export function createStationDialogRenderers({
       const sourceClass = arrival.isRealtime ? 'live' : 'sched'
 
       return `
-        <${wrapperTag} class="arrival-item${liveVehicle ? ' arrival-item-clickable' : ''}" data-arrival-time="${arrival.arrivalTime}" data-schedule-deviation="${arrival.scheduleDeviation ?? 0}"${interactiveAttrs}>
-          <span class="arrival-row arrival-row-top">
-            <span class="arrival-meta">
-              <span class="arrival-line-token" style="--line-color:${arrival.lineColor};">${arrival.lineToken}</span>
-              <span class="arrival-destination">${arrival.destination}</span>
+        <div class="arrival-card${canSetAlert ? ' has-alert-action' : ''}">
+          <${wrapperTag} class="arrival-item${liveVehicle ? ' arrival-item-clickable' : ''}" data-arrival-time="${arrival.arrivalTime}" data-schedule-deviation="${arrival.scheduleDeviation ?? 0}"${interactiveAttrs}>
+            <span class="arrival-row arrival-row-top">
+              <span class="arrival-meta">
+                <span class="arrival-line-token" style="--line-color:${arrival.lineColor};">${arrival.lineToken}</span>
+                <span class="arrival-destination">${arrival.destination}</span>
+              </span>
+              <span class="arrival-source arrival-source-${sourceClass}">${sourceBadge}</span>
             </span>
-            <span class="arrival-source arrival-source-${sourceClass}">${sourceBadge}</span>
-          </span>
-          <span class="arrival-row arrival-row-mid">
-            ${statusLabel ? `<span class="arrival-status arrival-status-${serviceTone}">${statusLabel}</span>` : ''}
-            ${clockTime ? `<span class="arrival-clock">${clockTime}</span>` : ''}
-            <span class="arrival-countdown">${timeStr}</span>
-          </span>
-          <span class="arrival-row arrival-row-bottom">
-            <span class="arrival-vehicle">${arrival.lineName} ${getVehicleLabel()} ${arrival.vehicleId}</span>
-            ${precisionInfo ? `<span class="arrival-precision">${precisionInfo}</span>` : ''}
-          </span>
-        </${wrapperTag}>
+            <span class="arrival-row arrival-row-mid">
+              ${statusLabel ? `<span class="arrival-status arrival-status-${serviceTone}">${statusLabel}</span>` : ''}
+              ${clockTime ? `<span class="arrival-clock">${clockTime}</span>` : ''}
+              <span class="arrival-countdown">${timeStr}</span>
+            </span>
+            <span class="arrival-row arrival-row-bottom">
+              <span class="arrival-vehicle">${arrival.lineName} ${getVehicleLabel()} ${arrival.vehicleId}</span>
+              ${precisionInfo ? `<span class="arrival-precision">${precisionInfo}</span>` : ''}
+            </span>
+          </${wrapperTag}>
+          ${canSetAlert ? `
+            <button
+              class="arrival-alert-button"
+              type="button"
+              data-arrival-alert="true"
+              data-arrival-time="${arrival.arrivalTime}"
+              data-arrival-line-name="${encodeDataValue(arrival.lineName)}"
+              data-arrival-destination="${encodeDataValue(arrival.destination)}"
+              data-arrival-vehicle-id="${encodeDataValue(arrival.vehicleId)}"
+              aria-label="${escapeAttribute(copyValue('arrivalAlertAria', arrival.destination))}"
+            >
+              ${copyValue('arrivalAlertAction')}
+            </button>
+          ` : ''}
+        </div>
       `
     }
 

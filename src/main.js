@@ -25,6 +25,9 @@ import { RECENT_STATIONS_KEY, createRecentStationsManager } from './recent-stati
 import { shouldRegisterServiceWorker } from './native/platform'
 import { initializeAppStorage, getStoredString, setStoredString } from './native/storage'
 import { copyTextToClipboard, shareTextContent } from './native/share'
+import { lightImpact, notificationSuccess } from './native/haptics'
+import { canScheduleLocalNotifications, scheduleArrivalAlert } from './native/notifications'
+import { hideSplashScreen } from './native/splash'
 
 const state = {
   fetchedAt: '',
@@ -92,6 +95,14 @@ function closeDialogAnimated(dialogEl) {
     dialogEl.classList.remove('is-closing')
     dialogEl.close()
   }, { once: true })
+}
+
+function decodeDataValue(value = '') {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
 }
 
 if (shouldRegisterServiceWorker()) {
@@ -611,8 +622,37 @@ systemBarElement.addEventListener('click', async (e) => {
   await switchSystem(btn.dataset.systemSwitch, { updateUrl: true, preserveDialog: false })
 })
 
-// Station dialog: arrival items → train dialog
-dialog.addEventListener('click', (e) => {
+// Station dialog: arrival items → train dialog / native reminder
+dialog.addEventListener('click', async (e) => {
+  const alertButton = e.target.closest('[data-arrival-alert]')
+  if (alertButton) {
+    e.preventDefault()
+    const stationName = state.currentDialogStation?.name ?? ''
+    const lineName = decodeDataValue(alertButton.dataset.arrivalLineName ?? '')
+    const destination = decodeDataValue(alertButton.dataset.arrivalDestination ?? '')
+    const result = await scheduleArrivalAlert({
+      stationName,
+      lineName,
+      destination,
+      vehicleId: decodeDataValue(alertButton.dataset.arrivalVehicleId ?? ''),
+      arrivalTimeMs: Number(alertButton.dataset.arrivalTime ?? 0),
+      title: copyValue('arrivalAlertNotificationTitle', lineName),
+      body: copyValue('arrivalAlertNotificationBody', stationName, destination),
+    })
+
+    if (result.status === 'scheduled') {
+      showToast(copyValue('arrivalAlertScheduled', formatClockTime(result.triggerAtMs)))
+      void notificationSuccess()
+    } else if (result.status === 'denied') {
+      showToast(copyValue('arrivalAlertDenied'))
+    } else if (result.status === 'unavailable') {
+      showToast(copyValue('arrivalAlertUnsupported'))
+    } else {
+      showToast(copyValue('arrivalAlertFailed'))
+    }
+    return
+  }
+
   const item = e.target.closest('[data-arrival-vehicle-id]')
   if (!item) return
   const vehicle = getAllVehicles().find((c) => c.id === item.dataset.arrivalVehicleId)
@@ -2036,6 +2076,7 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
   if (!station) return
   const requestId = state.activeDialogRequest + 1
   state.activeDialogRequest = requestId
+  if (updateUrl) void lightImpact()
   state.currentDialogStation = station
   state.currentDialogStationId = station.id
   setDialogTitle(getDialogStationTitle(station))
@@ -2111,6 +2152,7 @@ if (dialogFavoriteButton) {
       }
     }
     showToast(copyValue(result.isFavorite ? 'favoriteAdded' : 'favoriteRemoved'))
+    void (result.isFavorite ? notificationSuccess() : lightImpact())
   })
 }
 
@@ -2185,6 +2227,7 @@ const { renderArrivalLists } = createStationDialogRenderers({
   getStatusTone,
   getArrivalServiceStatus,
   getAllVehicles,
+  supportsArrivalAlerts: canScheduleLocalNotifications(),
   syncDialogDisplayScroll,
 })
 
@@ -2236,6 +2279,7 @@ function renderTrainDialog(vehicle, { updateUrl = true } = {}) {
   if (!vehicle) return
   state.currentTrainId = vehicle.id
   state.activeDialogType = 'train'
+  if (updateUrl) void lightImpact()
   renderTrainDialogBase(vehicle)
   if (updateUrl) setTrainDialogParams(vehicle.id)
 }
@@ -2692,4 +2736,6 @@ init().catch((error) => {
   statusPillElement.textContent = copyValue('statusFail')
   showToast(copyValue('startupRequestFailed'))
   updatedAtElement.textContent = error.message
+}).finally(() => {
+  hideSplashScreen().catch(() => {})
 })

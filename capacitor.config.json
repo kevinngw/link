@@ -9,5 +9,13 @@
   "ios": {
     "contentInset": "automatic",
     "backgroundColor": "#08141f"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#08141f",
+      "showSpinner": false,
+      "fadeOutDuration": 300
+    }
   }
 }

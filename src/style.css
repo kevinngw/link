@@ -3296,6 +3296,11 @@ button.train-list-item {
   overflow: hidden;
 }
 
+.arrival-card {
+  position: relative;
+  min-width: 0;
+}
+
 .arrival-item {
   display: grid;
   gap: 4px;
@@ -3304,6 +3309,10 @@ button.train-list-item {
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   min-width: 0;
+}
+
+.arrival-card.has-alert-action .arrival-item {
+  padding-right: 88px;
 }
 
 .arrival-row {
@@ -3351,6 +3360,37 @@ button.arrival-item {
 }
 
 .arrival-item-clickable:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-strong) 70%, white);
+  outline-offset: 2px;
+}
+
+.arrival-alert-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  height: 32px;
+  min-width: 68px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent-strong) 32%, var(--border-color));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-strong) 10%, var(--surface-card));
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.arrival-alert-button:hover {
+  background: color-mix(in srgb, var(--accent-strong) 16%, var(--surface-card));
+  border-color: color-mix(in srgb, var(--accent-strong) 48%, var(--border-color));
+  transform: translateY(-1px);
+}
+
+.arrival-alert-button:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent-strong) 70%, white);
   outline-offset: 2px;
 }
@@ -3752,6 +3792,10 @@ button.arrival-item {
   font-size: 0.85rem;
   padding: 4px 10px;
   border-radius: 6px;
+}
+
+.station-dialog.is-display-mode .arrival-alert-button {
+  display: none;
 }
 
 .station-dialog.is-display-mode .arrival-clock {
@@ -4280,18 +4324,18 @@ dialog.is-closing::backdrop {
   }
 }
 
-.arrival-item {
+.arrival-card {
   animation: arrivalItemIn var(--duration-normal) var(--ease-out) both;
 }
 
-.arrival-item:nth-child(1) { animation-delay: 0ms; }
-.arrival-item:nth-child(2) { animation-delay: 40ms; }
-.arrival-item:nth-child(3) { animation-delay: 50ms; }
-.arrival-item:nth-child(4) { animation-delay: 60ms; }
-.arrival-item:nth-child(5) { animation-delay: 70ms; }
-.arrival-item:nth-child(6) { animation-delay: 80ms; }
-.arrival-item:nth-child(7) { animation-delay: 90ms; }
-.arrival-item:nth-child(8) { animation-delay: 100ms; }
+.arrival-card:nth-child(1) { animation-delay: 0ms; }
+.arrival-card:nth-child(2) { animation-delay: 40ms; }
+.arrival-card:nth-child(3) { animation-delay: 50ms; }
+.arrival-card:nth-child(4) { animation-delay: 60ms; }
+.arrival-card:nth-child(5) { animation-delay: 70ms; }
+.arrival-card:nth-child(6) { animation-delay: 80ms; }
+.arrival-card:nth-child(7) { animation-delay: 90ms; }
+.arrival-card:nth-child(8) { animation-delay: 100ms; }
 
 /* ─── Skeleton/shimmer loading ─── */
 
@@ -4381,6 +4425,15 @@ dialog.is-closing::backdrop {
   .station-dialog .arrival-item {
     padding: 14px 16px;
     gap: 14px;
+  }
+
+  .station-dialog .arrival-card.has-alert-action .arrival-item {
+    padding-right: 92px;
+  }
+
+  .station-dialog .arrival-alert-button {
+    top: 14px;
+    right: 14px;
   }
 
   .station-dialog .arrival-vehicle {
