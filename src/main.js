@@ -1,5 +1,8 @@
 import './style.css'
-import { registerSW } from 'virtual:pwa-register'
+import { isNative } from './native/platform'
+import { lightImpact } from './native/haptics'
+import { hideSplashScreen } from './native/splash'
+import { getCurrentPosition } from './native/geolocation'
 import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
@@ -91,12 +94,16 @@ function closeDialogAnimated(dialogEl) {
   }, { once: true })
 }
 
-const updateSW = registerSW({
-  immediate: true,
-  onNeedRefresh() {
-    updateSW(true)
-  },
-})
+if (!isNative()) {
+  import('virtual:pwa-register').then(({ registerSW }) => {
+    const updateSW = registerSW({
+      immediate: true,
+      onNeedRefresh() {
+        updateSW(true)
+      },
+    })
+  })
+}
 
 document.querySelector('#app').innerHTML = `
   <main class="screen">
@@ -2022,6 +2029,7 @@ async function refreshStationDialog(station, { requestId = state.activeDialogReq
 
 async function showStationDialog(station, { updateUrl = true } = {}) {
   if (!station) return
+  lightImpact()
   const requestId = state.activeDialogRequest + 1
   state.activeDialogRequest = requestId
   state.currentDialogStation = station
@@ -2665,7 +2673,10 @@ const init = bootstrapApp({
   boardElement,
 })
 
-init().catch((error) => {
+init().then(() => {
+  hideSplashScreen()
+}).catch((error) => {
+  hideSplashScreen()
   statusPillElement.textContent = copyValue('statusFail')
   showToast(copyValue('startupRequestFailed'))
   updatedAtElement.textContent = error.message

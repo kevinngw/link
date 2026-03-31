@@ -1,0 +1,18 @@
+{
+  "appId": "com.linkpulse.app",
+  "appName": "Link Pulse",
+  "webDir": "dist",
+  "ios": {
+    "scheme": "LinkPulse"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#08141f"
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_icon",
+      "iconColor": "#08141f"
+    }
+  }
+}

@@ -1,123 +1,256 @@
 # Link Pulse
 
-面向 Puget Sound 区域交通系统的实时 PWA，集中展示 `Link`、`RapidRide` 和 `Swift` 的车辆位置、到站信息与运行健康度。
+西雅图轻轨实时追踪应用。支持 PWA 和 iOS 原生应用。
 
-[在线演示](https://kevinngw.github.io/link/) &nbsp;|&nbsp; [English README](./README.md)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Tests](https://img.shields.io/badge/tests-vitest-green.svg)
+![Platform](https://img.shields.io/badge/platform-web%20%7C%20iOS-blue.svg)
 
-## 功能
+## 功能特性
 
-- **多系统总览** — 在统一界面中切换 `Link`（轻轨）、`RapidRide`（King County Metro 快速公交）和 `Swift`（Community Transit 快速公交）
-- **实时车辆追踪** — 自适应刷新，数据来自 Puget Sound OneBusAway API，使用公开 `TEST` key 时自动降频
-- **四个视图** — `Map`（地图）、`Trains/Buses`（车辆列表）、`Favorites`（收藏站点）、`Insights`（运行洞察）
-- **地图视图** — SVG 可视化，展示站点与实时车辆位置及运动轨迹
-- **站点到站弹窗** — 点击任意站点查看未来 60 分钟的到站信息、服务摘要、告警及分享选项
-- **到站屏模式** — 全屏站点视图，支持方向自动轮播，适合挂墙公共展示
-- **站点搜索** — 按 `/` 可按名称、线路或系统搜索；支持基于定位的附近站点搜索
-- **收藏站点** — 保存常用站点，快速访问
-- **运行洞察面板** — 发车间隔健康度、晚点分布、关注标记及系统级健康汇总
-- **双语 UI** — 中英文切换，语言偏好持久保存
-- **主题切换** — 浅色 / 深色主题，带平滑过渡效果
-- **PWA 支持** — 可安装至桌面或手机主屏幕，支持自动更新
+### 实时交通数据
+- 列车和公交车实时位置与到站时间
+- 多系统支持：Link 轻轨、RapidRide、Swift
+- 站点到达预测与延误指示
+- 服务警报和中断通知
 
-## 技术栈
+### 性能优化
+- **Stale-while-revalidate 缓存** — 立即返回数据，后台刷新
+- **自适应并发** — 根据成功率自动调整 1-6 个并行请求
+- **请求去重** — 相同端点共享进行中的请求
+- **虚拟滚动** — 大数据列表保持 60fps
+- **悬停预加载** — 鼠标悬停 100ms 后预加载站点数据
 
-- [Vite](https://vitejs.dev/) + [vite-plugin-pwa](https://vite-pwa-org.netlify.app/)
-- 原生 JavaScript（ES 模块），SVG 渲染
-- 等宽字体 UI（SF Mono / Roboto Mono / IBM Plex Mono）
-- [Vitest](https://vitest.dev/) 单元测试
+### 弹性请求处理
+- AbortController 支持请求取消
+- FIFO 队列 + 指数退避重试
+- 全局错误边界，优雅降级
+- Web Vitals 监控（LCP、CLS、FID）
 
-## 数据来源
+### 键盘导航
+Vim 风格快捷键：
 
-| 数据 | 接口 |
-|------|------|
-| 实时车辆位置 | Puget Sound OneBusAway `vehicles-for-agency/{agencyId}.json` |
-| 站点到站信息 | `arrivals-and-departures-for-stop/{stopId}.json` |
-| 静态系统数据 | 由 [`scripts/build-link-data.mjs`](./scripts/build-link-data.mjs) 基于 Sound Transit GTFS、King County Metro GTFS、Community Transit GTFS 和 OBA 线路几何信息生成 |
+| 按键 | 操作 |
+|-----|------|
+| `j` / `k` | 下一项 / 上一项 |
+| `h` / `l` | 上一个标签 / 下一个标签 |
+| `1` `2` `3` | 地图 / 列车 / 洞察 |
+| `/` | 搜索站点 |
+| `r` | 刷新数据 |
+| `Space` | 切换显示模式 |
+| `Esc` | 关闭对话框 |
 
-> **说明：** 如果设置了 `VITE_OBA_KEY` 则优先使用，否则回退到公开测试 key `TEST`。使用 `TEST` 时，车辆轮询和到站缓存会自动放慢；遇到限流后，所有 OBA 请求共享冷却窗口，并使用带抖动的指数退避重试。生产部署建议配置正式 [OBA API key](https://developer.onebusaway.org/)。
+### iOS 原生功能
+- 本地推送通知 — 列车到站提醒
+- 原生地理位置 — 附近站点检测
+- 触觉反馈 — 交互振动反馈
+- 原生分享面板
+- 启动屏平滑过渡
 
-## 本地开发
+### 无障碍
+- 跳转到内容链接
+- ARIA 实时区域播报
+- 对话框焦点捕获
+- 完整键盘导航支持
 
-**环境要求：** Node.js `20.19+`（或 `22.12+`），npm 10+
+## 快速开始
 
+### 环境要求
+- Node.js 18+
+- npm
+- Xcode 15+（iOS 构建需要）
+
+### 安装
 ```bash
-# 可选：使用自己的 OneBusAway key，而非 TEST
-cp .env.example .env.local
-# 编辑 .env.local，设置 VITE_OBA_KEY=your_key
-
-# 安装依赖并启动开发服务器
+git clone https://github.com/kevinngw/link.git
+cd link
 npm install
-npm run dev
 ```
 
-`predev` 脚本会自动拉取最新 GTFS 源数据并重新生成 `public/pulse-data.json`。该文件已加入 gitignore 作为本地构建产物，日常 `dev/build` 不会污染工作区。内容未实际变化时，生成脚本会跳过重写。
-
+### Web 开发
 ```bash
-# 生产构建
-VITE_OBA_KEY=your_key npm run build
+npm run dev
+# 打开 http://localhost:5173/link/
+```
 
-# 或使用 .env.local / 部署平台环境变量
+### iOS 开发
+```bash
+npm run ios
+# 打开 Xcode — 选择模拟器或真机，点击运行
+```
+
+### 生产构建
+```bash
+# Web (PWA)
 npm run build
 
-# 本地预览生产构建
-npm run preview
+# iOS
+npm run build:ios
+npm run cap:sync
 ```
 
-通过 GitHub Pages 部署时，请在仓库 `Settings → Secrets and variables → Actions` 中新增 `VITE_OBA_KEY` secret。若未配置，workflow 会自动回退到 `TEST`。
-
-## 测试
-
+### 运行测试
 ```bash
-npm test              # 监听模式
-npm run test:run      # 单次运行
-npm run test:ui       # 浏览器 UI 面板
-npm run test:coverage # 覆盖率报告
+npm test             # 监听模式
+npm run test:run     # 单次运行
+npm run test:ui      # 交互式 UI
+npm run test:coverage
 ```
 
-## 项目结构
+## 架构
+
+### 双构建系统
+
+项目从同一代码库支持两个构建目标：
+
+| 目标 | 基础路径 | PWA | Service Worker | 原生插件 |
+|------|---------|-----|----------------|---------|
+| Web | `/link/` | 是 | 是 | 否 |
+| iOS (Capacitor) | `/` | 否 | 存根 | 是 |
+
+设置 `VITE_CAPACITOR=true` 启用 iOS 构建。PWA 插件替换为空操作存根，Capacitor 的原生 HTTP 层处理 API 请求（绕过 CORS）。
+
+### 项目结构
 
 ```
-public/
-  icon.svg              PWA 图标
-  pulse-data.json       生成的多系统静态数据产物（已 gitignore）
-scripts/
-  build-link-data.mjs   交通数据生成脚本 — 拉取并转换 GTFS 与 OBA 数据
 src/
-  main.js               应用编排与状态接线
-  config.js             系统元数据、UI 文案、刷新节奏配置
-  static-data.js        静态数据加载与布局构建
-  app-store.js          应用状态管理
-  oba.js                OneBusAway API 客户端，含缓存与请求队列
-  vehicles.js           车辆状态分类与解析
-  arrivals.js           站点到站信息拉取与缓存
-  insights.js           运行分析（间隔、晚点、健康标记）
-  station-search.js     站点搜索，含定位支持
-  favorites.js          收藏站点管理
-  url-state.js          URL 参数同步
-  vehicle-display.js    车辆 UI 渲染
-  keyboard-nav.js       键盘快捷键处理
-  virtual-scroll.js     虚拟列表渲染
-  formatters.js         时间/日期格式化工具
-  toast.js              Toast 通知
-  error-boundary.js     错误处理
-  utils.js              公共工具函数
-  renderers/            地图、车辆列表、洞察视图渲染器
-  dialogs/              站点到站、告警、洞察详情弹窗
-  style.css             全局样式（约 4300 行）
-.github/workflows/
-  deploy.yml            GitHub Pages CI/CD 配置
-index.html
-vite.config.js
-vitest.config.js
+├── main.js              # 应用入口
+├── store.js             # 响应式存储（基于 Proxy）
+├── app-store.js         # 应用状态和 actions
+├── config.js            # API 配置、缓存 TTL、国际化字符串
+├── oba.js               # OneBusAway API 客户端（SWR、去重、重试）
+├── arrivals.js          # 到站数据处理
+├── error-boundary.js    # 错误处理和 Web Vitals
+├── keyboard-nav.js      # 键盘快捷键系统
+├── virtual-scroll.js    # 虚拟滚动
+├── formatters.js        # 日期、时间、数字格式化
+├── insights.js          # 交通数据分析
+├── vehicles.js          # 车辆状态解析
+├── static-data.js       # 静态数据加载
+├── utils.js             # 工具函数
+├── native/              # Capacitor 原生模块
+│   ├── platform.js      # 平台检测（web vs iOS）
+│   ├── notifications.js # 本地推送通知
+│   ├── geolocation.js   # 原生地理位置（含 web 回退）
+│   ├── haptics.js       # 触觉反馈
+│   ├── splash.js        # 启动屏控制
+│   └── share.js         # 原生分享（含 web 回退）
+├── renderers/
+│   ├── map.js           # 地图视图
+│   ├── trains.js        # 列车列表视图
+│   └── insights.js      # 数据分析面板
+├── dialogs/
+│   ├── dom.js           # 对话框 DOM 结构
+│   ├── overlays.js      # 覆盖层管理
+│   ├── station-display.js
+│   └── station-render.js
+└── *.test.js            # 单元测试
+
+ios/                     # Xcode 项目（Capacitor 生成）
+capacitor.config.json    # Capacitor 配置
 ```
 
-## 部署
+### 请求流程
+```
+用户操作 → Store → OBA 客户端 → 队列 → fetch()
+                      ↓            ↓
+                   去重检查     重试（指数退避）
+                      ↓            ↓
+                   SWR 缓存    AbortController
+```
 
-通过 [`deploy.yml`](./.github/workflows/deploy.yml) 自动部署至 GitHub Pages。推送到 `main` 或 `dev` 时触发构建和发布。
+### 原生模块模式
 
-| 分支 | 地址 |
-|------|------|
-| `main` | https://kevinngw.github.io/link/ |
-| `dev`  | https://kevinngw.github.io/link/dev/ |
+所有原生模块使用惰性动态导入，在 web 上自动降级：
 
-`main` 发布到站点根目录，存在时保留 `dev/` 预览目录；`dev` 发布到 `/link/dev/`。每次构建前按分支设置 `VITE_BASE`，确保静态资源和 PWA manifest 路径正确。
+```javascript
+import { isNative } from './native/platform'
+
+// 原生地理位置，自动回退到 web
+const position = await getCurrentPosition()
+
+// 触觉反馈 — web 上无操作，iOS 上振动
+await lightImpact()
+
+// 通知 — 仅原生环境可用
+await scheduleArrivalAlert('Capitol Hill', '1 Line', 3)
+```
+
+## 配置
+
+### 环境变量
+```bash
+# .env.local
+VITE_OBA_KEY=your_api_key_here    # OneBusAway API 密钥
+VITE_CAPACITOR=true               # 启用 iOS 构建模式
+VITE_BASE=/link/                  # 基础路径（仅 web）
+```
+
+没有 `VITE_OBA_KEY` 时，使用公共 `TEST` 密钥（有速率限制）。
+
+### 缓存配置
+
+编辑 `src/config.js` 调整时间参数：
+
+```javascript
+// 生产配置（有 API 密钥）
+ARRIVALS_CACHE_TTL_MS: 60_000     // 1 分钟
+OBA_CACHE_TTL_MS: 60_000
+MAX_CONCURRENT_REQUESTS: 3
+COOLDOWN_BASE_MS: 10_000
+
+// 测试配置（公共密钥）
+ARRIVALS_CACHE_TTL_MS: 120_000    // 2 分钟
+MAX_CONCURRENT_REQUESTS: 1
+COOLDOWN_BASE_MS: 30_000
+```
+
+## iOS App Store
+
+### 分发构建
+1. 运行 `npm run ios` 打开 Xcode
+2. 在 Signing & Capabilities 中设置签名团队
+3. 在 `Assets.xcassets` 中添加 1024x1024 应用图标（无透明度）
+4. 设置 LaunchScreen.storyboard 背景色为 `#08141f`
+5. Product > Archive > Distribute to App Store Connect
+
+### 审核合规原生功能
+应用包含五项超越 web 能力的原生集成：
+- **本地通知** — 列车到站提醒
+- **原生地理位置** — iOS 权限流程
+- **触觉反馈** — 站点选择时振动
+- **原生分享面板** — 完整 iOS 分享集成
+- **启动屏** — 可控的关闭时机
+
+### App Store 元数据
+- **Bundle ID**: `com.linkpulse.app`
+- **分类**: 旅行 / 导航
+- **最低 iOS 版本**: 16.0
+- **隐私**: 位置仅用于查找附近站点；偏好设置本地存储；不收集个人数据
+
+## 浏览器支持
+
+| 浏览器 | 版本 |
+|--------|------|
+| Chrome / Edge | 90+ |
+| Firefox | 88+ |
+| Safari | 14+ |
+
+需要：ES2020+、IntersectionObserver、ResizeObserver、AbortController
+
+## 贡献指南
+
+1. Fork 仓库
+2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
+3. 运行测试 (`npm test`)
+4. 提交更改
+5. 创建 Pull Request
+
+## 许可证
+
+MIT 许可证 - 详见 LICENSE 文件
+
+## 致谢
+
+- 交通数据来自 [OneBusAway](https://onebusaway.org/) API
+- 服务数据来自 Sound Transit、King County Metro 和 Community Transit

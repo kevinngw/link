@@ -1,4 +1,6 @@
 import { normalizeName, formatDistanceMeters, getDistanceMeters } from './utils'
+import { isNative } from './native/platform'
+import { getCurrentPosition } from './native/geolocation'
 
 const RECENT_SEARCHES_KEY = 'link-pulse-recent-searches'
 const RECENT_SEARCHES_MAX = 5
@@ -131,7 +133,7 @@ export function createStationSearch({
   }
 
   async function findNearbyStations() {
-    if (!navigator.geolocation) {
+    if (!isNative() && !navigator.geolocation) {
       state.geolocationError = copyValue('locationUnsupported')
       state.geolocationStatus = ''
       state.nearbyStations = []
@@ -147,13 +149,7 @@ export function createStationSearch({
     renderStationSearchResults()
 
     try {
-      const position = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 12000,
-          maximumAge: 120000,
-        })
-      })
+      const position = await getCurrentPosition()
 
       const latitude = position.coords?.latitude
       const longitude = position.coords?.longitude

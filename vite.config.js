@@ -1,7 +1,23 @@
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
-const base = process.env.VITE_BASE ?? '/link/'
+const isCapacitor = process.env.VITE_CAPACITOR === 'true'
+const base = isCapacitor ? '/' : (process.env.VITE_BASE ?? '/link/')
+
+// Stub for virtual:pwa-register when PWA plugin is disabled (Capacitor builds)
+function pwaRegisterStub() {
+  const virtualId = 'virtual:pwa-register'
+  const resolvedId = '\0' + virtualId
+  return {
+    name: 'pwa-register-stub',
+    resolveId(id) {
+      if (id === virtualId) return resolvedId
+    },
+    load(id) {
+      if (id === resolvedId) return 'export function registerSW() { return () => {} }'
+    },
+  }
+}
 
 export default defineConfig({
   base,
@@ -20,7 +36,8 @@ export default defineConfig({
     },
   },
   plugins: [
-    VitePWA({
+    isCapacitor && pwaRegisterStub(),
+    !isCapacitor && VitePWA({
       registerType: 'autoUpdate',
       includeAssets: [
         'apple-touch-icon.png',
@@ -108,5 +125,8 @@ export default defineConfig({
         ],
       },
     }),
-  ],
+  ].filter(Boolean),
+  define: {
+    'import.meta.env.VITE_CAPACITOR': JSON.stringify(process.env.VITE_CAPACITOR || ''),
+  },
 })
