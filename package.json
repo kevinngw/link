@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "predev": "node scripts/build-link-data.mjs",
+    "predev": "node -e \"const fs=require('fs');fs.existsSync('public/pulse-data.json')?process.exit(0):require('child_process').execFileSync('node',['scripts/build-link-data.mjs'],{stdio:'inherit'})\"",
     "dev": "vite",
     "prebuild": "node scripts/build-link-data.mjs",
     "build": "vite build",
