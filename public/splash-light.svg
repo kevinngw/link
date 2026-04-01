@@ -6,8 +6,8 @@
       <stop offset="100%" stop-color="#d8ecfb" />
     </radialGradient>
     <radialGradient id="halo" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#32c4ff" stop-opacity="0.2" />
-      <stop offset="60%" stop-color="#8fd6ff" stop-opacity="0.15" />
+      <stop offset="0%" stop-color="#32c4ff" stop-opacity="0.16" />
+      <stop offset="62%" stop-color="#8fd6ff" stop-opacity="0.12" />
       <stop offset="100%" stop-color="#8fd6ff" stop-opacity="0" />
     </radialGradient>
     <linearGradient id="rail" x1="0" x2="0" y1="0" y2="1">
@@ -17,40 +17,40 @@
   </defs>
 
   <rect width="1024" height="1024" fill="url(#bg)" />
-  <circle cx="512" cy="512" r="300" fill="#d5efff" fill-opacity="0.55" />
-  <circle cx="512" cy="512" r="240" fill="url(#halo)" />
+  <circle cx="512" cy="512" r="288" fill="#d5efff" fill-opacity="0.4" />
+  <circle cx="512" cy="512" r="232" fill="url(#halo)" />
 
   <path
-    d="M512 170v684"
+    d="M512 212v600"
     fill="none"
     stroke="url(#rail)"
     stroke-linecap="round"
-    stroke-width="56"
+    stroke-width="52"
   />
 
-  <g fill="#f8fcff" stroke="#14384b" stroke-width="18">
-    <circle cx="512" cy="292" r="40" />
-    <circle cx="512" cy="732" r="40" />
+  <g fill="#f8fcff" stroke="#14384b" stroke-width="16">
+    <circle cx="512" cy="340" r="36" />
+    <circle cx="512" cy="684" r="36" />
   </g>
 
-  <circle cx="512" cy="512" r="176" fill="#25b9ff" fill-opacity="0.1" />
-  <circle cx="512" cy="512" r="128" fill="#25b9ff" fill-opacity="0.16" />
+  <circle cx="512" cy="512" r="160" fill="#25b9ff" fill-opacity="0.1" />
+  <circle cx="512" cy="512" r="116" fill="#25b9ff" fill-opacity="0.16" />
   <circle
     cx="512"
     cy="512"
-    r="96"
+    r="88"
     fill="none"
     stroke="#1baeff"
-    stroke-opacity="0.78"
-    stroke-width="20"
+    stroke-opacity="0.8"
+    stroke-width="18"
   />
   <circle
     cx="512"
     cy="512"
-    r="62"
+    r="58"
     fill="#103247"
     stroke="#f8fcff"
-    stroke-width="18"
+    stroke-width="16"
   />
-  <circle cx="512" cy="512" r="22" fill="#1baeff" />
+  <circle cx="512" cy="512" r="20" fill="#1baeff" />
 </svg>

@@ -16,19 +16,46 @@ export function createMapRenderer(deps) {
     renderServiceReminderChip,
   } = deps
 
+  function truncateLabelLine(line, maxChars) {
+    if (line.length <= maxChars) return line
+    return `${line.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`
+  }
+
   function splitStationLabel(label) {
-    const words = String(label).trim().split(/\s+/).filter(Boolean)
-    if (words.length <= 1 || label.length <= 16) return [label]
+    const normalizedLabel = String(label).trim().replace(/\s*\/\s*/g, ' / ')
+    const maxCharsPerLine = state.compactLayout ? 21 : 28
+    const maxLines = 2
+    const words = normalizedLabel.split(/\s+/).filter(Boolean)
+    if (words.length <= 1 || normalizedLabel.length <= maxCharsPerLine) return [normalizedLabel]
 
-    const midpoint = Math.ceil(words.length / 2)
-    const firstLine = words.slice(0, midpoint).join(' ')
-    const secondLine = words.slice(midpoint).join(' ')
+    const lines = []
+    let currentLine = ''
 
-    if (Math.max(firstLine.length, secondLine.length) > label.length - 4) {
-      return [label]
+    for (let index = 0; index < words.length; index += 1) {
+      const word = words[index]
+      const candidate = currentLine ? `${currentLine} ${word}` : word
+
+      if (candidate.length <= maxCharsPerLine) {
+        currentLine = candidate
+        continue
+      }
+
+      if (!currentLine) {
+        lines.push(truncateLabelLine(word, maxCharsPerLine))
+      } else {
+        lines.push(currentLine)
+        currentLine = word
+      }
+
+      if (lines.length === maxLines - 1) {
+        const remainder = [currentLine, ...words.slice(index + 1)].filter(Boolean).join(' ')
+        lines.push(truncateLabelLine(remainder, maxCharsPerLine))
+        return lines
+      }
     }
 
-    return [firstLine, secondLine]
+    if (currentLine) lines.push(currentLine)
+    return lines.slice(0, maxLines)
   }
 
   function renderStationLabel(station, layout) {

@@ -1,10 +1,9 @@
 import './style.css'
 import { isNative } from './native/platform'
-import { lightImpact, notificationSuccess } from './native/haptics'
+import { lightImpact } from './native/haptics'
 import { hideSplashScreen } from './native/splash'
 import { getCurrentPosition } from './native/geolocation'
 import { initializeAppStorage, getStoredString, setStoredString } from './native/storage'
-import { canScheduleLocalNotifications, scheduleArrivalAlert } from './native/notifications'
 import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
@@ -611,45 +610,8 @@ systemBarElement.addEventListener('click', async (e) => {
   await switchSystem(btn.dataset.systemSwitch, { updateUrl: true, preserveDialog: false })
 })
 
-function decodeDataValue(value = '') {
-  try {
-    return decodeURIComponent(value)
-  } catch {
-    return value
-  }
-}
-
-// Station dialog: arrival items → train dialog / native reminder
-dialog.addEventListener('click', async (e) => {
-  const alertButton = e.target.closest('[data-arrival-alert]')
-  if (alertButton) {
-    e.preventDefault()
-    const stationName = state.currentDialogStation?.name ?? ''
-    const lineName = decodeDataValue(alertButton.dataset.arrivalLineName ?? '')
-    const destination = decodeDataValue(alertButton.dataset.arrivalDestination ?? '')
-    const result = await scheduleArrivalAlert({
-      stationName,
-      lineName,
-      destination,
-      vehicleId: decodeDataValue(alertButton.dataset.arrivalVehicleId ?? ''),
-      arrivalTimeMs: Number(alertButton.dataset.arrivalTime ?? 0),
-      title: copyValue('arrivalAlertNotificationTitle', lineName),
-      body: copyValue('arrivalAlertNotificationBody', stationName, destination),
-    })
-
-    if (result.status === 'scheduled') {
-      showToast(copyValue('arrivalAlertScheduled', formatClockTime(result.triggerAtMs)))
-      void notificationSuccess()
-    } else if (result.status === 'denied') {
-      showToast(copyValue('arrivalAlertDenied'))
-    } else if (result.status === 'unavailable') {
-      showToast(copyValue('arrivalAlertUnsupported'))
-    } else {
-      showToast(copyValue('arrivalAlertFailed'))
-    }
-    return
-  }
-
+// Station dialog: arrival items → train dialog
+dialog.addEventListener('click', (e) => {
   const item = e.target.closest('[data-arrival-vehicle-id]')
   if (!item) return
   const vehicle = getAllVehicles().find((c) => c.id === item.dataset.arrivalVehicleId)
@@ -2146,7 +2108,6 @@ if (dialogFavoriteButton) {
       }
     }
     showToast(copyValue(result.isFavorite ? 'favoriteAdded' : 'favoriteRemoved'))
-    void (result.isFavorite ? notificationSuccess() : lightImpact())
   })
 }
 
@@ -2221,7 +2182,6 @@ const { renderArrivalLists } = createStationDialogRenderers({
   getStatusTone,
   getArrivalServiceStatus,
   getAllVehicles,
-  supportsArrivalAlerts: canScheduleLocalNotifications(),
   syncDialogDisplayScroll,
 })
 
@@ -2273,7 +2233,6 @@ function renderTrainDialog(vehicle, { updateUrl = true } = {}) {
   if (!vehicle) return
   state.currentTrainId = vehicle.id
   state.activeDialogType = 'train'
-  if (updateUrl) void lightImpact()
   renderTrainDialogBase(vehicle)
   if (updateUrl) setTrainDialogParams(vehicle.id)
 }
@@ -2694,14 +2653,12 @@ const handleViewportResize = () => {
 
 state.activeTab = getPageFromUrl()
 
-// Pre-warm storage cache before first read
-await initializeAppStorage({
-  persistentKeys: ['link-pulse-favorites', 'link-pulse-recent-searches', THEME_STORAGE_KEY, LANGUAGE_STORAGE_KEY],
-  sessionKeys: ['link-pulse-recent-stations'],
-})
-
 const init = bootstrapApp({
   state,
+  initializeStorage: () => initializeAppStorage({
+    persistentKeys: ['link-pulse-favorites', 'link-pulse-recent-searches', THEME_STORAGE_KEY, LANGUAGE_STORAGE_KEY],
+    sessionKeys: ['link-pulse-recent-stations'],
+  }),
   getPreferredLanguage,
   getPreferredTheme,
   handleViewportResize,

@@ -95,6 +95,11 @@
   box-sizing: border-box;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -3295,15 +3300,6 @@ button.train-list-item {
   overflow: hidden;
 }
 
-.arrival-card {
-  position: relative;
-  min-width: 0;
-}
-
-.arrival-card.has-alert-action .arrival-item {
-  padding-right: 88px;
-}
-
 .arrival-item {
   display: grid;
   gap: 4px;
@@ -3359,37 +3355,6 @@ button.arrival-item {
 }
 
 .arrival-item-clickable:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent-strong) 70%, white);
-  outline-offset: 2px;
-}
-
-.arrival-alert-button {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  height: 32px;
-  min-width: 68px;
-  padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--accent-strong) 32%, var(--border-color));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent-strong) 10%, var(--surface-card));
-  color: var(--accent-strong);
-  font: inherit;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
-}
-
-.arrival-alert-button:hover {
-  background: color-mix(in srgb, var(--accent-strong) 16%, var(--surface-card));
-  border-color: color-mix(in srgb, var(--accent-strong) 48%, var(--border-color));
-  transform: translateY(-1px);
-}
-
-.arrival-alert-button:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent-strong) 70%, white);
   outline-offset: 2px;
 }
@@ -3791,10 +3756,6 @@ button.arrival-item {
   font-size: 0.85rem;
   padding: 4px 10px;
   border-radius: 6px;
-}
-
-.station-dialog.is-display-mode .arrival-alert-button {
-  display: none;
 }
 
 .station-dialog.is-display-mode .arrival-clock {
@@ -4315,18 +4276,18 @@ dialog.is-closing::backdrop {
   }
 }
 
-.arrival-card {
+.arrival-item {
   animation: arrivalItemIn var(--duration-normal) var(--ease-out) both;
 }
 
-.arrival-card:nth-child(1) { animation-delay: 0ms; }
-.arrival-card:nth-child(2) { animation-delay: 40ms; }
-.arrival-card:nth-child(3) { animation-delay: 50ms; }
-.arrival-card:nth-child(4) { animation-delay: 60ms; }
-.arrival-card:nth-child(5) { animation-delay: 70ms; }
-.arrival-card:nth-child(6) { animation-delay: 80ms; }
-.arrival-card:nth-child(7) { animation-delay: 90ms; }
-.arrival-card:nth-child(8) { animation-delay: 100ms; }
+.arrival-item:nth-child(1) { animation-delay: 0ms; }
+.arrival-item:nth-child(2) { animation-delay: 40ms; }
+.arrival-item:nth-child(3) { animation-delay: 50ms; }
+.arrival-item:nth-child(4) { animation-delay: 60ms; }
+.arrival-item:nth-child(5) { animation-delay: 70ms; }
+.arrival-item:nth-child(6) { animation-delay: 80ms; }
+.arrival-item:nth-child(7) { animation-delay: 90ms; }
+.arrival-item:nth-child(8) { animation-delay: 100ms; }
 
 /* ─── Skeleton/shimmer loading ─── */
 
@@ -4411,15 +4372,6 @@ dialog.is-closing::backdrop {
   .station-dialog .arrivals-title {
     font-size: 0.94rem;
     margin-bottom: 14px;
-  }
-
-  .station-dialog .arrival-card.has-alert-action .arrival-item {
-    padding-right: 92px;
-  }
-
-  .station-dialog .arrival-alert-button {
-    top: 14px;
-    right: 14px;
   }
 
   .station-dialog .arrival-item {
@@ -4996,5 +4948,94 @@ dialog.is-closing::backdrop {
 
   .train-eta-stop-side {
     text-align: left;
+  }
+}
+
+@media (max-width: 430px) {
+  .station-dialog.is-display-mode > .dialog-content {
+    padding:
+      8px
+      12px
+      calc(14px + var(--safe-area-bottom));
+  }
+
+  .station-dialog.is-display-mode .dialog-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 6px 10px;
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+  }
+
+  .station-dialog.is-display-mode .dialog-header-main {
+    min-width: 0;
+  }
+
+  .station-dialog.is-display-mode .dialog-title-wrap {
+    display: grid;
+    align-items: start;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .station-dialog.is-display-mode .dialog-title-wrap .dialog-meta {
+    width: fit-content;
+    max-width: 100%;
+    min-width: 0;
+    padding: 4px 10px;
+  }
+
+  .station-dialog.is-display-mode .dialog-actions {
+    justify-self: end;
+    align-self: start;
+    gap: 6px;
+  }
+
+  .station-dialog.is-display-mode .dialog-actions .dialog-share-button,
+  .station-dialog.is-display-mode .dialog-actions .dialog-mode-button {
+    min-width: 58px;
+    height: 34px;
+    padding: 0 10px;
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+  }
+
+  .station-dialog.is-display-mode .dialog-actions .dialog-favorite-button,
+  .station-dialog.is-display-mode .dialog-actions > .dialog-close:not(.dialog-share-button):not(.dialog-mode-button):not(.dialog-favorite-button) {
+    width: 34px;
+    height: 34px;
+    font-size: 1.05rem;
+  }
+
+  .station-dialog.is-display-mode .dialog-service-summary {
+    display: none;
+  }
+
+  .station-dialog.is-display-mode .dialog-body {
+    gap: 10px;
+  }
+
+  .station-dialog.is-display-mode .arrivals-section {
+    padding: 14px;
+  }
+
+  .station-dialog.is-display-mode .arrivals-title {
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+    line-height: 1.25;
+    letter-spacing: 0.04em;
+  }
+
+  .station-dialog.is-display-mode .arrivals-title-text,
+  .station-dialog.is-display-mode .arrivals-title-clone {
+    font-size: inherit;
+    line-height: inherit;
+    letter-spacing: inherit;
+  }
+
+  .station-dialog.is-display-mode .arrivals-empty {
+    padding: 10px 6px;
+    font-size: 0.78rem;
   }
 }

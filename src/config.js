@@ -5,6 +5,7 @@ export const OBA_KEY = (import.meta.env.VITE_OBA_KEY || 'TEST').trim() || 'TEST'
 export const IS_PUBLIC_TEST_KEY = OBA_KEY === 'TEST'
 export const OBA_MAX_RETRIES = 3
 export const COMPACT_LAYOUT_BREAKPOINT = 1100
+export const SHARE_BASE_URL = (import.meta.env.VITE_SHARE_BASE_URL || 'https://kevinngw.github.io/link/').trim()
 
 const _TEST_PROFILE = {
   ARRIVALS_CACHE_TTL_MS: 120_000,
@@ -138,16 +139,6 @@ export const UI_COPY = {
     shareSuccess: 'Arrivals shared!',
     shareCopied: 'Arrivals copied to clipboard',
     shareFailed: 'Could not share arrivals',
-    arrivalAlertAction: 'Notify',
-    arrivalAlertAria: (destination) => destination ? `Notify me before the trip to ${destination}` : 'Notify me about this arrival',
-    arrivalAlertScheduled: (time) => `Reminder set for ${time}`,
-    arrivalAlertDenied: 'Notification permission was denied',
-    arrivalAlertUnsupported: 'Arrival reminders are only available in the iOS app',
-    arrivalAlertFailed: 'Could not schedule an arrival reminder',
-    arrivalAlertNotificationTitle: (lineName) => `${lineName || 'Transit'} arriving soon`,
-    arrivalAlertNotificationBody: (stationName, destination) => destination
-      ? `${destination} is due at ${stationName || 'your stop'} in about one minute.`
-      : `A vehicle is due at ${stationName || 'your stop'} in about one minute.`,
     addFavorite: 'Add to favorites',
     removeFavorite: 'Remove from favorites',
     moveUp: 'Move up',
@@ -484,16 +475,6 @@ export const UI_COPY = {
     shareSuccess: '已分享到站信息！',
     shareCopied: '到站信息已复制到剪贴板',
     shareFailed: '无法分享到站信息',
-    arrivalAlertAction: '提醒',
-    arrivalAlertAria: (destination) => destination ? `为开往 ${destination} 的班次设置提醒` : '为这条到站信息设置提醒',
-    arrivalAlertScheduled: (time) => `已设置 ${time} 的提醒`,
-    arrivalAlertDenied: '通知权限被拒绝',
-    arrivalAlertUnsupported: '到站提醒仅在 iOS App 内可用',
-    arrivalAlertFailed: '无法设置到站提醒',
-    arrivalAlertNotificationTitle: (lineName) => `${lineName || '班次'} 即将到站`,
-    arrivalAlertNotificationBody: (stationName, destination) => destination
-      ? `开往 ${destination} 的班次将在约 1 分钟后到达 ${stationName || '该站'}。`
-      : `车辆将在约 1 分钟后到达 ${stationName || '该站'}。`,
     addFavorite: '添加到收藏',
     removeFavorite: '从收藏移除',
     moveUp: '上移',
