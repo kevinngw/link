@@ -11,7 +11,6 @@ export function createStationDialogRenderers({
   getStatusTone,
   getArrivalServiceStatus,
   getAllVehicles,
-  supportsArrivalAlerts,
   syncDialogDisplayScroll,
 }) {
   const {
@@ -25,13 +24,6 @@ export function createStationDialogRenderers({
 
   function renderArrivalLists(arrivals, loading = false) {
     const now = Date.now()
-    const encodeDataValue = (value) => encodeURIComponent(String(value ?? ''))
-    const escapeAttribute = (value) => String(value ?? '')
-      .replaceAll('&', '&amp;')
-      .replaceAll('"', '&quot;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-
     const renderArrival = (arrival) => {
       const arrivalMs = arrival.arrivalTime
       const diffSec = Math.floor((arrivalMs - now) / 1000)
@@ -54,7 +46,6 @@ export function createStationDialogRenderers({
       const liveVehicle = arrival.rawVehicleId
         ? getAllVehicles().find((vehicle) => vehicle.id === arrival.rawVehicleId)
         : null
-      const canSetAlert = supportsArrivalAlerts && diffSec > 0
       const wrapperTag = liveVehicle ? 'button' : 'div'
       const interactiveAttrs = liveVehicle
         ? ` type="button" data-arrival-vehicle-id="${liveVehicle.id}" aria-label="${arrival.lineName} ${getVehicleLabel()} ${arrival.vehicleId}"`
@@ -65,7 +56,7 @@ export function createStationDialogRenderers({
       const sourceClass = arrival.isRealtime ? 'live' : 'sched'
 
       return `
-        <div class="arrival-card${canSetAlert ? ' has-alert-action' : ''}">
+        <div class="arrival-card">
           <${wrapperTag} class="arrival-item${liveVehicle ? ' arrival-item-clickable' : ''}" data-arrival-time="${arrival.arrivalTime}" data-schedule-deviation="${arrival.scheduleDeviation ?? 0}"${interactiveAttrs}>
             <span class="arrival-row arrival-row-top">
               <span class="arrival-meta">
@@ -84,20 +75,6 @@ export function createStationDialogRenderers({
               ${precisionInfo ? `<span class="arrival-precision">${precisionInfo}</span>` : ''}
             </span>
           </${wrapperTag}>
-          ${canSetAlert ? `
-            <button
-              class="arrival-alert-button"
-              type="button"
-              data-arrival-alert="true"
-              data-arrival-time="${arrival.arrivalTime}"
-              data-arrival-line-name="${encodeDataValue(arrival.lineName)}"
-              data-arrival-destination="${encodeDataValue(arrival.destination)}"
-              data-arrival-vehicle-id="${encodeDataValue(arrival.vehicleId)}"
-              aria-label="${escapeAttribute(copyValue('arrivalAlertAria', arrival.destination))}"
-            >
-              ${copyValue('arrivalAlertAction')}
-            </button>
-          ` : ''}
         </div>
       `
     }

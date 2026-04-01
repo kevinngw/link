@@ -1,12 +1,13 @@
 {
-  "appId": "io.kevinngw.linkpulse",
-  "appName": "LinkPulse",
+  "appId": "com.linkpulse.app",
+  "appName": "Link Pulse",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {
     "androidScheme": "https"
   },
   "ios": {
+    "scheme": "LinkPulse",
     "contentInset": "automatic",
     "backgroundColor": "#08141f"
   },
