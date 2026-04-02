@@ -1312,6 +1312,7 @@ h1 {
   flex-wrap: wrap;
   gap: 6px;
   color: currentColor;
+  font-weight: 560;
 }
 
 .line-insights {
@@ -2152,6 +2153,9 @@ button.train-list-item {
   background: var(--status-chip-bg);
   color: var(--status-chip-text);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
 }
 
 .status-ontime.status-chip {
@@ -2183,6 +2187,73 @@ button.train-list-item {
   color: #d84c4c;
   border-color: rgba(248, 113, 113, 0.78);
   background: rgba(239, 68, 68, 0.14);
+}
+
+:root[data-theme='light'] .line-marquee-item {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(22, 49, 73, 0.18);
+}
+
+:root[data-theme='light'] .line-marquee-item.status-ontime {
+  color: #1a6a45;
+  border-color: rgba(34, 197, 94, 0.28);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+:root[data-theme='light'] .line-marquee-item.status-arriving,
+:root[data-theme='light'] .line-marquee-item.status-early {
+  color: #205fc5;
+  border-color: rgba(59, 130, 246, 0.28);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+:root[data-theme='light'] .line-marquee-item.status-late-minor {
+  color: #946200;
+  border-color: rgba(245, 158, 11, 0.34);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+:root[data-theme='light'] .line-marquee-item.status-late-moderate {
+  color: #a95b11;
+  border-color: rgba(249, 115, 22, 0.34);
+  background: rgba(249, 115, 22, 0.1);
+}
+
+:root[data-theme='light'] .line-marquee-item.status-late-severe {
+  color: #bf3d3d;
+  border-color: rgba(239, 68, 68, 0.34);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+:root[data-theme='light'] .status-ontime.status-chip {
+  color: #16643f;
+  border-color: rgba(22, 163, 74, 0.6);
+  background: rgba(34, 197, 94, 0.18);
+}
+
+:root[data-theme='light'] .status-arriving.status-chip,
+:root[data-theme='light'] .status-early.status-chip {
+  color: #1f58ba;
+  border-color: rgba(37, 99, 235, 0.58);
+  background: rgba(59, 130, 246, 0.18);
+}
+
+:root[data-theme='light'] .status-late-minor.status-chip {
+  color: #8c5e00;
+  border-color: rgba(217, 119, 6, 0.62);
+  background: rgba(245, 158, 11, 0.18);
+}
+
+:root[data-theme='light'] .status-late-moderate.status-chip {
+  color: #9f4f0e;
+  border-color: rgba(234, 88, 12, 0.62);
+  background: rgba(249, 115, 22, 0.18);
+}
+
+:root[data-theme='light'] .status-late-severe.status-chip {
+  color: #b63636;
+  border-color: rgba(220, 38, 38, 0.58);
+  background: rgba(239, 68, 68, 0.18);
 }
 
 .status-muted.status-chip {
