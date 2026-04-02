@@ -1005,9 +1005,14 @@ h1 {
   height: 30px;
   border-radius: 50%;
   background: var(--line-color);
-  color: #051018;
+  color: #f7fbff;
+  border: 0;
+  font-size: 0.88rem;
+  line-height: 1;
   font-weight: 900;
-  box-shadow: 0 0 18px color-mix(in srgb, var(--line-color) 55%, transparent);
+  letter-spacing: 0;
+  text-shadow: none;
+  box-shadow: none;
 }
 
 .line-title h2 {
@@ -1131,9 +1136,12 @@ h1 {
 }
 
 .terminal-mark {
-  fill: #061018;
+  fill: #f7fbff;
   font-size: 12px;
   font-weight: 900;
+  paint-order: stroke fill;
+  stroke: rgba(0, 0, 0, 0.18);
+  stroke-width: 0.75px;
 }
 
 .station-label {
@@ -1287,10 +1295,15 @@ h1 {
   height: 22px;
   border-radius: 50%;
   background: var(--line-color);
-  color: #051018;
+  color: #f7fbff;
+  border: 0;
   font-size: 0.72rem;
+  line-height: 1;
   font-weight: 900;
+  letter-spacing: 0;
   flex: 0 0 auto;
+  text-shadow: none;
+  box-shadow: none;
 }
 
 .line-marquee-copy {
@@ -3445,10 +3458,14 @@ button.arrival-item {
   height: 22px;
   border-radius: 50%;
   background: var(--line-color);
-  color: #051018;
+  color: #f7fbff;
+  border: 0;
   font-size: 0.78rem;
+  line-height: 1;
   font-weight: 900;
-  box-shadow: 0 0 14px color-mix(in srgb, var(--line-color) 60%, transparent);
+  letter-spacing: 0;
+  text-shadow: none;
+  box-shadow: none;
 }
 
 .arrival-destination {
