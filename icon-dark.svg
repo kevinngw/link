@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="bg" cx="28%" cy="18%" r="88%">
+      <stop offset="0%" stop-color="#102537" />
+      <stop offset="58%" stop-color="#08141f" />
+      <stop offset="100%" stop-color="#050c14" />
+    </radialGradient>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#3ddc97" stop-opacity="0.3" />
+      <stop offset="55%" stop-color="#1fb7ff" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#1fb7ff" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="rail" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#56e39f" />
+      <stop offset="100%" stop-color="#27b05e" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)" />
+  <circle cx="512" cy="512" r="268" fill="url(#halo)" />
+  <circle cx="512" cy="512" r="324" fill="#8cc8ff" fill-opacity="0.04" />
+
+  <path
+    d="M512 170v684"
+    fill="none"
+    stroke="url(#rail)"
+    stroke-linecap="round"
+    stroke-width="56"
+  />
+
+  <g fill="#08141f" stroke="#eff7ff" stroke-width="18">
+    <circle cx="512" cy="292" r="40" />
+    <circle cx="512" cy="732" r="40" />
+  </g>
+
+  <circle cx="512" cy="512" r="176" fill="#20b7ff" fill-opacity="0.08" />
+  <circle cx="512" cy="512" r="128" fill="#20b7ff" fill-opacity="0.12" />
+  <circle
+    cx="512"
+    cy="512"
+    r="96"
+    fill="none"
+    stroke="#20b7ff"
+    stroke-opacity="0.7"
+    stroke-width="20"
+  />
+  <circle
+    cx="512"
+    cy="512"
+    r="62"
+    fill="#08141f"
+    stroke="#e6f5ff"
+    stroke-width="18"
+  />
+  <circle cx="512" cy="512" r="22" fill="#20b7ff" />
+</svg>
