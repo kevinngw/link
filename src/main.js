@@ -1,6 +1,6 @@
 import './style.css'
 import { registerSW } from 'virtual:pwa-register'
-import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
+import { APP_BUNDLE_ID, APP_MARKETING_VERSION, ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, PRIVACY_POLICY_URL, SHARE_BASE_URL, SOURCE_URL, SUPPORT_URL, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
 import { clamp, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
@@ -19,9 +19,14 @@ import { applySystemState, bootstrapApp, loadStaticData, loadSystemDataById } fr
 import { clearDialogParams, clearStationParam, getPageFromUrl, isOptionalNavigationEnabled, setAlertDialogParams, setInsightsDialogParams, setPageParam, setStationParam, setStationSearchParams, setSystemParam, setTrainDialogParams } from './url-state'
 import { createToast } from './toast'
 import { createVehicleDisplay } from './vehicle-display'
-import { createStationSearch } from './station-search'
-import { createFavoritesManager } from './favorites'
-import { createRecentStationsManager } from './recent-stations'
+import { RECENT_SEARCHES_KEY, createStationSearch } from './station-search'
+import { FAVORITES_STORAGE_KEY, createFavoritesManager } from './favorites'
+import { RECENT_STATIONS_KEY, createRecentStationsManager } from './recent-stations'
+import { shouldRegisterServiceWorker } from './native/platform'
+import { initializeAppStorage, getStoredString, setStoredString } from './native/storage'
+import { copyTextToClipboard, shareTextContent } from './native/share'
+import { lightImpact, notificationSuccess } from './native/haptics'
+import { hideSplashScreen } from './native/splash'
 
 const state = {
   fetchedAt: '',
@@ -91,27 +96,65 @@ function closeDialogAnimated(dialogEl) {
   }, { once: true })
 }
 
-const updateSW = registerSW({
-  immediate: true,
-  onNeedRefresh() {
-    updateSW(true)
-  },
-})
+function decodeDataValue(value = '') {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+if (shouldRegisterServiceWorker()) {
+  const updateSW = registerSW({
+    immediate: true,
+    onNeedRefresh() {
+      updateSW(true)
+    },
+  })
+}
+
+function isEditableTarget(target) {
+  return target instanceof HTMLElement && !!target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]')
+}
+
+function disableDoubleTapZoom(root) {
+  let lastTouchEndAt = 0
+
+  root.addEventListener('touchend', (event) => {
+    if (isEditableTarget(event.target)) return
+
+    const now = Date.now()
+    if (now - lastTouchEndAt <= 300) {
+      event.preventDefault()
+    }
+    lastTouchEndAt = now
+  }, { passive: false })
+
+  root.addEventListener('dblclick', (event) => {
+    if (isEditableTarget(event.target)) return
+    event.preventDefault()
+  }, { passive: false })
+}
 
 document.querySelector('#app').innerHTML = `
   <main class="screen">
     <header class="screen-header">
-      <div>
+      <div class="screen-heading">
         <p id="screen-kicker" class="screen-kicker">SEATTLE LIGHT RAIL</p>
         <h1 id="screen-title">LINK PULSE</h1>
       </div>
-      <div class="screen-pills">
-        <button id="station-search-toggle" class="theme-toggle station-search-toggle" type="button" aria-label="Open station search">Search</button>
-        <button id="language-toggle" class="theme-toggle" type="button" aria-label="Switch to Chinese">中文</button>
-        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">Light</button>
-        <button id="status-pill" class="status-pill" type="button" aria-label="Refresh data">SYNC</button>
-        <span id="current-time" class="dot-matrix-clock" aria-label="Current time">--:--</span>
-        <p id="updated-at" class="status-pill updated-at-pill">Waiting for snapshot</p>
+      <div class="screen-toolbar">
+        <div class="screen-actions-primary">
+          <button id="station-search-toggle" class="theme-toggle station-search-toggle" type="button" aria-label="Open station search">Search</button>
+          <button id="language-toggle" class="theme-toggle" type="button" aria-label="Switch to Chinese">中文</button>
+          <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">Light</button>
+          <button id="status-pill" class="status-pill" type="button" aria-label="Refresh data">SYNC</button>
+        </div>
+        <div class="screen-actions-secondary">
+          <span id="current-time" class="dot-matrix-clock" aria-label="Current time">--:--</span>
+          <p id="updated-at" class="status-pill updated-at-pill">Waiting for snapshot</p>
+          <button id="about-toggle" class="theme-toggle about-toggle" type="button" aria-label="About Link Pulse">About</button>
+        </div>
       </div>
     </header>
     <div class="switcher-stack">
@@ -258,7 +301,23 @@ document.querySelector('#app').innerHTML = `
       </div>
     </div>
   </dialog>
+  <dialog id="about-dialog" class="station-dialog about-dialog">
+    <div class="dialog-content">
+      <header class="dialog-header">
+        <div>
+          <h3 id="about-dialog-title">About Link Pulse</h3>
+          <p id="about-dialog-summary" class="dialog-service-summary">Privacy, support, and release info</p>
+        </div>
+        <div class="dialog-actions">
+          <button id="about-dialog-close" class="dialog-close" type="button" aria-label="Close about dialog">&times;</button>
+        </div>
+      </header>
+      <div id="about-dialog-body" class="about-dialog-body"></div>
+    </div>
+  </dialog>
 `
+
+disableDoubleTapZoom(document.querySelector('#app'))
 
 const boardElement = document.querySelector('#board')
 const screenKickerElement = document.querySelector('#screen-kicker')
@@ -272,6 +331,7 @@ const themeToggleButton = document.querySelector('#theme-toggle')
 const statusPillElement = document.querySelector('#status-pill')
 const currentTimeElement = document.querySelector('#current-time')
 const updatedAtElement = document.querySelector('#updated-at')
+const aboutToggleButton = document.querySelector('#about-toggle')
 const toastRegionElement = document.querySelector('#toast-region')
 const stationSearchDialog = document.querySelector('#station-search-dialog')
 const stationSearchTitleElement = document.querySelector('#station-search-title')
@@ -282,6 +342,11 @@ const stationSearchResultsElement = document.querySelector('#station-search-resu
 const stationSearchCloseButton = document.querySelector('#station-search-close')
 const stationLocationButton = document.querySelector('#station-location-button')
 const stationLocationStatusElement = document.querySelector('#station-location-status')
+const aboutDialog = document.querySelector('#about-dialog')
+const aboutDialogTitle = document.querySelector('#about-dialog-title')
+const aboutDialogSummary = document.querySelector('#about-dialog-summary')
+const aboutDialogBody = document.querySelector('#about-dialog-body')
+const aboutDialogCloseButton = document.querySelector('#about-dialog-close')
 
 const dialogElements = getDialogElements()
 const {
@@ -332,6 +397,14 @@ trainDialogClose.addEventListener('click', () => closeTrainDialog())
 alertDialogClose.addEventListener('click', () => closeAlertDialog())
 insightsDetailClose.addEventListener('click', () => closeInsightsDetailDialog())
 insightsDetailDialog.addEventListener('click', (e) => { if (e.target === insightsDetailDialog) closeInsightsDetailDialog() })
+aboutToggleButton.addEventListener('click', () => openAboutDialog())
+aboutDialogCloseButton.addEventListener('click', () => closeAboutDialog())
+aboutDialog.addEventListener('click', (e) => {
+  if (e.target === aboutDialog) closeAboutDialog()
+})
+aboutDialog.addEventListener('close', () => {
+  if (state.activeDialogType === 'about') state.activeDialogType = ''
+})
 languageToggleButton.addEventListener('click', () => {
   setLanguage(state.language === 'en' ? 'zh-CN' : 'en')
   render()
@@ -603,7 +676,7 @@ systemBarElement.addEventListener('click', async (e) => {
 })
 
 // Station dialog: arrival items → train dialog
-dialog.addEventListener('click', (e) => {
+dialog.addEventListener('click', async (e) => {
   const item = e.target.closest('[data-arrival-vehicle-id]')
   if (!item) return
   const vehicle = getAllVehicles().find((c) => c.id === item.dataset.arrivalVehicleId)
@@ -977,13 +1050,13 @@ function getDialogDirectionSummary(directionSymbol, arrivalsBucket = [], station
 }
 
 function getPreferredTheme() {
-  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
+  const storedTheme = getStoredString(THEME_STORAGE_KEY)
   if (storedTheme === 'light' || storedTheme === 'dark') return storedTheme
   return 'dark'
 }
 
 function getPreferredLanguage() {
-  const storedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY)
+  const storedLanguage = getStoredString(LANGUAGE_STORAGE_KEY)
   if (storedLanguage === 'en' || storedLanguage === 'zh-CN') return storedLanguage
 
   const browserLanguage = navigator.language?.toLowerCase() ?? ''
@@ -993,13 +1066,13 @@ function getPreferredLanguage() {
 function setTheme(theme) {
   state.theme = theme
   document.documentElement.dataset.theme = theme
-  window.localStorage.setItem(THEME_STORAGE_KEY, theme)
+  void setStoredString(THEME_STORAGE_KEY, theme).catch(() => {})
 }
 
 function setLanguage(language) {
   state.language = language === 'zh-CN' ? 'zh-CN' : 'en'
   document.documentElement.lang = state.language
-  window.localStorage.setItem(LANGUAGE_STORAGE_KEY, state.language)
+  void setStoredString(LANGUAGE_STORAGE_KEY, state.language).catch(() => {})
 }
 
 function updateViewportState() {
@@ -1444,22 +1517,25 @@ async function shareArrivals() {
   }
   
   // Add app link
-  const baseUrl = window.location.origin + window.location.pathname
-  const stationParam = encodeURIComponent(station.name.toLowerCase().replace(/\s+/g, '-'))
-  shareText += `\n${baseUrl}?system=${state.activeSystemId}&station=${stationParam}`
+  const stationParam = station.name.toLowerCase().replace(/\s+/g, '-')
+  const shareUrl = new URL(SHARE_BASE_URL)
+  shareUrl.searchParams.set('system', state.activeSystemId)
+  shareUrl.searchParams.set('station', stationParam)
+  shareText += `\n${shareUrl.toString()}`
   
   try {
-    if (navigator.share) {
-      await navigator.share({
-        title: `${station.name} - ${getActiveSystemMeta().title}`,
-        text: shareText,
-      })
-      showToast(copyValue('shareSuccess'))
-    } else if (navigator.clipboard) {
-      await navigator.clipboard.writeText(shareText)
+    const result = await shareTextContent({
+      title: `${station.name} - ${getActiveSystemMeta().title}`,
+      text: shareText,
+      url: shareUrl.toString(),
+    })
+    if (result.method === 'clipboard') {
       showToast(copyValue('shareCopied'))
+    } else if (result.method !== 'unavailable') {
+      showToast(copyValue('shareSuccess'))
     } else {
-      showToast(copyValue('shareFailed'))
+      const copied = await copyTextToClipboard(shareText)
+      showToast(copyValue(copied ? 'shareCopied' : 'shareFailed'))
     }
   } catch (err) {
     if (err.name !== 'AbortError') {
@@ -1555,7 +1631,7 @@ function getStationStopIds(station, line) {
 
 function getDialogStationTitle(station) {
   const stripDir = (s) => s.replace(/\s+(NB|SB|EB|WB)\b/gi, '')
-  const stripBay = (s) => s.replace(/\s*[-–]\s*Bay\s+\S+$/i, '')
+  const stripBay = (s) => s.replace(/\s*[-–]?\s*Bay\s+\S+$/i, '')
   const mainName = normalizeName(station.name)
   for (const line of state.lines) {
     const oppName = line.oppositeStopNames?.[station.id]
@@ -2024,6 +2100,7 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
   if (!station) return
   const requestId = state.activeDialogRequest + 1
   state.activeDialogRequest = requestId
+  if (updateUrl) void lightImpact()
   state.currentDialogStation = station
   state.currentDialogStationId = station.id
   setDialogTitle(getDialogStationTitle(station))
@@ -2099,6 +2176,7 @@ if (dialogFavoriteButton) {
       }
     }
     showToast(copyValue(result.isFavorite ? 'favoriteAdded' : 'favoriteRemoved'))
+    void (result.isFavorite ? notificationSuccess() : lightImpact())
   })
 }
 
@@ -2196,7 +2274,10 @@ const overlayDialogs = createOverlayDialogs({
   onStationClick: (stationId, lineId) => {
     const line = state.lines.find((l) => l.id === lineId)
     const station = line?.stops?.find((s) => s.id === stationId)
-    if (station) showStationDialog(station)
+    if (station) {
+      closeTrainDialog()
+      showStationDialog(station)
+    }
   },
 })
 
@@ -2221,6 +2302,7 @@ function renderTrainDialog(vehicle, { updateUrl = true } = {}) {
   if (!vehicle) return
   state.currentTrainId = vehicle.id
   state.activeDialogType = 'train'
+  if (updateUrl) void lightImpact()
   renderTrainDialogBase(vehicle)
   if (updateUrl) setTrainDialogParams(vehicle.id)
 }
@@ -2247,6 +2329,44 @@ function showInsightsDetail(title, subtitle, body, { updateUrl = true, lineId = 
   if (updateUrl && type) setInsightsDialogParams(type, lineId)
 }
 
+function renderAboutDialogContent() {
+  aboutDialogTitle.textContent = copyValue('aboutTitle')
+  aboutDialogSummary.textContent = copyValue('aboutSummary')
+  aboutDialogBody.innerHTML = `
+    <section class="about-panel">
+      <p class="about-panel-label">${copyValue('aboutProductTitle')}</p>
+      <p class="about-panel-copy">${copyValue('aboutProductBody', APP_MARKETING_VERSION)}</p>
+    </section>
+    <section class="about-panel">
+      <p class="about-panel-label">${copyValue('aboutPrivacyTitle')}</p>
+      <p class="about-panel-copy">${copyValue('aboutPrivacyBody')}</p>
+      <a class="about-link" href="${PRIVACY_POLICY_URL}" target="_blank" rel="noreferrer">${copyValue('aboutPrivacyLink')}</a>
+    </section>
+    <section class="about-panel">
+      <p class="about-panel-label">${copyValue('aboutSupportTitle')}</p>
+      <p class="about-panel-copy">${copyValue('aboutSupportBody')}</p>
+      <a class="about-link" href="${SUPPORT_URL}" target="_blank" rel="noreferrer">${copyValue('aboutSupportLink')}</a>
+    </section>
+    <section class="about-panel">
+      <p class="about-panel-label">${copyValue('aboutSourceTitle')}</p>
+      <p class="about-panel-copy">${copyValue('aboutSourceBody', APP_BUNDLE_ID)}</p>
+      <a class="about-link" href="${SOURCE_URL}" target="_blank" rel="noreferrer">${copyValue('aboutSourceLink')}</a>
+    </section>
+  `
+}
+
+function openAboutDialog() {
+  state.activeDialogType = 'about'
+  renderAboutDialogContent()
+  aboutDialog.showModal()
+  aboutDialogCloseButton.focus()
+}
+
+function closeAboutDialog() {
+  if (!aboutDialog.open) return
+  closeDialogAnimated(aboutDialog)
+}
+
 
 function renderShellCopy() {
   const systemMeta = getActiveSystemMeta()
@@ -2266,6 +2386,8 @@ function renderShellCopy() {
   languageToggleButton.setAttribute('aria-label', copyValue('languageToggleAria'))
   themeToggleButton.textContent = state.theme === 'dark' ? copyValue('themeLight') : copyValue('themeDark')
   themeToggleButton.setAttribute('aria-label', copyValue('themeToggleAria'))
+  aboutToggleButton.textContent = copyValue('openAbout')
+  aboutToggleButton.setAttribute('aria-label', copyValue('aboutTitle'))
 
   statusPillElement.setAttribute('aria-label', copyValue('manualRefresh'))
   dialogStatusPillElement.setAttribute('aria-label', copyValue('manualRefresh'))
@@ -2291,6 +2413,10 @@ function renderDialogCopy() {
   trainDialogClose.setAttribute('aria-label', copyValue('closeTrainDialog'))
   alertDialogClose.setAttribute('aria-label', copyValue('closeAlertDialog'))
   alertDialogLink.textContent = copyValue('readOfficialAlert')
+  aboutDialogCloseButton.setAttribute('aria-label', copyValue('closeAboutDialog'))
+  if (!aboutDialog.open) {
+    renderAboutDialogContent()
+  }
   updateFavoriteButton()
   if (!dialog.open) {
     setDialogTitle(copyValue('station'))
@@ -2642,6 +2768,17 @@ const handleViewportResize = () => {
 state.activeTab = getPageFromUrl()
 const init = bootstrapApp({
   state,
+  initializeStorage: () => initializeAppStorage({
+    persistentKeys: [
+      THEME_STORAGE_KEY,
+      LANGUAGE_STORAGE_KEY,
+      FAVORITES_STORAGE_KEY,
+      RECENT_SEARCHES_KEY,
+    ],
+    sessionKeys: [
+      RECENT_STATIONS_KEY,
+    ],
+  }),
   getPreferredLanguage,
   getPreferredTheme,
   handleViewportResize,
@@ -2666,4 +2803,6 @@ init().catch((error) => {
   statusPillElement.textContent = copyValue('statusFail')
   showToast(copyValue('startupRequestFailed'))
   updatedAtElement.textContent = error.message
+}).finally(() => {
+  hideSplashScreen().catch(() => {})
 })

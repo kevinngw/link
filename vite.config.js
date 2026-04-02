@@ -1,7 +1,24 @@
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
-const base = process.env.VITE_BASE ?? '/link/'
+const target = process.env.VITE_TARGET ?? 'web'
+const isNativeBuild = target === 'native'
+const base = process.env.VITE_BASE ?? (isNativeBuild ? '/' : '/link/')
+
+function pwaRegisterStub() {
+  const virtualId = 'virtual:pwa-register'
+  const resolvedId = `\0${virtualId}`
+
+  return {
+    name: 'pwa-register-stub',
+    resolveId(id) {
+      if (id === virtualId) return resolvedId
+    },
+    load(id) {
+      if (id === resolvedId) return 'export function registerSW() { return () => {} }'
+    },
+  }
+}
 
 export default defineConfig({
   base,
@@ -20,7 +37,8 @@ export default defineConfig({
     },
   },
   plugins: [
-    VitePWA({
+    isNativeBuild && pwaRegisterStub(),
+    !isNativeBuild && VitePWA({
       registerType: 'autoUpdate',
       includeAssets: [
         'apple-touch-icon.png',
@@ -108,5 +126,5 @@ export default defineConfig({
         ],
       },
     }),
-  ],
+  ].filter(Boolean),
 })

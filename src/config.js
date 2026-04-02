@@ -5,6 +5,14 @@ export const OBA_KEY = (import.meta.env.VITE_OBA_KEY || 'TEST').trim() || 'TEST'
 export const IS_PUBLIC_TEST_KEY = OBA_KEY === 'TEST'
 export const OBA_MAX_RETRIES = 3
 export const COMPACT_LAYOUT_BREAKPOINT = 1100
+export const SHARE_BASE_URL = (import.meta.env.VITE_SHARE_BASE_URL || 'https://kevinngw.github.io/link/').trim()
+const NORMALIZED_SHARE_BASE_URL = SHARE_BASE_URL.endsWith('/') ? SHARE_BASE_URL : `${SHARE_BASE_URL}/`
+export const APP_DISPLAY_NAME = 'Link Pulse'
+export const APP_BUNDLE_ID = 'com.linkpulse.app'
+export const APP_MARKETING_VERSION = '1.0'
+export const PRIVACY_POLICY_URL = new URL('privacy.html', NORMALIZED_SHARE_BASE_URL).toString()
+export const SUPPORT_URL = new URL('support.html', NORMALIZED_SHARE_BASE_URL).toString()
+export const SOURCE_URL = 'https://github.com/kevinngw/link'
 
 const _TEST_PROFILE = {
   ARRIVALS_CACHE_TTL_MS: 120_000,
@@ -83,6 +91,7 @@ export const UI_COPY = {
     transitSystems: 'Transit systems',
     boardViews: 'Board views',
     openStationSearch: 'Station search',
+    openAbout: 'About',
 
     stationSearchPlaceholder: 'Search stations, lines, or systems',
     stationSearchHint: 'Jump straight to any station across loaded systems.',
@@ -133,6 +142,20 @@ export const UI_COPY = {
     transitAdvisory: 'Transit advisory',
     closeAlertDialog: 'Close alert dialog',
     readOfficialAlert: 'Read official alert',
+    aboutTitle: 'About Link Pulse',
+    aboutSummary: 'Privacy, support, and release info',
+    closeAboutDialog: 'Close about dialog',
+    aboutProductTitle: 'App',
+    aboutProductBody: (version) => `Link Pulse ${version} is a mobile live board for Link, RapidRide, and Swift.`,
+    aboutPrivacyTitle: 'Privacy',
+    aboutPrivacyBody: 'Location is only requested when you choose nearby station search. Favorites, recent stations, theme, and language are stored on your device. The app runs without an account.',
+    aboutPrivacyLink: 'Open privacy policy',
+    aboutSupportTitle: 'Support',
+    aboutSupportBody: 'Questions, bug reports, and feedback can be sent through the project support page.',
+    aboutSupportLink: 'Get support',
+    aboutSourceTitle: 'Source',
+    aboutSourceBody: (bundleId) => `Bundle ID ${bundleId}`,
+    aboutSourceLink: 'View source',
     shareArrivals: 'Share',
     shareArrivalsAria: 'Share arrival times',
     shareSuccess: 'Arrivals shared!',
@@ -419,6 +442,7 @@ export const UI_COPY = {
     transitSystems: '交通系统',
     boardViews: '视图切换',
     openStationSearch: '站点搜索',
+    openAbout: '关于',
 
     stationSearchPlaceholder: '搜索站点、线路或系统',
     stationSearchHint: '可直接跳转到任意已加载系统中的站点。',
@@ -469,6 +493,20 @@ export const UI_COPY = {
     transitAdvisory: '交通提示',
     closeAlertDialog: '关闭通知详情',
     readOfficialAlert: '查看官方公告',
+    aboutTitle: '关于 Link Pulse',
+    aboutSummary: '隐私、支持与版本信息',
+    closeAboutDialog: '关闭关于弹窗',
+    aboutProductTitle: '应用',
+    aboutProductBody: (version) => `Link Pulse ${version} 是一个面向 Link、RapidRide 与 Swift 的移动实时看板。`,
+    aboutPrivacyTitle: '隐私',
+    aboutPrivacyBody: '只有在你主动使用“附近站点”功能时才会请求定位。收藏站点、最近浏览、主题和语言偏好都保存在你的设备本地，应用不需要账号登录。',
+    aboutPrivacyLink: '查看隐私政策',
+    aboutSupportTitle: '支持',
+    aboutSupportBody: '问题反馈、Bug 报告和建议可以通过项目支持页面提交。',
+    aboutSupportLink: '获取支持',
+    aboutSourceTitle: '项目',
+    aboutSourceBody: (bundleId) => `Bundle ID：${bundleId}`,
+    aboutSourceLink: '查看源码',
     shareArrivals: '分享',
     shareArrivalsAria: '分享到站时间',
     shareSuccess: '已分享到站信息！',

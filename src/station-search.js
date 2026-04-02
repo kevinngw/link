@@ -1,7 +1,11 @@
 import { normalizeName, formatDistanceMeters, getDistanceMeters } from './utils'
+import { getCurrentDevicePosition, supportsDeviceLocation } from './native/location'
+import { getStoredJSON, setStoredJSON } from './native/storage'
 
 const RECENT_SEARCHES_KEY = 'link-pulse-recent-searches'
 const RECENT_SEARCHES_MAX = 5
+
+export { RECENT_SEARCHES_KEY }
 
 /**
  * Create station search module
@@ -46,10 +50,7 @@ export function createStationSearch({
   }
 
   function getRecentSearches() {
-    try {
-      const raw = window.localStorage.getItem(RECENT_SEARCHES_KEY)
-      return raw ? JSON.parse(raw) : []
-    } catch { return [] }
+    return getStoredJSON(RECENT_SEARCHES_KEY, { fallback: [] })
   }
 
   function addRecentSearch(result) {
@@ -59,7 +60,7 @@ export function createStationSearch({
       { key, systemId: result.systemId, lineId: result.lineId, stationId: result.stationId, stationName: result.stationName, lineName: result.lineName, lineColor: result.lineColor, systemName: result.systemName },
       ...recents.filter((item) => item.key !== key),
     ].slice(0, RECENT_SEARCHES_MAX)
-    try { window.localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated)) } catch {}
+    void setStoredJSON(RECENT_SEARCHES_KEY, updated).catch(() => {})
   }
 
   function highlightMatch(text, query) {
@@ -131,7 +132,7 @@ export function createStationSearch({
   }
 
   async function findNearbyStations() {
-    if (!navigator.geolocation) {
+    if (!supportsDeviceLocation()) {
       state.geolocationError = copyValue('locationUnsupported')
       state.geolocationStatus = ''
       state.nearbyStations = []
@@ -147,12 +148,10 @@ export function createStationSearch({
     renderStationSearchResults()
 
     try {
-      const position = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 12000,
-          maximumAge: 120000,
-        })
+      const position = await getCurrentDevicePosition({
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 120000,
       })
 
       const latitude = position.coords?.latitude

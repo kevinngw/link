@@ -139,6 +139,7 @@ export async function loadSystemDataById(state, systemId) {
 
 export function bootstrapApp({
   state,
+  initializeStorage,
   getPreferredLanguage,
   getPreferredTheme,
   handleViewportResize,
@@ -157,8 +158,11 @@ export function bootstrapApp({
   setLanguage,
   setTheme,
   boardElement,
-}) {
+  }) {
   return async function init() {
+    if (initializeStorage) {
+      await initializeStorage()
+    }
     setLanguage(getPreferredLanguage())
     setTheme(getPreferredTheme())
     updateViewportState()

@@ -1,6 +1,56 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#08141f" />
-  <path d="M112 146h70v220h148v-54H236v-58h140v166H112z" fill="#a7f3d0" />
-  <circle cx="392" cy="162" r="44" fill="#00b7ff" />
-  <circle cx="392" cy="162" r="72" fill="#00b7ff" fill-opacity=".18" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="bg" cx="32%" cy="18%" r="86%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="55%" stop-color="#eef7ff" />
+      <stop offset="100%" stop-color="#d8ecfb" />
+    </radialGradient>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#32c4ff" stop-opacity="0.2" />
+      <stop offset="60%" stop-color="#8fd6ff" stop-opacity="0.15" />
+      <stop offset="100%" stop-color="#8fd6ff" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="rail" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#4bd694" />
+      <stop offset="100%" stop-color="#17a45c" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)" />
+  <circle cx="512" cy="512" r="300" fill="#d5efff" fill-opacity="0.55" />
+  <circle cx="512" cy="512" r="240" fill="url(#halo)" />
+
+  <path
+    d="M512 170v684"
+    fill="none"
+    stroke="url(#rail)"
+    stroke-linecap="round"
+    stroke-width="56"
+  />
+
+  <g fill="#f8fcff" stroke="#14384b" stroke-width="18">
+    <circle cx="512" cy="292" r="40" />
+    <circle cx="512" cy="732" r="40" />
+  </g>
+
+  <circle cx="512" cy="512" r="176" fill="#25b9ff" fill-opacity="0.1" />
+  <circle cx="512" cy="512" r="128" fill="#25b9ff" fill-opacity="0.16" />
+  <circle
+    cx="512"
+    cy="512"
+    r="96"
+    fill="none"
+    stroke="#1baeff"
+    stroke-opacity="0.78"
+    stroke-width="20"
+  />
+  <circle
+    cx="512"
+    cy="512"
+    r="62"
+    fill="#103247"
+    stroke="#f8fcff"
+    stroke-width="18"
+  />
+  <circle cx="512" cy="512" r="22" fill="#1baeff" />
 </svg>

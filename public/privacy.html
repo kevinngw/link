@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Link Pulse Privacy Policy</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f4f8fb;
+      --surface: rgba(255, 255, 255, 0.92);
+      --text: #143047;
+      --muted: #5e7388;
+      --border: #cfdbe6;
+      --accent: #155f49;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #05070b;
+        --surface: rgba(8, 12, 18, 0.92);
+        --text: #f3f8fc;
+        --muted: #7c8ea2;
+        --border: #1b2735;
+        --accent: #8df0b8;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, var(--bg), color-mix(in srgb, var(--bg) 88%, black 12%));
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    main {
+      width: min(760px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 40px 0 64px;
+    }
+
+    .card {
+      padding: 24px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--surface);
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.08);
+    }
+
+    h1, h2 { margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 5vw, 2.75rem); }
+    h2 { margin-top: 24px; font-size: 1.05rem; letter-spacing: 0.04em; text-transform: uppercase; }
+    p, li { margin: 0 0 12px; }
+    ul { padding-left: 20px; margin: 0 0 12px; }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <p class="muted">Effective date: April 1, 2026</p>
+      <h1>Link Pulse Privacy Policy</h1>
+      <p>Link Pulse is designed to work without an account. This page explains what the app uses, what it stores, and which network services it contacts.</p>
+
+      <h2>Information the app uses</h2>
+      <ul>
+        <li>Location is only requested when you choose nearby station search.</li>
+        <li>Theme, language, favorites, recent searches, and recently viewed stations are stored on your device.</li>
+        <li>Live arrivals and vehicle positions are requested from public transit data services so the app can render realtime boards.</li>
+      </ul>
+
+      <h2>What is stored on device</h2>
+      <p>Link Pulse stores app preferences and station shortcuts locally using standard device storage. This allows favorites, theme, language, and recent stations to persist between launches.</p>
+
+      <h2>Location usage</h2>
+      <p>If you tap the nearby search action, the app asks for location access and uses it to sort nearby stations. The app is still usable without granting location permission.</p>
+
+      <h2>Third-party services</h2>
+      <p>Realtime transit data is fetched from OneBusAway and static service data is packaged with the app or site build. These services may receive normal network metadata such as your IP address when requests are made.</p>
+
+      <h2>Contact</h2>
+      <p>Support requests and bug reports can be submitted through the project support page.</p>
+      <p><a href="./support.html">Open support page</a></p>
+    </section>
+  </main>
+</body>
+</html>

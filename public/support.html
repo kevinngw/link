@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Link Pulse Support</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f4f8fb;
+      --surface: rgba(255, 255, 255, 0.92);
+      --text: #143047;
+      --muted: #5e7388;
+      --border: #cfdbe6;
+      --accent: #155f49;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #05070b;
+        --surface: rgba(8, 12, 18, 0.92);
+        --text: #f3f8fc;
+        --muted: #7c8ea2;
+        --border: #1b2735;
+        --accent: #8df0b8;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, var(--bg), color-mix(in srgb, var(--bg) 88%, black 12%));
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    main {
+      width: min(760px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 40px 0 64px;
+    }
+
+    .card {
+      padding: 24px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--surface);
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.08);
+    }
+
+    h1 { margin: 0 0 12px; font-size: clamp(2rem, 5vw, 2.75rem); }
+    p { margin: 0 0 12px; }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <p class="muted">Link Pulse support</p>
+      <h1>Get Help</h1>
+      <p>If you find a bug, have a feature request, or need help with Link Pulse, please use one of the links below.</p>
+      <p><a href="https://github.com/kevinngw/link/issues/new">Open a support request</a></p>
+      <p><a href="https://github.com/kevinngw/link">View the project source</a></p>
+      <p><a href="./privacy.html">Read the privacy policy</a></p>
+    </section>
+  </main>
+</body>
+</html>

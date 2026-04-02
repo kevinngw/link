@@ -24,7 +24,6 @@ export function createStationDialogRenderers({
 
   function renderArrivalLists(arrivals, loading = false) {
     const now = Date.now()
-
     const renderArrival = (arrival) => {
       const arrivalMs = arrival.arrivalTime
       const diffSec = Math.floor((arrivalMs - now) / 1000)
@@ -57,24 +56,26 @@ export function createStationDialogRenderers({
       const sourceClass = arrival.isRealtime ? 'live' : 'sched'
 
       return `
-        <${wrapperTag} class="arrival-item${liveVehicle ? ' arrival-item-clickable' : ''}" data-arrival-time="${arrival.arrivalTime}" data-schedule-deviation="${arrival.scheduleDeviation ?? 0}"${interactiveAttrs}>
-          <span class="arrival-row arrival-row-top">
-            <span class="arrival-meta">
-              <span class="arrival-line-token" style="--line-color:${arrival.lineColor};">${arrival.lineToken}</span>
-              <span class="arrival-destination">${arrival.destination}</span>
+        <div class="arrival-card">
+          <${wrapperTag} class="arrival-item${liveVehicle ? ' arrival-item-clickable' : ''}" data-arrival-time="${arrival.arrivalTime}" data-schedule-deviation="${arrival.scheduleDeviation ?? 0}"${interactiveAttrs}>
+            <span class="arrival-row arrival-row-top">
+              <span class="arrival-meta">
+                <span class="arrival-line-token" style="--line-color:${arrival.lineColor};">${arrival.lineToken}</span>
+                <span class="arrival-destination">${arrival.destination}</span>
+              </span>
+              <span class="arrival-source arrival-source-${sourceClass}">${sourceBadge}</span>
             </span>
-            <span class="arrival-source arrival-source-${sourceClass}">${sourceBadge}</span>
-          </span>
-          <span class="arrival-row arrival-row-mid">
-            ${statusLabel ? `<span class="arrival-status arrival-status-${serviceTone}">${statusLabel}</span>` : ''}
-            ${clockTime ? `<span class="arrival-clock">${clockTime}</span>` : ''}
-            <span class="arrival-countdown">${timeStr}</span>
-          </span>
-          <span class="arrival-row arrival-row-bottom">
-            <span class="arrival-vehicle">${arrival.lineName} ${getVehicleLabel()} ${arrival.vehicleId}</span>
-            ${precisionInfo ? `<span class="arrival-precision">${precisionInfo}</span>` : ''}
-          </span>
-        </${wrapperTag}>
+            <span class="arrival-row arrival-row-mid">
+              ${statusLabel ? `<span class="arrival-status arrival-status-${serviceTone}">${statusLabel}</span>` : ''}
+              ${clockTime ? `<span class="arrival-clock">${clockTime}</span>` : ''}
+              <span class="arrival-countdown">${timeStr}</span>
+            </span>
+            <span class="arrival-row arrival-row-bottom">
+              <span class="arrival-vehicle">${arrival.lineName} ${getVehicleLabel()} ${arrival.vehicleId}</span>
+              ${precisionInfo ? `<span class="arrival-precision">${precisionInfo}</span>` : ''}
+            </span>
+          </${wrapperTag}>
+        </div>
       `
     }
 

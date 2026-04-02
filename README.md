@@ -1,123 +1,213 @@
 # Link Pulse
 
-Realtime PWA for Puget Sound transit, tracking live vehicles, arrivals, and service health across `Link`, `RapidRide`, and `Swift`.
+Realtime transit board for Puget Sound, available as both an installable web app and a Capacitor-based iOS app.
 
-[Live Site](https://kevinngw.github.io/link/) &nbsp;|&nbsp; [中文说明](./README.zh-CN.md)
+[Live Site](https://kevinngw.github.io/link/) | [中文说明](./README.zh-CN.md)
 
-## Features
+## Overview
 
-- **Multi-system board** — switch between `Link` (light rail), `RapidRide` (King County Metro BRT), and `Swift` (Community Transit BRT) from a shared shell
-- **Live vehicle positions** — adaptive refresh via Puget Sound OneBusAway API, with automatic throttling on the public `TEST` key
-- **Four views** — `Map`, `Trains/Buses`, `Favorites`, and `Insights` tabs
-- **Map view** — SVG visualization of stations and live vehicle positions with ghost trails
-- **Station arrivals dialog** — click any station to see upcoming arrivals (next 60 min), service summary, alerts, and sharing options
-- **Board display mode** — fullscreen station view with auto-rotating directions, optimized for glanceable public displays
-- **Station search** — press `/` to search by name, line, or system; supports location-based nearby station search
-- **Favorites** — save frequently used stations for quick access
-- **Insights dashboard** — headway analysis, delay distribution buckets, attention flags, and system-level health rollups
-- **Bilingual UI** — English / Simplified Chinese with persistent language preference
-- **Theme toggle** — light / dark themes with smooth transitions
-- **PWA support** — installable on desktop and mobile, with auto-update service worker
+Link Pulse tracks live vehicles, arrivals, and service health across:
+
+- `Link` light rail
+- `RapidRide` bus rapid transit
+- `Swift` bus rapid transit
+
+The project keeps one shared JavaScript UI and ships it in two forms:
+
+- a PWA web build for GitHub Pages
+- an iOS shell built with Capacitor
+
+## Highlights
+
+- **Multi-system board** with `Map`, `Trains/Buses`, `Favorites`, and `Insights`
+- **Live arrivals and vehicle positions** via Puget Sound OneBusAway
+- **Station dialog** with arrivals, alerts, favorites, sharing, and board display mode
+- **Train detail dialog** with previous/current/next stop and ETA-to-terminal
+- **Station search** across names, lines, systems, and nearby stations
+- **Persistent preferences** for theme, language, favorites, and recent searches
+- **Bilingual UI** in English and Simplified Chinese
+- **iPhone polish** for dialogs, board mode, map labels, icons, and splash screens
 
 ## Stack
 
 - [Vite](https://vitejs.dev/) + [vite-plugin-pwa](https://vite-pwa-org.netlify.app/)
-- Vanilla JavaScript (ES modules), SVG rendering
-- Monospace UI (SF Mono / Roboto Mono / IBM Plex Mono)
-- [Vitest](https://vitest.dev/) for unit testing
+- Vanilla JavaScript (ES modules) + SVG rendering
+- [Capacitor](https://capacitorjs.com/) for iOS packaging
+- Capacitor plugins:
+  - `Preferences`
+  - `Geolocation`
+  - `Share`
+  - `Clipboard`
+  - `Haptics`
+  - `Splash Screen`
+- [Vitest](https://vitest.dev/) for unit tests
+
+## Requirements
+
+- Node.js `20.19+` or `22.12+`
+- npm `10+`
+- Xcode for simulator or device testing
+
+## Quick Start
+
+```bash
+npm install
+
+# Optional: use your own OneBusAway key instead of TEST
+cp .env.example .env.local
+# Edit .env.local and set VITE_OBA_KEY=your_key
+```
+
+Static GTFS-derived data refresh is explicit:
+
+```bash
+npm run refresh:data
+```
+
+Use that when you want fresh source data. Routine web and iOS builds do not force a GTFS download first.
+
+## Common Commands
+
+```bash
+# Web dev
+npm run dev
+npm run dev:refresh
+
+# Production builds
+npm run build
+npm run build:web
+npm run build:native
+
+# iOS sync / open
+npm run cap:sync
+npm run ios:open
+
+# Local preview
+npm run preview
+
+# Tests
+npm test
+npm run test:run
+npm run test:ui
+npm run test:coverage
+```
+
+## Web Development
+
+`npm run dev` starts the Vite dev server. In this project, the web app is served under `/link/`, so the page is typically available at:
+
+- `http://localhost:5173/link/`
+
+`npm run build:web` produces the PWA build:
+
+- service worker enabled
+- GitHub Pages base path `/link/`
+
+## iOS Development
+
+The iOS app currently ships as:
+
+- App name: `Link Pulse`
+- Bundle ID: `com.linkpulse.app`
+- Scheme: `LinkPulse`
+
+Relevant files:
+
+- Capacitor config: [`capacitor.config.json`](./capacitor.config.json)
+- Xcode project: [`ios/App/App.xcodeproj`](./ios/App/App.xcodeproj/project.pbxproj)
+- App source/assets: [`ios/App/LinkPulse/`](./ios/App/LinkPulse)
+
+Typical simulator/device loop:
+
+```bash
+# Build web assets for the native shell and sync them into ios/
+npm run cap:sync
+
+# Open the Xcode project
+npm run ios:open
+```
+
+`npm run build:native` differs from the web build in two important ways:
+
+- it switches the base path to `/`
+- it disables PWA registration so the native shell does not ship a service worker
+
+Native integrations live in [`src/native/`](./src/native):
+
+- [`src/native/platform.js`](./src/native/platform.js)
+- [`src/native/storage.js`](./src/native/storage.js)
+- [`src/native/location.js`](./src/native/location.js)
+- [`src/native/share.js`](./src/native/share.js)
+- [`src/native/haptics.js`](./src/native/haptics.js)
+- [`src/native/splash.js`](./src/native/splash.js)
+
+## Environment Variables
+
+| Variable | Purpose |
+| --- | --- |
+| `VITE_OBA_KEY` | OneBusAway API key. Falls back to public `TEST` if omitted. |
+| `VITE_TARGET` | Build target selector used by scripts (`web` or `native`). |
+| `VITE_BASE` | Override the base path for unusual deployments. |
+| `VITE_SHARE_BASE_URL` | Base URL used when generating shared station links. |
+
+> The app works with the public `TEST` key, but refreshes more conservatively and backs off more aggressively after rate limiting.
 
 ## Data Sources
 
 | Source | Endpoint |
-|--------|----------|
-| Realtime vehicles | Puget Sound OneBusAway `vehicles-for-agency/{agencyId}.json` |
+| --- | --- |
+| Live vehicles | Puget Sound OneBusAway `vehicles-for-agency/{agencyId}.json` |
 | Stop arrivals | `arrivals-and-departures-for-stop/{stopId}.json` |
-| Static system data | Generated by [`scripts/build-link-data.mjs`](./scripts/build-link-data.mjs) from Sound Transit GTFS, King County Metro GTFS, Community Transit GTFS, and OBA route-stop geometry |
-
-> **Note:** The app uses `VITE_OBA_KEY` when provided, falling back to the public `TEST` key otherwise. With `TEST`, vehicle polling and arrival caching slow down automatically, and OBA requests share a cooldown window with jittered exponential backoff after rate limiting. For production use, configure your own [OBA API key](https://developer.onebusaway.org/).
-
-## Development
-
-**Requirements:** Node.js `20.19+` (or `22.12+`), npm 10+
-
-```bash
-# Optional: use your own OneBusAway key instead of TEST
-cp .env.example .env.local
-# Edit .env.local and set VITE_OBA_KEY=your_key
-
-# Install dependencies and start dev server
-npm install
-npm run dev
-```
-
-The `predev` script automatically fetches the latest GTFS source data and regenerates `public/pulse-data.json`. This file is gitignored as a local build artifact, so routine dev/build runs do not dirty the working tree. The generator also skips rewriting when the meaningful payload is unchanged.
-
-```bash
-# Production build
-VITE_OBA_KEY=your_key npm run build
-
-# Or use values from .env.local / deployment env vars
-npm run build
-
-# Preview production build locally
-npm run preview
-```
-
-For GitHub Pages deploys, add `VITE_OBA_KEY` under repository `Settings → Secrets and variables → Actions → New repository secret`. The workflow falls back to `TEST` if the secret is not set.
-
-## Testing
-
-```bash
-npm test              # Watch mode
-npm run test:run      # Single run
-npm run test:ui       # Browser UI dashboard
-npm run test:coverage # Coverage report
-```
+| Static system data | Generated by [`scripts/build-link-data.mjs`](./scripts/build-link-data.mjs) from GTFS feeds and OBA geometry |
 
 ## Project Layout
 
-```
+```text
+docs/
+  ios-app-store-readiness.md   iOS rollout and App Store notes
+ios/
+  App/
+    App.xcodeproj/             Xcode project
+    CapApp-SPM/                Capacitor Swift package bridge
+    LinkPulse/                 App source, assets, plist, privacy manifest
 public/
-  icon.svg              PWA icon
-  pulse-data.json       Generated multi-system static data artifact (gitignored)
+  icon.svg                     Web icon source
+  splash-light.svg             Light splash source
+  splash-dark.svg              Dark splash source
+  pulse-data.json              Generated static transit data artifact
 scripts/
-  build-link-data.mjs   Transit data generator — fetches and transforms GTFS + OBA data
+  build-link-data.mjs          GTFS / OBA static data generator
 src/
-  main.js               App orchestration and state wiring
-  config.js             System metadata, UI copy, refresh timings
-  static-data.js        Static data loading and layout building
-  app-store.js          Application state store
-  oba.js                OneBusAway API client with caching and request queuing
-  vehicles.js           Vehicle status classification and parsing
-  arrivals.js           Station arrivals fetching and caching
-  insights.js           Service analytics (headway, delays, health flags)
-  station-search.js     Station search with geolocation support
-  favorites.js          Favorite stations management
-  url-state.js          URL parameter syncing
-  vehicle-display.js    Vehicle UI rendering
-  keyboard-nav.js       Keyboard shortcut handling
-  virtual-scroll.js     Virtualized list rendering
-  formatters.js         Time/date formatting utilities
-  toast.js              Toast notifications
-  error-boundary.js     Error handling
-  utils.js              Shared utilities
-  renderers/            Map, trains/buses, and insights view renderers
-  dialogs/              Station arrivals, alert, and insights dialogs
-  style.css             Global styles (~4300 lines)
-.github/workflows/
-  deploy.yml            GitHub Pages CI/CD
-index.html
-vite.config.js
-vitest.config.js
+  dialogs/                     Station, train, alert, and overlay dialog logic
+  native/                      Web/native adapters
+  renderers/                   Map, train list, and insights renderers
+  main.js                      App shell and UI wiring
+  static-data.js               Static data loading and bootstrap
+  station-search.js            Search and nearby lookup
+  favorites.js                 Favorite station management
+  recent-stations.js           Recent station session state
+  style.css                    Global styles
+capacitor.config.json          Capacitor app config
+vite.config.js                 Web/native Vite build config
 ```
 
 ## Deployment
 
-Configured for GitHub Pages via [`deploy.yml`](./.github/workflows/deploy.yml). Pushes to `main` and `dev` automatically build and deploy.
+Web deploys are published through [`deploy.yml`](./.github/workflows/deploy.yml).
 
 | Branch | URL |
-|--------|-----|
+| --- | --- |
 | `main` | https://kevinngw.github.io/link/ |
-| `dev`  | https://kevinngw.github.io/link/dev/ |
+| `dev` | https://kevinngw.github.io/link/dev/ |
 
-`main` publishes to the site root and preserves the existing `dev/` preview directory when present. `dev` publishes to `/link/dev/`. Each branch sets `VITE_BASE` to its own subpath before building, so assets and the PWA manifest resolve correctly.
+## App Store Notes
+
+This repo already includes the basics needed for iOS packaging:
+
+- native app shell via Capacitor
+- iOS app icons and splash assets
+- `PrivacyInfo.xcprivacy`
+- location usage copy in `Info.plist`
+- native-safe storage, geolocation, sharing, haptics, and splash handling
+
+Longer implementation and review notes live in [`docs/ios-app-store-readiness.md`](./docs/ios-app-store-readiness.md).
