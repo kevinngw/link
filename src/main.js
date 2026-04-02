@@ -1,6 +1,6 @@
 import './style.css'
 import { registerSW } from 'virtual:pwa-register'
-import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, SHARE_BASE_URL, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
+import { APP_BUNDLE_ID, APP_MARKETING_VERSION, ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, PRIVACY_POLICY_URL, SHARE_BASE_URL, SOURCE_URL, SUPPORT_URL, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
 import { clamp, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
@@ -113,6 +113,29 @@ if (shouldRegisterServiceWorker()) {
   })
 }
 
+function isEditableTarget(target) {
+  return target instanceof HTMLElement && !!target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]')
+}
+
+function disableDoubleTapZoom(root) {
+  let lastTouchEndAt = 0
+
+  root.addEventListener('touchend', (event) => {
+    if (isEditableTarget(event.target)) return
+
+    const now = Date.now()
+    if (now - lastTouchEndAt <= 300) {
+      event.preventDefault()
+    }
+    lastTouchEndAt = now
+  }, { passive: false })
+
+  root.addEventListener('dblclick', (event) => {
+    if (isEditableTarget(event.target)) return
+    event.preventDefault()
+  }, { passive: false })
+}
+
 document.querySelector('#app').innerHTML = `
   <main class="screen">
     <header class="screen-header">
@@ -130,6 +153,7 @@ document.querySelector('#app').innerHTML = `
         <div class="screen-actions-secondary">
           <span id="current-time" class="dot-matrix-clock" aria-label="Current time">--:--</span>
           <p id="updated-at" class="status-pill updated-at-pill">Waiting for snapshot</p>
+          <button id="about-toggle" class="theme-toggle about-toggle" type="button" aria-label="About Link Pulse">About</button>
         </div>
       </div>
     </header>
@@ -277,7 +301,23 @@ document.querySelector('#app').innerHTML = `
       </div>
     </div>
   </dialog>
+  <dialog id="about-dialog" class="station-dialog about-dialog">
+    <div class="dialog-content">
+      <header class="dialog-header">
+        <div>
+          <h3 id="about-dialog-title">About Link Pulse</h3>
+          <p id="about-dialog-summary" class="dialog-service-summary">Privacy, support, and release info</p>
+        </div>
+        <div class="dialog-actions">
+          <button id="about-dialog-close" class="dialog-close" type="button" aria-label="Close about dialog">&times;</button>
+        </div>
+      </header>
+      <div id="about-dialog-body" class="about-dialog-body"></div>
+    </div>
+  </dialog>
 `
+
+disableDoubleTapZoom(document.querySelector('#app'))
 
 const boardElement = document.querySelector('#board')
 const screenKickerElement = document.querySelector('#screen-kicker')
@@ -291,6 +331,7 @@ const themeToggleButton = document.querySelector('#theme-toggle')
 const statusPillElement = document.querySelector('#status-pill')
 const currentTimeElement = document.querySelector('#current-time')
 const updatedAtElement = document.querySelector('#updated-at')
+const aboutToggleButton = document.querySelector('#about-toggle')
 const toastRegionElement = document.querySelector('#toast-region')
 const stationSearchDialog = document.querySelector('#station-search-dialog')
 const stationSearchTitleElement = document.querySelector('#station-search-title')
@@ -301,6 +342,11 @@ const stationSearchResultsElement = document.querySelector('#station-search-resu
 const stationSearchCloseButton = document.querySelector('#station-search-close')
 const stationLocationButton = document.querySelector('#station-location-button')
 const stationLocationStatusElement = document.querySelector('#station-location-status')
+const aboutDialog = document.querySelector('#about-dialog')
+const aboutDialogTitle = document.querySelector('#about-dialog-title')
+const aboutDialogSummary = document.querySelector('#about-dialog-summary')
+const aboutDialogBody = document.querySelector('#about-dialog-body')
+const aboutDialogCloseButton = document.querySelector('#about-dialog-close')
 
 const dialogElements = getDialogElements()
 const {
@@ -351,6 +397,14 @@ trainDialogClose.addEventListener('click', () => closeTrainDialog())
 alertDialogClose.addEventListener('click', () => closeAlertDialog())
 insightsDetailClose.addEventListener('click', () => closeInsightsDetailDialog())
 insightsDetailDialog.addEventListener('click', (e) => { if (e.target === insightsDetailDialog) closeInsightsDetailDialog() })
+aboutToggleButton.addEventListener('click', () => openAboutDialog())
+aboutDialogCloseButton.addEventListener('click', () => closeAboutDialog())
+aboutDialog.addEventListener('click', (e) => {
+  if (e.target === aboutDialog) closeAboutDialog()
+})
+aboutDialog.addEventListener('close', () => {
+  if (state.activeDialogType === 'about') state.activeDialogType = ''
+})
 languageToggleButton.addEventListener('click', () => {
   setLanguage(state.language === 'en' ? 'zh-CN' : 'en')
   render()
@@ -2275,6 +2329,44 @@ function showInsightsDetail(title, subtitle, body, { updateUrl = true, lineId = 
   if (updateUrl && type) setInsightsDialogParams(type, lineId)
 }
 
+function renderAboutDialogContent() {
+  aboutDialogTitle.textContent = copyValue('aboutTitle')
+  aboutDialogSummary.textContent = copyValue('aboutSummary')
+  aboutDialogBody.innerHTML = `
+    <section class="about-panel">
+      <p class="about-panel-label">${copyValue('aboutProductTitle')}</p>
+      <p class="about-panel-copy">${copyValue('aboutProductBody', APP_MARKETING_VERSION)}</p>
+    </section>
+    <section class="about-panel">
+      <p class="about-panel-label">${copyValue('aboutPrivacyTitle')}</p>
+      <p class="about-panel-copy">${copyValue('aboutPrivacyBody')}</p>
+      <a class="about-link" href="${PRIVACY_POLICY_URL}" target="_blank" rel="noreferrer">${copyValue('aboutPrivacyLink')}</a>
+    </section>
+    <section class="about-panel">
+      <p class="about-panel-label">${copyValue('aboutSupportTitle')}</p>
+      <p class="about-panel-copy">${copyValue('aboutSupportBody')}</p>
+      <a class="about-link" href="${SUPPORT_URL}" target="_blank" rel="noreferrer">${copyValue('aboutSupportLink')}</a>
+    </section>
+    <section class="about-panel">
+      <p class="about-panel-label">${copyValue('aboutSourceTitle')}</p>
+      <p class="about-panel-copy">${copyValue('aboutSourceBody', APP_BUNDLE_ID)}</p>
+      <a class="about-link" href="${SOURCE_URL}" target="_blank" rel="noreferrer">${copyValue('aboutSourceLink')}</a>
+    </section>
+  `
+}
+
+function openAboutDialog() {
+  state.activeDialogType = 'about'
+  renderAboutDialogContent()
+  aboutDialog.showModal()
+  aboutDialogCloseButton.focus()
+}
+
+function closeAboutDialog() {
+  if (!aboutDialog.open) return
+  closeDialogAnimated(aboutDialog)
+}
+
 
 function renderShellCopy() {
   const systemMeta = getActiveSystemMeta()
@@ -2294,6 +2386,8 @@ function renderShellCopy() {
   languageToggleButton.setAttribute('aria-label', copyValue('languageToggleAria'))
   themeToggleButton.textContent = state.theme === 'dark' ? copyValue('themeLight') : copyValue('themeDark')
   themeToggleButton.setAttribute('aria-label', copyValue('themeToggleAria'))
+  aboutToggleButton.textContent = copyValue('openAbout')
+  aboutToggleButton.setAttribute('aria-label', copyValue('aboutTitle'))
 
   statusPillElement.setAttribute('aria-label', copyValue('manualRefresh'))
   dialogStatusPillElement.setAttribute('aria-label', copyValue('manualRefresh'))
@@ -2319,6 +2413,10 @@ function renderDialogCopy() {
   trainDialogClose.setAttribute('aria-label', copyValue('closeTrainDialog'))
   alertDialogClose.setAttribute('aria-label', copyValue('closeAlertDialog'))
   alertDialogLink.textContent = copyValue('readOfficialAlert')
+  aboutDialogCloseButton.setAttribute('aria-label', copyValue('closeAboutDialog'))
+  if (!aboutDialog.open) {
+    renderAboutDialogContent()
+  }
   updateFavoriteButton()
   if (!dialog.open) {
     setDialogTitle(copyValue('station'))

@@ -98,6 +98,12 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  touch-action: manipulation;
+}
+
+body,
+#app {
+  touch-action: manipulation;
 }
 
 .sr-only {
@@ -391,6 +397,10 @@ h1 {
   line-height: 1;
   letter-spacing: 0.08em;
   text-align: center;
+}
+
+.about-toggle {
+  min-width: 4.5em;
 }
 
 .status-pill {
@@ -2277,8 +2287,8 @@ button.train-list-item {
   }
 
   .arrival-line-token {
-    width: 20px;
-    height: 20px;
+    width: 10px;
+    height: 10px;
     font-size: 0.7rem;
   }
 
@@ -2739,6 +2749,60 @@ button.train-list-item {
 }
 
 .alert-dialog-link:hover {
+  text-decoration: underline;
+}
+
+.about-dialog {
+  max-width: 560px;
+}
+
+.about-dialog .dialog-content {
+  min-height: 0;
+}
+
+.about-dialog-body {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.about-panel {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  background: var(--surface-soft);
+}
+
+.about-panel-label,
+.about-panel-copy {
+  margin: 0;
+}
+
+.about-panel-label {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.about-panel-copy {
+  color: var(--text-primary);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.about-link {
+  color: var(--status-link);
+  font-size: 0.84rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.about-link:hover {
   text-decoration: underline;
 }
 
@@ -3842,7 +3906,7 @@ button.arrival-item {
 
   .screen-actions-secondary {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 8px;
     align-items: stretch;
   }
@@ -5024,6 +5088,13 @@ dialog.is-closing::backdrop {
 
   .station-dialog.is-display-mode .arrivals-section {
     padding: 14px;
+  }
+
+  .station-dialog.is-display-mode .arrival-line-token {
+    width: 28px;
+    height: 28px;
+    font-size: 0.86rem;
+    box-shadow: 0 0 8px color-mix(in srgb, var(--line-color) 42%, transparent);
   }
 
   .station-dialog.is-display-mode .arrivals-title {
