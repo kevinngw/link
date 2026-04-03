@@ -1,0 +1,205 @@
+@media (max-width: 430px) {
+  .station-dialog {
+    --dialog-max-height: calc(100dvh - 16px - var(--safe-area-top) - var(--safe-area-bottom));
+    top: max(8px, var(--safe-area-top));
+    right: auto;
+    bottom: auto;
+    left: 50%;
+    width: 96vw;
+    max-width: 96vw;
+    margin: 0;
+    box-sizing: border-box;
+    transform: translateX(-50%);
+  }
+
+  .station-dialog > .dialog-content {
+    padding: 10px 12px calc(16px + var(--safe-area-bottom));
+  }
+
+  .station-dialog .dialog-header {
+    gap: 8px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+  }
+
+  .station-dialog .dialog-service-summary {
+    margin-top: 2px;
+  }
+
+  .train-dialog {
+    width: 96vw;
+    max-width: 96vw;
+  }
+
+  .train-dialog .dialog-content,
+  .train-dialog .dialog-header > div:first-child,
+  .train-dialog-body,
+  .train-detail-line,
+  .train-detail-stop > div,
+  .train-eta-panel,
+  .train-eta-stop > div:first-child,
+  .train-eta-stop-side,
+  .metric-chip {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .train-dialog .dialog-content {
+    overflow-x: hidden;
+  }
+
+  .train-dialog-body {
+    gap: 14px;
+    padding-right: 0;
+    overflow-x: hidden;
+  }
+
+  #train-dialog-title,
+  #train-dialog-subtitle,
+  .train-detail-name,
+  .train-eta-stop-name,
+  .metric-chip-value {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  #train-dialog-title {
+    font-size: 1rem;
+    line-height: 1.18;
+  }
+
+  #train-dialog-subtitle {
+    white-space: normal;
+    line-height: 1.35;
+  }
+
+  .train-detail-line {
+    gap: 18px;
+    padding: 8px 0;
+    --anchor-top: 22px;
+    --anchor-bottom: calc(100% - 22px);
+  }
+
+  .train-detail-stop {
+    gap: 12px;
+    min-height: 72px;
+    align-items: start;
+  }
+
+  .train-detail-name {
+    font-size: 0.98rem;
+    line-height: 1.12;
+  }
+
+  .metric-chip-value,
+  .train-eta-stop-name {
+    line-height: 1.2;
+  }
+
+  .train-eta-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .train-eta-stop {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .train-eta-stop-side {
+    text-align: left;
+  }
+
+  .station-dialog.is-display-mode > .dialog-content {
+    padding:
+      8px
+      12px
+      calc(14px + var(--safe-area-bottom));
+  }
+
+  .station-dialog.is-display-mode .dialog-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 6px 10px;
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+  }
+
+  .station-dialog.is-display-mode .dialog-header-main {
+    min-width: 0;
+  }
+
+  .station-dialog.is-display-mode .dialog-title-wrap {
+    display: grid;
+    align-items: start;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .station-dialog.is-display-mode .dialog-title-wrap .dialog-meta {
+    width: fit-content;
+    max-width: 100%;
+    min-width: 0;
+    padding: 4px 10px;
+  }
+
+  .station-dialog.is-display-mode .dialog-actions {
+    justify-self: end;
+    align-self: start;
+    gap: 6px;
+  }
+
+  .station-dialog.is-display-mode .dialog-actions .dialog-share-button,
+  .station-dialog.is-display-mode .dialog-actions .dialog-mode-button {
+    min-width: 58px;
+    height: 34px;
+    padding: 0 10px;
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+  }
+
+  .station-dialog.is-display-mode .dialog-actions .dialog-favorite-button,
+  .station-dialog.is-display-mode .dialog-actions > .dialog-close:not(.dialog-share-button):not(.dialog-mode-button):not(.dialog-favorite-button) {
+    width: 34px;
+    height: 34px;
+    font-size: 1.05rem;
+  }
+
+  .station-dialog.is-display-mode .dialog-service-summary {
+    display: none;
+  }
+
+  .station-dialog.is-display-mode .dialog-body {
+    gap: 10px;
+  }
+
+  .station-dialog.is-display-mode .arrivals-section {
+    padding: 14px;
+  }
+
+  .station-dialog.is-display-mode .arrival-line-token {
+    width: 28px;
+    height: 28px;
+    font-size: 0.86rem;
+    box-shadow: 0 0 8px color-mix(in srgb, var(--line-color) 42%, transparent);
+  }
+
+  .station-dialog.is-display-mode .arrivals-title {
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+    line-height: 1.25;
+    letter-spacing: 0.04em;
+  }
+
+  .station-dialog.is-display-mode .arrivals-title-text,
+  .station-dialog.is-display-mode .arrivals-title-clone {
+    font-size: inherit;
+    line-height: inherit;
+    letter-spacing: inherit;
+  }
+
+  .station-dialog.is-display-mode .arrivals-empty {
+    padding: 10px 6px;
+    font-size: 0.78rem;
+  }
+}

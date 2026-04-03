@@ -10,7 +10,8 @@ export function getDialogElements() {
     dialogUpdatedAtElement: document.querySelector('#dialog-updated-at'),
     dialogShare: document.querySelector('#dialog-share'),
     dialogDisplay: document.querySelector('#dialog-display'),
-    dialogDirectionTabs: [...document.querySelectorAll('[data-dialog-direction]')],
+    dialogDirectionTabs: [...document.querySelectorAll('[data-dialog-direction]')]
+      .filter((button) => button.dataset.dialogDirection !== 'auto'),
     arrivalsTitleNb: document.querySelector('#arrivals-title-nb'),
     arrivalsTitleSb: document.querySelector('#arrivals-title-sb'),
     stationAlertsContainer: document.querySelector('#station-alerts-container'),

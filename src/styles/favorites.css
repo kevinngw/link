@@ -1,0 +1,234 @@
+/* ─── Favorites feature styles ─── */
+
+.dialog-favorite-button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--text-secondary);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 0 0 auto;
+}
+
+.dialog-favorite-button:hover {
+  background: var(--surface-active);
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--status-warn) 40%, var(--border-color));
+}
+
+.dialog-favorite-button.is-favorite {
+  color: var(--status-warn);
+  border-color: color-mix(in srgb, var(--status-warn) 50%, var(--border-color));
+  background: color-mix(in srgb, var(--status-warn) 8%, var(--surface-soft));
+}
+
+.dialog-favorite-button.is-favorite:hover {
+  background: color-mix(in srgb, var(--status-warn) 15%, var(--surface-active));
+}
+
+.favorites-list {
+  display: grid;
+  gap: 10px;
+}
+
+.favorite-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--surface-soft);
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.favorite-item:hover {
+  background: var(--surface-active);
+  border-color: color-mix(in srgb, var(--accent-strong) 35%, var(--border-color));
+  transform: translateY(-1px);
+}
+
+.favorite-item:active {
+  transform: translateY(0);
+}
+
+.favorite-item-missing {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.favorite-item-missing:hover {
+  background: var(--surface-soft);
+  border-color: var(--border-color);
+  transform: none;
+}
+
+.favorite-item-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.favorite-item-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.favorite-arrivals-preview {
+  margin-top: 12px;
+}
+
+.favorite-arrivals-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.favorite-arrival-lane {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 90%, transparent);
+  background: color-mix(in srgb, var(--surface) 55%, var(--surface-soft));
+}
+
+.favorite-arrival-direction {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.favorite-arrival-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.favorite-arrival-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--surface-active);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.favorite-arrival-chip.is-live {
+  background: color-mix(in srgb, var(--status-ok) 18%, var(--surface-active));
+}
+
+.favorite-arrival-chip-badge {
+  color: var(--status-ok);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+}
+
+.favorite-arrival-status,
+.favorite-arrival-empty {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.favorite-arrival-updated {
+  margin-top: 8px;
+}
+
+.favorite-item-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.98rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.favorite-item-meta {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.favorite-item-arrow {
+  color: var(--text-secondary);
+  font-size: 1.2rem;
+  transition: transform 0.2s ease;
+}
+
+.favorite-item:hover .favorite-item-arrow {
+  transform: translateX(3px);
+  color: var(--text-primary);
+}
+
+.favorite-item-actions {
+  display: flex;
+  gap: 4px;
+  padding: 6px 0 0;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+
+.favorite-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.favorite-action-btn:hover {
+  background: var(--surface-hover, rgba(255, 255, 255, 0.06));
+  color: var(--text-primary);
+}
+
+.favorite-action-remove:hover {
+  color: var(--danger, #e53e3e);
+}
+
+@media (max-width: 700px) {
+  .dialog-favorite-button {
+    width: 36px;
+    height: 36px;
+    font-size: 1.2rem;
+  }
+
+  .favorite-item {
+    padding: 12px 14px;
+  }
+
+  .favorite-arrivals-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .favorite-item-title {
+    font-size: 0.92rem;
+  }
+
+  .favorite-item-meta,
+  .favorite-arrival-status,
+  .favorite-arrival-empty {
+    font-size: 0.74rem;
+  }
+}
+

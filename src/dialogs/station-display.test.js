@@ -62,8 +62,6 @@ function makeState() {
   return {
     dialogDisplayMode: false,
     dialogDisplayDirection: 'both',
-    dialogDisplayAutoPhase: 'nb',
-    dialogDisplayDirectionTimer: 0,
     dialogDisplayDirectionAnimationTimer: 0,
     dialogDisplayAnimatingDirection: '',
     dialogDisplayTimer: 0,
@@ -163,13 +161,11 @@ describe('createStationDialogDisplayController', () => {
 
       state.dialogRefreshTimer = 100
       state.dialogDisplayTimer = 200
-      state.dialogDisplayDirectionTimer = 300
 
       cleanupDialogState()
 
       expect(clearTimeoutSpy).toHaveBeenCalledWith(100)
       expect(clearIntervalSpy).toHaveBeenCalledWith(200)
-      expect(clearIntervalSpy).toHaveBeenCalledWith(300)
       expect(state.dialogDisplayMode).toBe(false)
       expect(clearStationParam).toHaveBeenCalled()
     })

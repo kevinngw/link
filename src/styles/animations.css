@@ -1,0 +1,400 @@
+/* ─── Dialog open/close animations ─── */
+
+@keyframes dialogIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes dialogOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+}
+
+@keyframes backdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+dialog[open] {
+  animation: none;
+}
+
+dialog[open] > .dialog-content {
+  animation: dialogIn var(--duration-slow) var(--ease-out) both;
+}
+
+dialog[open]::backdrop {
+  animation: backdropIn var(--duration-normal) ease both;
+}
+
+dialog.is-closing {
+  animation: none;
+}
+
+dialog.is-closing > .dialog-content {
+  animation: dialogOut var(--duration-normal) var(--ease-in-out) both;
+}
+
+dialog.is-closing::backdrop {
+  opacity: 0;
+  transition: opacity var(--duration-normal) ease;
+}
+
+/* ─── Toast animations ─── */
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toastOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+.toast {
+  animation: toastIn var(--duration-normal) var(--ease-out) both;
+}
+
+.toast.toast-leaving {
+  animation: toastOut var(--duration-fast) var(--ease-in-out) both;
+}
+
+/* ─── Tab/board transition ─── */
+
+.board {
+  transition: opacity var(--duration-fast) var(--ease-in-out);
+}
+
+/* ─── Arrival list item stagger animation ─── */
+
+@keyframes arrivalItemIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.arrival-card {
+  animation: arrivalItemIn var(--duration-normal) var(--ease-out) both;
+}
+
+.arrival-card:nth-child(1) { animation-delay: 0ms; }
+.arrival-card:nth-child(2) { animation-delay: 40ms; }
+.arrival-card:nth-child(3) { animation-delay: 50ms; }
+.arrival-card:nth-child(4) { animation-delay: 60ms; }
+.arrival-card:nth-child(5) { animation-delay: 70ms; }
+.arrival-card:nth-child(6) { animation-delay: 80ms; }
+.arrival-card:nth-child(7) { animation-delay: 90ms; }
+.arrival-card:nth-child(8) { animation-delay: 100ms; }
+
+/* ─── Skeleton/shimmer loading ─── */
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+
+.arrivals-loading {
+  background: linear-gradient(90deg, var(--surface-soft) 25%, var(--surface-active) 50%, var(--surface-soft) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease infinite;
+  border-radius: 8px;
+}
+
+/* ─── Line switcher press feedback ─── */
+
+.line-switcher-button:active {
+  transform: scale(0.96);
+  transition-duration: var(--duration-instant);
+}
+
+/* ─── Tablet breakpoint (701–1100px) ─── */
+
+@media (min-width: 701px) and (max-width: 1100px) {
+  .metric-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .system-summary-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .system-ranking-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .station-dialog {
+    max-width: 720px;
+    width: 92vw;
+    margin: auto;
+  }
+
+  .station-dialog .dialog-content {
+    padding: 24px 28px 28px;
+  }
+
+  .station-dialog .dialog-header {
+    gap: 16px;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+  }
+
+  .station-dialog .dialog-header h3 {
+    font-size: 1.3rem;
+  }
+
+  .station-dialog .dialog-service-summary {
+    font-size: 0.88rem;
+  }
+
+  .station-dialog .dialog-direction-tab {
+    min-width: 72px;
+    padding: 10px 14px;
+    font-size: 0.82rem;
+  }
+
+  .station-dialog .dialog-mode-button {
+    min-width: 80px;
+    height: 44px;
+    font-size: 0.82rem;
+  }
+
+  .station-dialog .dialog-body {
+    gap: 16px;
+  }
+
+  .station-dialog .arrivals-section {
+    padding: 18px 20px;
+  }
+
+  .station-dialog .arrivals-title {
+    font-size: 0.94rem;
+    margin-bottom: 14px;
+  }
+
+  .station-dialog .arrival-item {
+    padding: 14px 16px;
+    gap: 14px;
+  }
+
+  .station-dialog .arrival-vehicle {
+    font-size: 0.92rem;
+  }
+
+  .station-dialog .arrival-destination {
+    font-size: 0.82rem;
+  }
+
+  .station-dialog .arrival-countdown {
+    font-size: 1.02rem;
+  }
+
+  .train-focus-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .train-eta-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .headway-health-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .delay-distribution {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ─── Landscape handling ─── */
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .station-dialog {
+    --dialog-max-height: calc(100dvh - 12px);
+    max-width: 80vw;
+  }
+
+  .dialog-content {
+    padding: 12px calc(16px + var(--safe-area-right)) 14px calc(16px + var(--safe-area-left));
+  }
+
+  .dialog-header {
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    gap: 10px;
+  }
+
+  .dialog-header h3 {
+    font-size: 1rem;
+  }
+
+  .dialog-body {
+    gap: 8px;
+  }
+
+  .arrivals-section {
+    padding: 8px 10px;
+  }
+}
+
+/* ─── Arrival source indicator (LIVE / SCHED) ─── */
+
+.arrival-source {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.arrival-source-live {
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent-strong) 14%, transparent);
+}
+
+.arrival-source-sched {
+  color: var(--text-muted);
+  background: var(--surface-soft);
+}
+
+/* ─── Train dialog clickable elements ─── */
+
+.train-detail-stop-clickable {
+  cursor: pointer;
+  transition: background var(--duration-fast) ease;
+  border-radius: 8px;
+  padding: 4px 6px;
+  margin: -4px -6px;
+}
+
+.train-detail-stop-clickable:hover {
+  background: var(--surface-active);
+}
+
+.train-detail-stop-clickable:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-strong) 70%, white);
+  outline-offset: 2px;
+}
+
+[data-timeline-station-id] {
+  cursor: pointer;
+  transition: background var(--duration-fast) ease;
+}
+
+[data-timeline-station-id]:hover {
+  background: var(--surface-active);
+}
+
+[data-timeline-station-id]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-strong) 70%, white);
+  outline-offset: 2px;
+}
+
+/* ─── Search match highlight ─── */
+
+.search-highlight {
+  background: color-mix(in srgb, var(--accent-strong) 25%, transparent);
+  color: var(--accent-strong);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* ─── Skeleton loading (initial page load) ─── */
+
+.skeleton-board {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+
+.skeleton-card {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+}
+
+.skeleton-line {
+  height: 14px;
+  border-radius: 7px;
+  background: linear-gradient(90deg, var(--surface-soft) 25%, var(--surface-active) 50%, var(--surface-soft) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease infinite;
+}
+
+.skeleton-line-wide {
+  width: 75%;
+}
+
+.skeleton-line-narrow {
+  width: 45%;
+}
+
+@media (max-width: 700px) {
+  .skeleton-board {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+/* ─── View Transition (theme toggle) ─── */
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--duration-slow);
+  animation-timing-function: var(--ease-in-out);
+}
+
+::view-transition-old(root) {
+  animation-name: none;
+}
+
+::view-transition-new(root) {
+  animation-name: none;
+  mix-blend-mode: normal;
+}
+
+/* ─── Prefers reduced motion ─── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

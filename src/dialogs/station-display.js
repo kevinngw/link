@@ -1,6 +1,5 @@
 import {
   DIALOG_DISPLAY_DIRECTION_ANIMATION_MS,
-  DIALOG_DISPLAY_DIRECTION_ROTATE_MS,
   DIALOG_DISPLAY_SCROLL_INTERVAL_MS,
   DIALOG_REFRESH_INTERVAL_MS,
   OBA_RATE_LIMIT_DELAY_MS,
@@ -35,7 +34,6 @@ export function createStationDialogDisplayController({
     dialogDisplay.textContent = isDisplayMode ? copyValue('exit') : copyValue('board')
     dialogDisplay.setAttribute('aria-label', isDisplayMode ? copyValue('exit') : copyValue('board'))
     state.dialogDisplayDirection = 'both'
-    state.dialogDisplayAutoPhase = 'nb'
     renderDialogDirectionView()
 
     if (dialog.open && state.currentDialogStation) {
@@ -48,13 +46,6 @@ export function createStationDialogDisplayController({
 
   function toggleDialogDisplayMode() {
     setDialogDisplayMode(!state.dialogDisplayMode)
-  }
-
-  function stopDialogDirectionRotation() {
-    if (state.dialogDisplayDirectionTimer) {
-      window.clearInterval(state.dialogDisplayDirectionTimer)
-      state.dialogDisplayDirectionTimer = 0
-    }
   }
 
   function stopDialogDirectionAnimation() {
@@ -88,12 +79,10 @@ export function createStationDialogDisplayController({
   }
 
   function renderDialogDirectionView({ animate = false } = {}) {
-    stopDialogDirectionRotation()
     stopDialogDirectionAnimation()
-    const requestedDirection = state.dialogDisplayDirection
-    const direction = requestedDirection === 'auto' ? state.dialogDisplayAutoPhase : requestedDirection
+    const direction = state.dialogDisplayDirection
     dialogDirectionTabs.forEach((button) => {
-      button.classList.toggle('is-active', button.dataset.dialogDirection === requestedDirection)
+      button.classList.toggle('is-active', button.dataset.dialogDirection === direction)
     })
 
     dialog.classList.toggle('show-nb-only', direction === 'nb')
@@ -101,13 +90,6 @@ export function createStationDialogDisplayController({
 
     if (animate) {
       startDialogDirectionAnimation(direction)
-    }
-
-    if (state.dialogDisplayMode && requestedDirection === 'auto') {
-      state.dialogDisplayDirectionTimer = window.setInterval(() => {
-        state.dialogDisplayAutoPhase = state.dialogDisplayAutoPhase === 'nb' ? 'sb' : 'nb'
-        renderDialogDirectionView({ animate: true })
-      }, DIALOG_DISPLAY_DIRECTION_ROTATE_MS)
     }
   }
 
@@ -208,7 +190,6 @@ export function createStationDialogDisplayController({
   function cleanupDialogState() {
     stopDialogAutoRefresh()
     stopDialogDisplayScroll()
-    stopDialogDirectionRotation()
     stopDialogDirectionAnimation()
     setDialogDisplayMode(false)
     clearStationParam()
@@ -269,7 +250,6 @@ export function createStationDialogDisplayController({
   return {
     setDialogDisplayMode,
     toggleDialogDisplayMode,
-    stopDialogDirectionRotation,
     stopDialogDirectionAnimation,
     renderDialogDirectionView,
     stopDialogAutoRefresh,

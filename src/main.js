@@ -1,22 +1,28 @@
 import './style.css'
 import { registerSW } from 'virtual:pwa-register'
-import { APP_BUNDLE_ID, APP_MARKETING_VERSION, ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, PRIVACY_POLICY_URL, SHARE_BASE_URL, SOURCE_URL, SUPPORT_URL, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
+import { APP_BUNDLE_ID, APP_MARKETING_VERSION, ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, PRIVACY_POLICY_URL, SHARE_BASE_URL, SOURCE_URL, SUPPORT_URL, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
-import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
-import { clamp, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
+import { classifyHeadwayHealth, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
+import { clamp, normalizeName, pluralizeVehicleLabel, slugifyStation } from './utils'
 import { createObaClient } from './oba'
 import { createArrivalsHelpers, getLineRouteId, getStatusTone } from './arrivals'
 import { parseVehicle } from './vehicles'
 import { createMapRenderer } from './renderers/map'
 import { createTrainRenderers } from './renderers/trains'
 import { createInsightsRenderers } from './renderers/insights'
+import { renderAppShell } from './app-shell'
+import { getAppElements } from './app-dom'
+import { buildInsightsItems, computeSystemSummaryMetrics } from './insights-metrics'
+import { createServiceTimelineHelpers } from './service-timeline'
+import { createDialogLifecycle } from './dialog-lifecycle'
+import { registerAppEventHandlers } from './event-handlers'
 
 import { getDialogElements } from './dialogs/dom'
 import { createStationDialogDisplayController } from './dialogs/station-display'
 import { createStationDialogRenderers } from './dialogs/station-render'
 import { createOverlayDialogs } from './dialogs/overlays'
 import { applySystemState, bootstrapApp, loadStaticData, loadSystemDataById } from './static-data'
-import { clearDialogParams, clearStationParam, getPageFromUrl, isOptionalNavigationEnabled, setAlertDialogParams, setInsightsDialogParams, setPageParam, setStationParam, setStationSearchParams, setSystemParam, setTrainDialogParams } from './url-state'
+import { clearDialogParams, getPageFromUrl, setAlertDialogParams, setInsightsDialogParams, setPageParam, setStationParam, setStationSearchParams, setSystemParam, setTrainDialogParams } from './url-state'
 import { createToast } from './toast'
 import { createVehicleDisplay } from './vehicle-display'
 import { RECENT_SEARCHES_KEY, createStationSearch } from './station-search'
@@ -54,8 +60,6 @@ const state = {
   liveMetaTimer: 0,
   dialogDisplayMode: false,
   dialogDisplayDirection: 'both',
-  dialogDisplayAutoPhase: 'nb',
-  dialogDisplayDirectionTimer: 0,
   dialogDisplayDirectionAnimationTimer: 0,
   dialogDisplayAnimatingDirection: '',
   dialogDisplayTimer: 0,
@@ -96,14 +100,6 @@ function closeDialogAnimated(dialogEl) {
   }, { once: true })
 }
 
-function decodeDataValue(value = '') {
-  try {
-    return decodeURIComponent(value)
-  } catch {
-    return value
-  }
-}
-
 if (shouldRegisterServiceWorker()) {
   const updateSW = registerSW({
     immediate: true,
@@ -136,217 +132,42 @@ function disableDoubleTapZoom(root) {
   }, { passive: false })
 }
 
-document.querySelector('#app').innerHTML = `
-  <main class="screen">
-    <header class="screen-header">
-      <div class="screen-heading">
-        <p id="screen-kicker" class="screen-kicker">SEATTLE LIGHT RAIL</p>
-        <h1 id="screen-title">LINK PULSE</h1>
-      </div>
-      <div class="screen-toolbar">
-        <div class="screen-actions-primary">
-          <button id="station-search-toggle" class="theme-toggle station-search-toggle" type="button" aria-label="Open station search">Search</button>
-          <button id="language-toggle" class="theme-toggle" type="button" aria-label="Switch to Chinese">中文</button>
-          <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">Light</button>
-          <button id="status-pill" class="status-pill" type="button" aria-label="Refresh data">SYNC</button>
-        </div>
-        <div class="screen-actions-secondary">
-          <span id="current-time" class="dot-matrix-clock" aria-label="Current time">--:--</span>
-          <p id="updated-at" class="status-pill updated-at-pill">Waiting for snapshot</p>
-          <button id="about-toggle" class="theme-toggle about-toggle" type="button" aria-label="About Link Pulse">About</button>
-        </div>
-      </div>
-    </header>
-    <div class="switcher-stack">
-      <section id="system-bar" class="tab-bar system-bar" aria-label="Transit systems"></section>
-      <section id="view-bar" class="tab-bar" aria-label="Board views">
-        <button class="tab-button is-active" data-tab="map" type="button">Map</button>
-        <button class="tab-button" data-tab="trains" type="button" id="tab-trains">Trains</button>
-        <button class="tab-button" data-tab="favorites" type="button">Favorites</button>
-        <button class="tab-button" data-tab="insights" type="button">Insights</button>
-      </section>
-    </div>
-    <section id="board" class="board"></section>
-    <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
-  </main>
-  <dialog id="station-dialog" class="station-dialog">
-    <div class="dialog-content">
-      <header class="dialog-header">
-        <div class="dialog-header-main">
-          <div class="dialog-title-wrap">
-            <h3 id="dialog-title" class="dialog-title">
-              <span id="dialog-title-track" class="dialog-title-track">
-                <span id="dialog-title-text" class="dialog-title-text">Station</span>
-                <span id="dialog-title-text-clone" class="dialog-title-text dialog-title-text-clone" aria-hidden="true">Station</span>
-              </span>
-            </h3>
-            <div id="dialog-meta" class="dialog-meta">
-              <button id="dialog-status-pill" class="status-pill" type="button" aria-label="Refresh data">SYNC</button>
-              <p id="dialog-updated-at" class="updated-at">Waiting for snapshot</p>
-            </div>
-          </div>
-          <p id="dialog-service-summary" class="dialog-service-summary">Service summary</p>
-        </div>
-        <div class="dialog-actions">
-          <button id="dialog-favorite" class="dialog-close dialog-favorite-button" type="button" aria-label="Add to favorites">☆</button>
-          <button id="dialog-share" class="dialog-close dialog-share-button" type="button" aria-label="Share arrivals">Share</button>
-          <button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
-          <button id="station-dialog-close" class="dialog-close" type="button" aria-label="Close station dialog">&times;</button>
-        </div>
-      </header>
-      <div class="dialog-direction-bar">
-        <div id="dialog-direction-tabs" class="dialog-direction-tabs" aria-label="Board direction view">
-          <button id="dir-tab-both" class="dialog-direction-tab is-active" data-dialog-direction="both" type="button">Both</button>
-          <button class="dialog-direction-tab" data-dialog-direction="nb" type="button">NB</button>
-          <button class="dialog-direction-tab" data-dialog-direction="sb" type="button">SB</button>
-          <button id="dir-tab-auto" class="dialog-direction-tab" data-dialog-direction="auto" type="button">Auto</button>
-        </div>
-      </div>
-      <div id="station-alerts-container"></div>
-      <div class="dialog-body">
-        <div class="arrivals-section" data-direction-section="nb">
-          <h4 id="arrivals-title-nb" class="arrivals-title">
-            <span class="arrivals-title-track">
-              <span class="arrivals-title-text">Northbound (▲)</span>
-              <span class="arrivals-title-text arrivals-title-clone" aria-hidden="true">Northbound (▲)</span>
-            </span>
-          </h4>
-          <div id="arrivals-nb-pinned" class="arrivals-pinned"></div>
-          <div class="arrivals-viewport"><div id="arrivals-nb" class="arrivals-list"></div></div>
-        </div>
-        <div class="arrivals-section" data-direction-section="sb">
-          <h4 id="arrivals-title-sb" class="arrivals-title">
-            <span class="arrivals-title-track">
-              <span class="arrivals-title-text">Southbound (▼)</span>
-              <span class="arrivals-title-text arrivals-title-clone" aria-hidden="true">Southbound (▼)</span>
-            </span>
-          </h4>
-          <div id="arrivals-sb-pinned" class="arrivals-pinned"></div>
-          <div class="arrivals-viewport"><div id="arrivals-sb" class="arrivals-list"></div></div>
-        </div>
-      </div>
-    </div>
-  </dialog>
-  <dialog id="train-dialog" class="station-dialog train-dialog">
-    <div class="dialog-content">
-      <header class="dialog-header">
-        <div>
-          <h3 id="train-dialog-title">Train</h3>
-          <p id="train-dialog-subtitle" class="updated-at">Current movement</p>
-        </div>
-        <div class="dialog-actions">
-          <button id="train-dialog-close" class="dialog-close" type="button" aria-label="Close train dialog">&times;</button>
-        </div>
-      </header>
-      <div class="train-dialog-body">
-        <div id="train-dialog-line" class="train-detail-line"></div>
-        <div id="train-dialog-status" class="train-detail-status"></div>
-      </div>
-    </div>
-  </dialog>
-  <dialog id="alert-dialog" class="station-dialog alert-dialog">
-    <div class="dialog-content">
-      <header class="dialog-header">
-        <div>
-          <h3 id="alert-dialog-title">Service Alert</h3>
-          <p id="alert-dialog-subtitle" class="updated-at">Transit advisory</p>
-        </div>
-        <div class="dialog-actions">
-          <button id="alert-dialog-close" class="dialog-close" type="button" aria-label="Close alert dialog">&times;</button>
-        </div>
-      </header>
-      <div class="train-dialog-body">
-        <p id="alert-dialog-lines" class="train-detail-status"></p>
-        <p id="alert-dialog-body" class="alert-dialog-body"></p>
-        <a id="alert-dialog-link" class="alert-dialog-link" href="" target="_blank" rel="noreferrer">Read official alert</a>
-      </div>
-    </div>
-  </dialog>
-  <dialog id="station-search-dialog" class="station-dialog station-search-dialog">
-    <div class="dialog-content">
-      <header class="dialog-header">
-        <div>
-          <h3 id="station-search-title">Station search</h3>
-          <p id="station-search-summary" class="dialog-service-summary">Jump straight to any station across loaded systems.</p>
-        </div>
-        <div class="dialog-actions">
-          <button id="station-search-close" class="dialog-close" type="button" aria-label="Close station search">&times;</button>
-        </div>
-      </header>
-      <div class="station-search-shell">
-        <label class="sr-only" for="station-search-input">Station search</label>
-        <input id="station-search-input" class="station-search-input" type="search" placeholder="Search stations, lines, or systems" autocomplete="off" spellcheck="false" />
-        <div class="station-search-actions">
-          <button id="station-location-button" class="station-location-button" type="button">Use my location</button>
-          <p id="station-location-status" class="station-location-status updated-at"></p>
-        </div>
-        <p id="station-search-meta" class="updated-at">Press / to search</p>
-        <div id="station-search-results" class="station-search-results"></div>
-      </div>
-    </div>
-  </dialog>
-  <dialog id="insights-detail-dialog" class="station-dialog train-dialog">
-    <div class="dialog-content">
-      <header class="dialog-header">
-        <div>
-          <h3 id="insights-detail-title">Details</h3>
-          <p id="insights-detail-subtitle" class="updated-at"></p>
-        </div>
-        <div class="dialog-actions">
-          <button id="insights-detail-close" class="dialog-close" type="button" aria-label="Close details">&times;</button>
-        </div>
-      </header>
-      <div class="train-dialog-body">
-        <div id="insights-detail-body"></div>
-      </div>
-    </div>
-  </dialog>
-  <dialog id="about-dialog" class="station-dialog about-dialog">
-    <div class="dialog-content">
-      <header class="dialog-header">
-        <div>
-          <h3 id="about-dialog-title">About Link Pulse</h3>
-          <p id="about-dialog-summary" class="dialog-service-summary">Privacy, support, and release info</p>
-        </div>
-        <div class="dialog-actions">
-          <button id="about-dialog-close" class="dialog-close" type="button" aria-label="Close about dialog">&times;</button>
-        </div>
-      </header>
-      <div id="about-dialog-body" class="about-dialog-body"></div>
-    </div>
-  </dialog>
-`
+const appRootElement = document.querySelector('#app')
+renderAppShell(appRootElement)
+disableDoubleTapZoom(appRootElement)
 
-disableDoubleTapZoom(document.querySelector('#app'))
-
-const boardElement = document.querySelector('#board')
-const screenKickerElement = document.querySelector('#screen-kicker')
-const screenTitleElement = document.querySelector('#screen-title')
-const systemBarElement = document.querySelector('#system-bar')
-const viewBarElement = document.querySelector('#view-bar')
-const tabButtons = [...document.querySelectorAll('.tab-button')]
-const stationSearchToggleButton = document.querySelector('#station-search-toggle')
-const languageToggleButton = document.querySelector('#language-toggle')
-const themeToggleButton = document.querySelector('#theme-toggle')
-const statusPillElement = document.querySelector('#status-pill')
-const currentTimeElement = document.querySelector('#current-time')
-const updatedAtElement = document.querySelector('#updated-at')
-const aboutToggleButton = document.querySelector('#about-toggle')
-const toastRegionElement = document.querySelector('#toast-region')
-const stationSearchDialog = document.querySelector('#station-search-dialog')
-const stationSearchTitleElement = document.querySelector('#station-search-title')
-const stationSearchSummaryElement = document.querySelector('#station-search-summary')
-const stationSearchInput = document.querySelector('#station-search-input')
-const stationSearchMetaElement = document.querySelector('#station-search-meta')
-const stationSearchResultsElement = document.querySelector('#station-search-results')
-const stationSearchCloseButton = document.querySelector('#station-search-close')
-const stationLocationButton = document.querySelector('#station-location-button')
-const stationLocationStatusElement = document.querySelector('#station-location-status')
-const aboutDialog = document.querySelector('#about-dialog')
-const aboutDialogTitle = document.querySelector('#about-dialog-title')
-const aboutDialogSummary = document.querySelector('#about-dialog-summary')
-const aboutDialogBody = document.querySelector('#about-dialog-body')
-const aboutDialogCloseButton = document.querySelector('#about-dialog-close')
+const {
+  boardElement,
+  screenKickerElement,
+  screenTitleElement,
+  systemBarElement,
+  viewBarElement,
+  tabButtons,
+  stationSearchToggleButton,
+  languageToggleButton,
+  themeToggleButton,
+  statusPillElement,
+  currentTimeElement,
+  updatedAtElement,
+  aboutToggleButton,
+  toastRegionElement,
+  stationSearchDialog,
+  stationSearchTitleElement,
+  stationSearchSummaryElement,
+  stationSearchInput,
+  stationSearchMetaElement,
+  stationSearchResultsElement,
+  stationSearchCloseButton,
+  stationLocationButton,
+  stationLocationStatusElement,
+  aboutDialog,
+  aboutDialogTitle,
+  aboutDialogSummary,
+  aboutDialogBody,
+  aboutDialogCloseButton,
+  stationDialogCloseButton,
+  dialogFavoriteButton,
+} = getAppElements()
 
 const dialogElements = getDialogElements()
 const {
@@ -380,214 +201,6 @@ const {
   insightsDetailClose,
 } = dialogElements
 
-const dialogShareButton = document.querySelector('#dialog-share')
-const dialogFavoriteButton = document.querySelector('#dialog-favorite')
-
-dialogDisplay.addEventListener('click', () => toggleDialogDisplayMode())
-
-// Share button event listener
-if (dialogShareButton) {
-  dialogShareButton.addEventListener('click', () => {
-    if (!state.currentDialogStation) return
-    shareArrivals()
-  })
-}
-
-trainDialogClose.addEventListener('click', () => closeTrainDialog())
-alertDialogClose.addEventListener('click', () => closeAlertDialog())
-insightsDetailClose.addEventListener('click', () => closeInsightsDetailDialog())
-insightsDetailDialog.addEventListener('click', (e) => { if (e.target === insightsDetailDialog) closeInsightsDetailDialog() })
-aboutToggleButton.addEventListener('click', () => openAboutDialog())
-aboutDialogCloseButton.addEventListener('click', () => closeAboutDialog())
-aboutDialog.addEventListener('click', (e) => {
-  if (e.target === aboutDialog) closeAboutDialog()
-})
-aboutDialog.addEventListener('close', () => {
-  if (state.activeDialogType === 'about') state.activeDialogType = ''
-})
-languageToggleButton.addEventListener('click', () => {
-  setLanguage(state.language === 'en' ? 'zh-CN' : 'en')
-  render()
-})
-dialogDirectionTabs.forEach((button) => {
-  button.addEventListener('click', () => {
-    state.dialogDisplayDirection = button.dataset.dialogDirection
-    if (state.dialogDisplayDirection === 'auto') {
-      state.dialogDisplayAutoPhase = 'nb'
-    }
-    renderDialogDirectionView()
-  })
-})
-dialog.addEventListener('click', (e) => {
-  if (e.target === dialog) closeStationDialog()
-})
-document.querySelector('#station-dialog-close').addEventListener('click', () => closeStationDialog())
-trainDialog.addEventListener('click', (e) => {
-  if (e.target === trainDialog) closeTrainDialog()
-})
-alertDialog.addEventListener('click', (e) => {
-  if (e.target === alertDialog) closeAlertDialog()
-})
-trainDialog.addEventListener('close', () => {
-  state.currentTrainId = ''
-  if (!state.isSyncingFromUrl) {
-    clearDialogParams({ keepPage: true, keepSystem: true, keepStation: true })
-  }
-})
-alertDialog.addEventListener('close', () => {
-  if (!state.isSyncingFromUrl) {
-    clearDialogParams({ keepPage: true, keepSystem: true, keepStation: true })
-  }
-})
-stationSearchDialog.addEventListener('close', () => {
-  if (!state.isSyncingFromUrl) {
-    clearDialogParams({ keepPage: true, keepSystem: true, keepStation: true })
-  }
-})
-insightsDetailDialog.addEventListener('close', () => {
-  if (!state.isSyncingFromUrl) {
-    clearDialogParams({ keepPage: true, keepSystem: true, keepStation: true })
-  }
-})
-dialog.addEventListener('close', () => {
-  state.activeDialogRequest += 1
-  state.currentDialogStationId = ''
-  state.currentDialogStation = null
-  state.activeDialogType = ''
-  // Cancel pending requests
-  if (state.dialogAbortController) {
-    state.dialogAbortController.abort()
-    state.dialogAbortController = null
-  }
-  stopDialogAutoRefresh()
-  stopDialogDisplayScroll()
-  stopDialogDirectionRotation()
-  setDialogDisplayMode(false)
-  clearStationDialogContent()
-  state.arrivalsCache.clear()
-  clearObaQueue() // Cancel pending requests for this dialog
-  setDialogTitle(copyValue('station'))
-  if (!state.isSyncingFromUrl) {
-    clearDialogParams({ keepPage: true, keepSystem: true })
-  }
-  state.dialogOpenerElement?.focus()
-  state.dialogOpenerElement = null
-})
-tabButtons.forEach((button) => {
-  button.addEventListener('click', () => {
-    if (button.dataset.tab === state.activeTab) return
-    boardElement.style.opacity = '0'
-    setTimeout(() => {
-      state.activeTab = button.dataset.tab
-      setPageParam(state.activeTab)
-      render()
-      boardElement.style.opacity = '1'
-    }, 150)
-  })
-})
-themeToggleButton.addEventListener('click', () => {
-  const nextTheme = state.theme === 'dark' ? 'light' : 'dark'
-  if (document.startViewTransition) {
-    document.startViewTransition(() => {
-      setTheme(nextTheme)
-      render()
-    })
-  } else {
-    setTheme(nextTheme)
-    render()
-  }
-})
-stationSearchToggleButton.addEventListener('click', () => {
-  openStationSearch()
-})
-stationLocationButton?.addEventListener('click', async () => {
-  await findNearbyStations()
-})
-stationSearchCloseButton.addEventListener('click', () => closeStationSearch())
-stationSearchDialog.addEventListener('click', (e) => {
-  if (e.target === stationSearchDialog) closeStationSearch()
-})
-stationSearchInput.addEventListener('input', () => {
-  state.stationSearchQuery = stationSearchInput.value
-  state.highlightedStationSearchIndex = 0
-  state.highlightedNearbyStationIndex = 0
-  if (state.stationSearchQuery.trim()) {
-    state.nearbyStations = []
-    state.geolocationStatus = ''
-    state.geolocationError = ''
-  }
-  if (stationSearchDialog.open && !state.isSyncingFromUrl) {
-    setStationSearchParams(state.stationSearchQuery)
-  }
-  renderStationSearchResults()
-})
-stationSearchInput.addEventListener('keydown', async (event) => {
-  const results = getActiveStationSearchResults()
-  if (event.key === 'ArrowDown') {
-    event.preventDefault()
-    if (state.stationSearchQuery.trim()) {
-      state.highlightedStationSearchIndex = Math.min(Math.max(0, results.length - 1), state.highlightedStationSearchIndex + 1)
-    } else {
-      state.highlightedNearbyStationIndex = Math.min(Math.max(0, results.length - 1), state.highlightedNearbyStationIndex + 1)
-    }
-    renderStationSearchResults()
-    return
-  }
-  if (event.key === 'ArrowUp') {
-    event.preventDefault()
-    if (state.stationSearchQuery.trim()) {
-      state.highlightedStationSearchIndex = Math.max(0, state.highlightedStationSearchIndex - 1)
-    } else {
-      state.highlightedNearbyStationIndex = Math.max(0, state.highlightedNearbyStationIndex - 1)
-    }
-    renderStationSearchResults()
-    return
-  }
-  if (event.key === 'Enter') {
-    event.preventDefault()
-    const selected = state.stationSearchQuery.trim()
-      ? (results[state.highlightedStationSearchIndex] ?? results[0])
-      : (results[state.highlightedNearbyStationIndex] ?? results[0])
-    if (selected) await handleStationSearchSelection(selected)
-  }
-})
-document.addEventListener('keydown', (event) => {
-  const target = event.target
-  const isTypingTarget = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-  if (event.key === '/' && !isTypingTarget && !event.metaKey && !event.ctrlKey && !event.altKey) {
-    event.preventDefault()
-    openStationSearch()
-    return
-  }
-  if (event.key === 'Escape' && stationSearchDialog.open) {
-    closeStationSearch()
-  }
-})
-document.addEventListener('visibilitychange', () => {
-  refreshVisibleRealtime().catch(console.error)
-})
-window.addEventListener('focus', () => {
-  refreshVisibleRealtime().catch(console.error)
-})
-
-statusPillElement.addEventListener('click', async () => {
-  statusPillElement.textContent = '...'
-  showToast(copyValue('refreshingData'))
-  await refreshVisibleRealtime()
-  showToast(copyValue('dataRefreshed'))
-})
-
-dialogStatusPillElement.addEventListener('click', async () => {
-  dialogStatusPillElement.textContent = '...'
-  showToast(copyValue('refreshingData'))
-  await refreshVisibleRealtime()
-  showToast(copyValue('dataRefreshed'))
-})
-
-// ---------------------------------------------------------------------------
-// Event delegation — set up once; no re-attachment on every render
-// ---------------------------------------------------------------------------
-
 function findStationAndLineByStopId(stopId) {
   for (const line of state.lines) {
     const layout = state.layouts.get(line.id)
@@ -597,101 +210,16 @@ function findStationAndLineByStopId(stopId) {
   return null
 }
 
-// Board: activate role=button elements with keyboard (Enter/Space)
-boardElement.addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter' && e.key !== ' ') return
-  const activatable = e.target.closest('[role="button"]')
-  if (!activatable) return
-  e.preventDefault()
-  activatable.click()
-})
-
-// Board: handles line-switch, train, alert, station, insights, terminal clicks
-boardElement.addEventListener('click', (e) => {
-  const lineSwitchBtn = e.target.closest('[data-line-switch]')
-  if (lineSwitchBtn) {
-    state.activeLineId = lineSwitchBtn.dataset.lineSwitch
-    render()
-    return
-  }
-
-  const dirFilterBtn = e.target.closest('[data-direction-filter]')
-  if (dirFilterBtn) {
-    const lineId = dirFilterBtn.dataset.directionLine
-    const direction = dirFilterBtn.dataset.directionFilter
-    state.directionFilterByLine.set(lineId, direction)
-    render()
-    return
-  }
-
-  const trainItem = e.target.closest('[data-train-id]')
-  if (trainItem) {
-    const vehicle = getAllVehicles().find((c) => c.id === trainItem.dataset.trainId)
-    if (vehicle) {
-      state.currentTrainId = trainItem.dataset.trainId
-      renderTrainDialog(vehicle)
-    }
-    return
-  }
-
-  const alertBtn = e.target.closest('[data-alert-line-id]')
-  if (alertBtn) {
-    const line = state.lines.find((c) => c.id === alertBtn.dataset.alertLineId)
-    if (line) renderAlertListDialog(line)
-    return
-  }
-
-  const stationGroup = e.target.closest('.station-group')
-  if (stationGroup) {
-    const result = findStationAndLineByStopId(stationGroup.dataset.stopId)
-    if (result) showStationDialog(result.station)
-    return
-  }
-
-  const insightsEl = e.target.closest('[data-insights-type]')
-  if (insightsEl) {
-    const lineId = insightsEl.dataset.insightsLineId ?? null
-    const type = insightsEl.dataset.insightsType
-    const stopId = insightsEl.dataset.hotspotStopId ?? null
-    const content = buildInsightsDetailContent(lineId, type, { stopId })
-    if (content) showInsightsDetail(content.title, content.subtitle, content.body, { type, lineId: lineId ?? '' })
-    return
-  }
-
-  const terminalEl = e.target.closest('[data-terminal-line-id]')
-  if (terminalEl) {
-    const layout = state.layouts.get(terminalEl.dataset.terminalLineId)
-    if (!layout) return
-    const station = terminalEl.dataset.terminalDirection === 'nb' ? layout.stations[0] : layout.stations.at(-1)
-    if (station) showStationDialog(station)
-  }
-})
-
-
-// System bar: system switcher
-systemBarElement.addEventListener('click', async (e) => {
-  const btn = e.target.closest('[data-system-switch]')
-  if (!btn) return
-  await switchSystem(btn.dataset.systemSwitch, { updateUrl: true, preserveDialog: false })
-})
-
-// Station dialog: arrival items → train dialog
-dialog.addEventListener('click', async (e) => {
-  const item = e.target.closest('[data-arrival-vehicle-id]')
-  if (!item) return
-  const vehicle = getAllVehicles().find((c) => c.id === item.dataset.arrivalVehicleId)
-  if (!vehicle) return
-  state.currentTrainId = item.dataset.arrivalVehicleId
-  renderTrainDialog(vehicle)
-})
-
-const { showToast, hideToast } = createToast(toastRegionElement)
+const { showToast } = createToast(toastRegionElement)
 
 const { getRecentStations, addRecentStation } = createRecentStationsManager()
+const dialogLifecycleBridge = {
+  showStationDialog: async () => {},
+  refreshStationDialog: async () => {},
+}
 
 const {
   getActiveStationSearchResults,
-  getStationSearchEntries,
   findNearbyStations,
   renderStationSearchResults,
   openStationSearch,
@@ -709,7 +237,7 @@ const {
   },
   copyValue,
   closeDialogAnimated,
-  showStationDialog,
+  showStationDialog: (...args) => dialogLifecycleBridge.showStationDialog(...args),
   switchSystem,
   setStationSearchParams,
   getRecentStations,
@@ -726,7 +254,7 @@ const {
   handleFavoriteClick,
 } = createFavoritesManager({
   state,
-  showStationDialog,
+  showStationDialog: (...args) => dialogLifecycleBridge.showStationDialog(...args),
   switchSystem,
   showToast,
 })
@@ -870,29 +398,6 @@ function renderFavoritesView() {
   `
 }
 
-boardElement.addEventListener('click', (e) => {
-  const moveBtn = e.target.closest('[data-fav-move]')
-  if (moveBtn) {
-    e.stopPropagation()
-    moveFavorite(moveBtn.dataset.favStation, moveBtn.dataset.favLine, moveBtn.dataset.favSystem, moveBtn.dataset.favMove)
-    renderBoard()
-    return
-  }
-  const removeBtn = e.target.closest('[data-fav-remove]')
-  if (removeBtn) {
-    e.stopPropagation()
-    removeFavorite(removeBtn.dataset.favStation, removeBtn.dataset.favLine, removeBtn.dataset.favSystem)
-    showToast(copyValue('favoriteRemoved'))
-    renderBoard()
-    return
-  }
-  const favItem = e.target.closest('[data-favorite-key]')
-  if (!favItem) return
-  const key = favItem.dataset.favoriteKey
-  const fav = getFavorites().find((f) => `${f.systemId}:${f.lineId}:${f.stationId}` === key)
-  if (fav) handleFavoriteClick(fav)
-})
-
 function setArrivalsTitleHtml(element, text) {
   element.innerHTML = `<span class="arrivals-title-track"><span class="arrivals-title-text">${text}</span><span class="arrivals-title-text arrivals-title-clone" aria-hidden="true">${text}</span></span>`
 }
@@ -951,7 +456,7 @@ function isPageRequestContextActive() {
 
 const obaClient = createObaClient(state)
 const { fetchJsonWithRetry, clearQueue: clearObaQueue } = obaClient
-const { buildArrivalsForLine, fetchArrivalsForStopIds, getCachedArrivalsForStation, getArrivalsForStation, mergeArrivalBuckets, getArrivalServiceStatus } = createArrivalsHelpers({
+const { buildArrivalsForLine, fetchArrivalsForStopIds, getCachedArrivalsForStation, mergeArrivalBuckets, getArrivalServiceStatus } = createArrivalsHelpers({
   state,
   fetchJsonWithRetry,
   getStationStopIds: (...args) => getStationStopIds(...args),
@@ -985,6 +490,21 @@ function formatClockTime(timestamp) {
 function formatEtaClockFromNow(offsetSeconds) {
   return formatEtaClockFromNowValue(offsetSeconds, state.language)
 }
+
+const {
+  getTodayServiceSpan,
+  getServiceReminder,
+  renderServiceReminderChip,
+  renderServiceTimeline,
+} = createServiceTimelineHelpers({
+  clamp,
+  copyValue,
+  formatDurationFromMs,
+  formatServiceClock,
+  getDateKeyWithOffset,
+  getServiceDateTime,
+  getTodayDateKey,
+})
 
 function getDirectionBaseLabel(directionSymbol, includeSymbol = false) {
   const symbolPrefix = includeSymbol && (directionSymbol === '▲' || directionSymbol === '▼')
@@ -1101,98 +621,6 @@ function getInsightsTickerPageSize() {
   return state.compactLayout ? 1 : 3
 }
 
-function getTodayServiceSpan(line) {
-  const todayKey = getTodayDateKey()
-  const span = line.serviceSpansByDate?.[todayKey]
-  if (!span) return copyValue('todayServiceUnavailable')
-  return copyValue('todayServiceSpan', formatServiceClock(span.start), formatServiceClock(span.end))
-}
-
-function getServiceReminder(line) {
-  const now = new Date()
-  const yesterdayKey = getDateKeyWithOffset(-1)
-  const todayKey = getDateKeyWithOffset(0)
-  const tomorrowKey = getDateKeyWithOffset(1)
-
-  const yesterdaySpan = line.serviceSpansByDate?.[yesterdayKey]
-  const todaySpan = line.serviceSpansByDate?.[todayKey]
-  const tomorrowSpan = line.serviceSpansByDate?.[tomorrowKey]
-
-  const windows = [
-    yesterdaySpan && {
-      kind: 'yesterday',
-      start: getServiceDateTime(yesterdayKey, yesterdaySpan.start),
-      end: getServiceDateTime(yesterdayKey, yesterdaySpan.end),
-      span: yesterdaySpan,
-    },
-    todaySpan && {
-      kind: 'today',
-      start: getServiceDateTime(todayKey, todaySpan.start),
-      end: getServiceDateTime(todayKey, todaySpan.end),
-      span: todaySpan,
-    },
-  ].filter(Boolean)
-
-  const activeWindow = windows.find((window) => now >= window.start && now <= window.end)
-  if (activeWindow) {
-    return {
-      tone: 'active',
-      headline: copyValue('lastTrip', formatServiceClock(activeWindow.span.end)),
-      detail: copyValue('endsIn', formatDurationFromMs(activeWindow.end.getTime() - now.getTime())),
-      compact: copyValue('endsIn', formatDurationFromMs(activeWindow.end.getTime() - now.getTime())),
-    }
-  }
-
-  if (todaySpan) {
-    const todayStart = getServiceDateTime(todayKey, todaySpan.start)
-    const todayEnd = getServiceDateTime(todayKey, todaySpan.end)
-
-    if (now < todayStart) {
-      return {
-        tone: 'upcoming',
-        headline: copyValue('firstTrip', formatServiceClock(todaySpan.start)),
-        detail: copyValue('startsIn', formatDurationFromMs(todayStart.getTime() - now.getTime())),
-        compact: copyValue('startsIn', formatDurationFromMs(todayStart.getTime() - now.getTime())),
-      }
-    }
-
-    if (now > todayEnd) {
-      return {
-        tone: 'ended',
-        headline: copyValue('serviceEnded', formatServiceClock(todaySpan.end)),
-        detail: tomorrowSpan ? copyValue('nextStart', formatServiceClock(tomorrowSpan.start)) : copyValue('noNextServiceLoaded'),
-        compact: tomorrowSpan ? copyValue('nextStart', formatServiceClock(tomorrowSpan.start)) : copyValue('ended'),
-      }
-    }
-  }
-
-  if (tomorrowSpan) {
-    return {
-      tone: 'upcoming',
-      headline: copyValue('nextFirstTrip', formatServiceClock(tomorrowSpan.start)),
-      detail: copyValue('noServiceRemainingToday'),
-      compact: copyValue('nextStart', formatServiceClock(tomorrowSpan.start)),
-    }
-  }
-
-  return {
-    tone: 'muted',
-    headline: copyValue('serviceHoursUnavailable'),
-    detail: copyValue('staticScheduleMissing'),
-    compact: copyValue('unavailable'),
-  }
-}
-
-function renderServiceReminderChip(line) {
-  const reminder = getServiceReminder(line)
-  return `
-    <div class="service-reminder service-reminder-${reminder.tone}">
-      <p class="service-reminder-headline">${reminder.headline}</p>
-      <p class="service-reminder-detail">${reminder.detail}</p>
-    </div>
-  `
-}
-
 function renderStationServiceSummary(station) {
   const summaries = getDialogStations(station)
     .map(({ line }) => {
@@ -1202,137 +630,6 @@ function renderStationServiceSummary(station) {
     .slice(0, 3)
 
   dialogServiceSummary.textContent = summaries.join('  ·  ') || copyValue('serviceSummaryUnavailable')
-}
-
-function getTimelineHour(date) {
-  return date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600
-}
-
-function getLosAngelesDateParts(date = new Date()) {
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Los_Angeles',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  })
-  const parts = Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]))
-  const hours = Number(parts.hour ?? '0')
-  const minutes = Number(parts.minute ?? '0')
-  const seconds = Number(parts.second ?? '0')
-  return {
-    hours,
-    minutes,
-    seconds,
-    hourValue: hours + minutes / 60 + seconds / 3600,
-  }
-}
-
-function getTimelineBoundaryLabel(boundary) {
-  if (boundary === 'start') {
-    return copyValue('midnightStartLabel')
-  }
-  return copyValue('midnightEndLabel')
-}
-
-function getServiceTimelineData(line) {
-  const now = new Date()
-  const yesterdayKey = getDateKeyWithOffset(-1)
-  const todayKey = getDateKeyWithOffset(0)
-  const tomorrowKey = getDateKeyWithOffset(1)
-  const yesterdaySpan = line.serviceSpansByDate?.[yesterdayKey]
-  const todaySpan = line.serviceSpansByDate?.[todayKey]
-  const tomorrowSpan = line.serviceSpansByDate?.[tomorrowKey]
-
-  const windows = [
-    yesterdaySpan && {
-      kind: 'yesterday',
-      dateKey: yesterdayKey,
-      span: yesterdaySpan,
-      start: getServiceDateTime(yesterdayKey, yesterdaySpan.start),
-      end: getServiceDateTime(yesterdayKey, yesterdaySpan.end),
-    },
-    todaySpan && {
-      kind: 'today',
-      dateKey: todayKey,
-      span: todaySpan,
-      start: getServiceDateTime(todayKey, todaySpan.start),
-      end: getServiceDateTime(todayKey, todaySpan.end),
-    },
-    tomorrowSpan && {
-      kind: 'tomorrow',
-      dateKey: tomorrowKey,
-      span: tomorrowSpan,
-      start: getServiceDateTime(tomorrowKey, tomorrowSpan.start),
-      end: getServiceDateTime(tomorrowKey, tomorrowSpan.end),
-    },
-  ].filter(Boolean)
-
-  if (!windows.length) return null
-
-  const activeWindow = windows.find((window) => now >= window.start && now <= window.end)
-  const selectedWindow = activeWindow
-    ?? windows.find((window) => window.kind === 'today')
-    ?? windows.find((window) => window.start > now)
-    ?? windows.at(-1)
-
-  if (!selectedWindow?.span) return null
-
-  const todayStart = getServiceDateTime(todayKey, '00:00:00')
-  const todayEnd = getServiceDateTime(tomorrowKey, '00:00:00')
-  const visibleStart = new Date(Math.max(selectedWindow.start.getTime(), todayStart.getTime()))
-  const visibleEnd = new Date(Math.min(selectedWindow.end.getTime(), todayEnd.getTime()))
-  const visibleStartHours = Math.max(0, (visibleStart.getTime() - todayStart.getTime()) / 3_600_000)
-  const visibleEndHours = Math.max(0, (visibleEnd.getTime() - todayStart.getTime()) / 3_600_000)
-  const { hourValue: nowHourValue } = getLosAngelesDateParts(now)
-  const isLive = now >= selectedWindow.start && now <= selectedWindow.end
-  const continuesPastMidnight = selectedWindow.end.getTime() > todayEnd.getTime()
-  const startedBeforeToday = selectedWindow.start.getTime() < todayStart.getTime()
-
-  return {
-    startHours: visibleStartHours,
-    endHours: visibleEndHours,
-    nowHours: nowHourValue,
-    axisMax: 24,
-    isLive,
-    startLabel: startedBeforeToday ? getTimelineBoundaryLabel('start') : formatServiceClock(selectedWindow.span.start),
-    endLabel: continuesPastMidnight ? getTimelineBoundaryLabel('end') : formatServiceClock(selectedWindow.span.end),
-    overflowLabel: continuesPastMidnight ? formatServiceClock(selectedWindow.span.end) : '',
-  }
-}
-
-function renderServiceTimeline(line) {
-  const timeline = getServiceTimelineData(line)
-  if (!timeline) return ''
-
-  const startPercent = clamp((timeline.startHours / timeline.axisMax) * 100, 0, 100)
-  const endPercent = clamp((timeline.endHours / timeline.axisMax) * 100, startPercent, 100)
-  const nowPercent = clamp((timeline.nowHours / timeline.axisMax) * 100, 0, 100)
-
-  return `
-    <section class="service-timeline-card">
-      <div class="service-timeline-header">
-        <div>
-          <p class="headway-chart-title">${copyValue('todayServiceWindowTitle')}</p>
-          <p class="headway-chart-copy">${timeline.overflowLabel
-            ? copyValue('serviceOverflowNote', timeline.overflowLabel)
-            : copyValue('serviceFirstLastNote')}</p>
-        </div>
-        <span class="service-timeline-badge ${timeline.isLive ? 'is-live' : 'is-off'}">${timeline.isLive ? copyValue('inServiceBadge') : copyValue('offHoursBadge')}</span>
-      </div>
-      <div class="service-timeline-track">
-        <div class="service-timeline-band" style="left:${startPercent}%; width:${Math.max(2, endPercent - startPercent)}%;"></div>
-        <div class="service-timeline-now" style="left:${nowPercent}%;" aria-label="${copyValue('currentTimeAria')}">
-          <span class="service-timeline-now-line"></span>
-          <span class="service-timeline-now-dot"></span>
-        </div>
-      </div>
-      <div class="service-timeline-labels">
-        <span>${timeline.startLabel}</span>
-        <span>${timeline.endLabel}</span>
-      </div>
-    </section>
-  `
 }
 
 function getAlertsForLine(lineId) {
@@ -1705,123 +1002,13 @@ function getSystemIdFromUrl() {
   return DEFAULT_SYSTEM_ID
 }
 
-async function syncDialogFromUrl() {
-  const url = new URL(window.location.href)
-  state.isSyncingFromUrl = true
-  try {
-    state.activeTab = getPageFromUrl()
-
-    const requestedSystemId = url.searchParams.get('system')
-    if (requestedSystemId && state.systemsById.has(requestedSystemId) && requestedSystemId !== state.activeSystemId) {
-      await switchSystem(requestedSystemId, { updateUrl: false, preserveDialog: false })
-    }
-
-    render()
-
-    const requestedDialog = (url.searchParams.get('dialog') ?? '').trim().toLowerCase()
-    const requestedStation = url.searchParams.get('station')
-    const requestedTrainId = url.searchParams.get('train')
-    const requestedLineId = url.searchParams.get('line')
-    const requestedDetailType = url.searchParams.get('detail')
-    const requestedSearchQuery = url.searchParams.get('q') ?? ''
-    const effectiveDialog = requestedDialog || (requestedStation ? 'station' : '')
-
-    if (effectiveDialog !== 'station' && dialog.open) closeStationDialog()
-    if (effectiveDialog !== 'train' && trainDialog.open) closeTrainDialog()
-    if (effectiveDialog !== 'alerts' && alertDialog.open) closeAlertDialog()
-    if (effectiveDialog !== 'search' && stationSearchDialog.open) closeStationSearch()
-    if (effectiveDialog !== 'insights' && insightsDetailDialog.open) closeInsightsDetailDialog()
-
-    if (!effectiveDialog) return
-
-    if (effectiveDialog === 'station') {
-      if (!requestedStation) {
-        closeStationDialog()
-        return
-      }
-
-      const station = findStationByParam(requestedStation)
-      if (!station) {
-        closeStationDialog()
-        return
-      }
-
-      if (state.currentDialogStationId === station.id && dialog.open) return
-      await showStationDialog(station, { updateUrl: false })
-      return
-    }
-
-    if (effectiveDialog === 'train') {
-      if (!requestedTrainId) {
-        closeTrainDialog()
-        return
-      }
-      const vehicle = getAllVehicles().find((candidate) => candidate.id === requestedTrainId)
-      if (!vehicle) {
-
-        closeTrainDialog()
-        return
-      }
-      state.currentTrainId = requestedTrainId
-      state.activeDialogType = 'train'
-      renderTrainDialog(vehicle, { updateUrl: false })
-      return
-    }
-
-    if (effectiveDialog === 'alerts') {
-      if (!requestedLineId) {
-        closeAlertDialog()
-        return
-      }
-      const line = state.lines.find((candidate) => candidate.id === requestedLineId)
-      if (!line) {
-        closeAlertDialog()
-        return
-      }
-      state.activeDialogType = 'alerts'
-      renderAlertListDialog(line, { updateUrl: false })
-      return
-    }
-
-    if (effectiveDialog === 'search') {
-      state.activeDialogType = 'search'
-      openStationSearch(requestedSearchQuery, { updateUrl: false })
-      return
-    }
-
-    if (effectiveDialog === 'insights') {
-      if (state.activeTab !== 'insights') {
-        state.activeTab = 'insights'
-        render()
-      }
-      if (!requestedDetailType) {
-        closeInsightsDetailDialog()
-        return
-      }
-      const content = buildInsightsDetailContent(requestedLineId || null, requestedDetailType)
-      if (!content) {
-        closeInsightsDetailDialog()
-        return
-      }
-      state.activeDialogType = 'insights'
-      showInsightsDetail(content.title, content.subtitle, content.body, {
-        updateUrl: false,
-        lineId: requestedLineId || '',
-        type: requestedDetailType,
-      })
-    }
-  } finally {
-    state.isSyncingFromUrl = false
-  }
-}
-
 const stationDialogDisplay = createStationDialogDisplayController({
   state,
   elements: dialogElements,
   copyValue,
   refreshStationDialog: async (station) => {
     try {
-      await refreshStationDialog(station)
+      await dialogLifecycleBridge.refreshStationDialog(station)
     } catch (error) {
       if (error.errorType === 'rate-limit') {
         showToast(copyValue('stationRateLimited'))
@@ -1831,18 +1018,15 @@ const stationDialogDisplay = createStationDialogDisplayController({
       throw error
     }
   },
-  clearStationParam,
+  clearStationParam: () => clearDialogParams({ keepPage: true, keepSystem: true }),
 })
 
 const {
   setDialogDisplayMode,
   toggleDialogDisplayMode,
-  stopDialogDirectionRotation,
-  stopDialogDirectionAnimation,
   renderDialogDirectionView,
   stopDialogAutoRefresh,
   stopDialogDisplayScroll,
-  applyDialogDisplayOffset,
   syncDialogDisplayScroll,
   startDialogAutoRefresh,
   closeStationDialog,
@@ -1881,303 +1065,6 @@ function recordVehicleGhosts(lineId, vehicles) {
 function getVehicleGhostTrail(lineId, vehicleId) {
   const history = state.vehicleGhosts.get(`${lineId}:${vehicleId}`) ?? []
   return history.slice(0, -1)
-}
-
-
-function buildInsightsItems(lines) {
-  return lines.map((line) => {
-    const layout = state.layouts.get(line.id)
-    const vehicles = state.vehiclesByLine.get(line.id) ?? []
-    const nb = vehicles.filter((vehicle) => vehicle.directionSymbol === '▲')
-    const sb = vehicles.filter((vehicle) => vehicle.directionSymbol === '▼')
-    const lineAlerts = getAlertsForLine(line.id)
-
-    return {
-      line,
-      layout,
-      vehicles,
-      nb,
-      sb,
-      lineAlerts,
-    }
-  })
-}
-
-function computeSystemSummaryMetrics(insightsItems) {
-  const totalLines = insightsItems.length
-  const totalVehicles = insightsItems.reduce((sum, item) => sum + item.vehicles.length, 0)
-  const totalAlerts = insightsItems.reduce((sum, item) => sum + item.lineAlerts.length, 0)
-  const impactedLines = insightsItems.filter((item) => item.lineAlerts.length > 0).length
-  const impactedStopCount = new Set(insightsItems.flatMap((item) => item.lineAlerts.flatMap((alert) => alert.stopIds ?? []))).size
-  const allVehicles = insightsItems.flatMap((item) => item.vehicles)
-  const delayBuckets = getDelayBuckets(allVehicles)
-
-  const rankedLines = insightsItems
-    .map((item) => {
-      const { nbGaps, sbGaps } = computeLineHeadways(item.nb, item.sb)
-      const worstGap = [...nbGaps, ...sbGaps].length ? Math.max(...nbGaps, ...sbGaps) : 0
-      const severeLateCount = item.vehicles.filter((vehicle) => Number(vehicle.scheduleDeviation ?? 0) > 300).length
-      const balanceDelta = Math.abs(item.nb.length - item.sb.length)
-      const nbHealth = classifyHeadwayHealth(nbGaps, item.nb.length).health
-      const sbHealth = classifyHeadwayHealth(sbGaps, item.sb.length).health
-      const isUneven = [nbHealth, sbHealth].some((health) => health === 'uneven' || health === 'bunched' || health === 'sparse')
-      const hasSevereLate = severeLateCount > 0
-      const score = item.lineAlerts.length * 5 + severeLateCount * 3 + Math.max(0, worstGap - 10)
-      const attentionReasons = getLineAttentionReasons({
-        worstGap,
-        severeLateCount,
-        alertCount: item.lineAlerts.length,
-        balanceDelta,
-        copyValue,
-      })
-
-      return {
-        line: item.line,
-        score,
-        worstGap,
-        severeLateCount,
-        alertCount: item.lineAlerts.length,
-        balanceDelta,
-        hasSevereLate,
-        isUneven,
-        attentionReasons,
-      }
-    })
-    .sort((left, right) => right.score - left.score || right.worstGap - left.worstGap)
-
-  const delayedLineIds = new Set(rankedLines.filter((item) => item.hasSevereLate).map((item) => item.line.id))
-  const unevenLineIds = new Set(rankedLines.filter((item) => item.isUneven).map((item) => item.line.id))
-  const lateOnlyLineCount = rankedLines.filter((item) => item.hasSevereLate && !item.isUneven).length
-  const unevenOnlyLineCount = rankedLines.filter((item) => item.isUneven && !item.hasSevereLate).length
-  const mixedIssueLineCount = rankedLines.filter((item) => item.hasSevereLate && item.isUneven).length
-  const attentionLineCount = new Set([...delayedLineIds, ...unevenLineIds]).size
-  const healthyLineCount = Math.max(0, totalLines - attentionLineCount)
-  const onTimeRate = totalVehicles ? Math.round((delayBuckets.onTime / totalVehicles) * 100) : null
-  const priorityLines = rankedLines.filter((item) => item.score > 0).slice(0, 2)
-
-  let topIssue = {
-    tone: 'healthy',
-    copy: copyValue('noMajorIssues'),
-  }
-  const topLine = rankedLines[0] ?? null
-  if (topLine?.alertCount) {
-    topIssue = {
-      tone: 'info',
-      copy: copyValue('topIssueAlerts', topLine.line.name, topLine.alertCount),
-    }
-  } else if (topLine?.worstGap >= 12) {
-    topIssue = {
-      tone: 'alert',
-      copy: copyValue('topIssueGap', topLine.line.name, topLine.worstGap),
-    }
-  } else if (topLine?.severeLateCount) {
-    topIssue = {
-      tone: 'warn',
-      copy: copyValue('topIssueLate', topLine.line.name, topLine.severeLateCount, topLine.severeLateCount === 1 ? getVehicleLabel().toLowerCase() : getVehicleLabelPlural().toLowerCase()),
-    }
-  }
-
-  return {
-    totalLines,
-    totalVehicles,
-    totalAlerts,
-    impactedLines,
-    impactedStopCount,
-    delayedLineIds,
-    unevenLineIds,
-    lateOnlyLineCount,
-    unevenOnlyLineCount,
-    mixedIssueLineCount,
-    attentionLineCount,
-    healthyLineCount,
-    onTimeRate,
-    rankedLines,
-    priorityLines,
-    topIssue,
-  }
-}
-
-function isActiveStationDialogRequest(station, requestId) {
-  return Boolean(
-    dialog.open &&
-    station &&
-    state.currentDialogStationId === station.id &&
-    state.activeDialogRequest === requestId,
-  )
-}
-
-function canRefreshStationDialog(station, requestId = state.activeDialogRequest) {
-  return isPageRequestContextActive() && isActiveStationDialogRequest(station, requestId)
-}
-
-async function refreshStationDialog(station, { requestId = state.activeDialogRequest, skipCache = false } = {}) {
-  if (!station) return
-
-  // Don't interrupt a fresh (forceFresh) fetch with a lower-priority background refresh
-  if (!skipCache && state.dialogFreshFetchActive) return
-
-  const dialogStations = getDialogStations(station)
-
-  // Phase 1: render stale cached arrivals immediately (zero wait) - skip for fresh opens
-  if (!skipCache) {
-    const cachedArrivals = dialogStations.map(({ station: s, line }) => getCachedArrivalsForStation(s, line) ?? { nb: [], sb: [] })
-    const hasAnyCache = cachedArrivals.some((a) => a.nb.length > 0 || a.sb.length > 0)
-    if (hasAnyCache) {
-      renderArrivalLists(mergeArrivalBuckets(cachedArrivals))
-      renderDialogDirectionView()
-      syncDialogTitleMarquee()
-    }
-  }
-
-  const stationAlerts = getStationDialogAlerts(station)
-  stationAlertsContainer.innerHTML = stationAlerts.length
-    ? stationAlerts.map((alert) => `
-        <article class="insight-exception insight-exception-warn">
-          <p>${alert.title || copyValue('serviceAlert')}</p>
-        </article>
-      `).join('')
-    : ''
-
-  if (!canRefreshStationDialog(station, requestId)) return
-
-  // Cancel previous request if any
-  if (state.dialogAbortController) {
-    state.dialogAbortController.abort()
-  }
-  // Create new controller for this request
-  state.dialogAbortController = new AbortController()
-  const { signal } = state.dialogAbortController
-
-  // Phase 2: fetch fresh arrivals for all lines
-  // Collect all unique stop IDs across all lines, then fetch once and distribute
-  const lineStopIdMap = new Map() // line -> stopIds for this station
-  const allStopIds = new Set()
-  
-  for (const { station: matchedStation, line } of dialogStations) {
-    const stopIds = getStationStopIds(matchedStation, line)
-    lineStopIdMap.set(line, stopIds)
-    for (const id of stopIds) {
-      allStopIds.add(id)
-    }
-  }
-  
-  // Single fetch for all unique stop IDs
-  if (skipCache) state.dialogFreshFetchActive = true
-  let arrivalFeed = []
-  try {
-    arrivalFeed = await fetchArrivalsForStopIds([...allStopIds], signal, skipCache)
-  } catch (error) {
-    if (error.message?.includes('cancelled') || error.name === 'AbortError') {
-      return
-    }
-    console.warn(`Failed to fetch arrivals for station ${station.name}:`, error)
-  } finally {
-    if (skipCache) state.dialogFreshFetchActive = false
-  }
-  
-  // Safeguard: abort if station changed during fetch
-  if (state.currentDialogStationId !== station.id) {
-    return
-  }
-  
-  if (!isActiveStationDialogRequest(station, requestId)) {
-    return
-  }
-  
-  // Build arrivals for each line using the shared feed
-  const arrivalsByLine = dialogStations.map(({ station: matchedStation, line }) => {
-    const stopIds = lineStopIdMap.get(line)
-    return buildArrivalsForLine(arrivalFeed, line, stopIds)
-  })
-
-  const merged = mergeArrivalBuckets(arrivalsByLine)
-  renderArrivalLists(merged)
-  renderDialogDirectionView()
-  syncDialogTitleMarquee()
-}
-
-async function showStationDialog(station, { updateUrl = true } = {}) {
-  if (!station) return
-  const requestId = state.activeDialogRequest + 1
-  state.activeDialogRequest = requestId
-  if (updateUrl) void lightImpact()
-  state.currentDialogStation = station
-  state.currentDialogStationId = station.id
-  setDialogTitle(getDialogStationTitle(station))
-  renderStationServiceSummary(station)
-  clearStationDialogContent()
-  renderArrivalLists({ nb: [], sb: [] }, true)
-  if (!dialog.open) {
-    state.dialogOpenerElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    dialog.showModal()
-    dialog.querySelector('#station-dialog-close')?.focus()
-  }
-  if (updateUrl) setStationParam(station)
-  startDialogAutoRefresh()
-  updateFavoriteButton()
-  const dialogStations = getDialogStations(station)
-  const firstMatch = dialogStations[0]
-  if (firstMatch) addRecentStation(firstMatch.station, firstMatch.line, state.activeSystemId, getActiveSystemMeta().label)
-  try {
-    await refreshStationDialog(station, { requestId, skipCache: true })
-  } catch (e) {
-    if (state.activeDialogRequest !== requestId) return
-    if (e.errorType === 'rate-limit') {
-      showToast(copyValue('stationRateLimited'))
-    } else {
-      showToast(copyValue('stationRequestFailed'))
-    }
-    console.warn('Station refresh failed:', e)
-    // Retry once after a short delay on non-rate-limit failures
-    if (e.errorType !== 'rate-limit') {
-      setTimeout(async () => {
-        if (state.activeDialogRequest !== requestId || !dialog.open) return
-        try {
-          await refreshStationDialog(station, { requestId, skipCache: true })
-        } catch { /* auto-refresh will handle further retries */ }
-      }, 3000)
-    }
-  }
-}
-
-// Re-render open station dialog when OBA background revalidation completes (debounced)
-let backgroundUpdateTimer = null
-obaClient.setOnBackgroundUpdate(() => {
-  if (dialog.open && state.currentDialogStation) {
-    clearTimeout(backgroundUpdateTimer)
-    backgroundUpdateTimer = setTimeout(() => {
-      refreshStationDialog(state.currentDialogStation).catch(console.error)
-    }, 500)
-  }
-})
-
-if (dialogFavoriteButton) {
-  dialogFavoriteButton.addEventListener('click', () => {
-    if (!state.currentDialogStation) return
-    const dialogStations = getDialogStations(state.currentDialogStation)
-    const firstMatch = dialogStations[0]
-    if (!firstMatch) return
-
-    const favoriteKey = getFavoriteKey({
-      systemId: state.activeSystemId,
-      lineId: firstMatch.line.id,
-      stationId: firstMatch.station.id,
-    })
-
-    const result = toggleFavorite(firstMatch.station, firstMatch.line, state.activeSystemId)
-    if (!result.isFavorite) {
-      state.favoriteArrivals.delete(favoriteKey)
-    }
-    updateFavoriteButton()
-    if (state.activeTab === 'favorites') {
-      render()
-      if (result.isFavorite) {
-        refreshFavoriteArrivals({ force: true }).catch(console.error)
-      }
-    }
-    showToast(copyValue(result.isFavorite ? 'favoriteAdded' : 'favoriteRemoved'))
-    void (result.isFavorite ? notificationSuccess() : lightImpact())
-  })
 }
 
 const { renderLine } = createMapRenderer({
@@ -2276,7 +1163,7 @@ const overlayDialogs = createOverlayDialogs({
     const station = line?.stops?.find((s) => s.id === stationId)
     if (station) {
       closeTrainDialog()
-      showStationDialog(station)
+      dialogLifecycleBridge.showStationDialog(station)
     }
   },
 })
@@ -2329,6 +1216,64 @@ function showInsightsDetail(title, subtitle, body, { updateUrl = true, lineId = 
   if (updateUrl && type) setInsightsDialogParams(type, lineId)
 }
 
+const dialogLifecycle = createDialogLifecycle({
+  state,
+  obaClient,
+  appElements: {
+    stationSearchDialog,
+    stationDialogCloseButton,
+  },
+  dialogElements,
+  copyValue,
+  isPageRequestContextActive,
+  getPageFromUrl,
+  switchSystem,
+  render,
+  closeStationDialog,
+  closeTrainDialog,
+  closeAlertDialog,
+  closeStationSearch,
+  closeInsightsDetailDialog,
+  openStationSearch,
+  showInsightsDetail,
+  buildInsightsDetailContent,
+  renderTrainDialog,
+  renderAlertListDialog,
+  getAllVehicles,
+  findStationByParam,
+  getDialogStations,
+  getDialogStationTitle,
+  getCachedArrivalsForStation,
+  mergeArrivalBuckets,
+  renderArrivalLists,
+  renderDialogDirectionView,
+  syncDialogTitleMarquee,
+  fetchArrivalsForStopIds,
+  buildArrivalsForLine,
+  getStationStopIds,
+  getStationDialogAlerts,
+  addRecentStation,
+  getActiveSystemMeta,
+  clearStationDialogContent,
+  renderStationServiceSummary,
+  lightImpact,
+  setStationParam,
+  startDialogAutoRefresh,
+  setDialogTitle,
+  showToast,
+})
+
+const {
+  refreshStationDialog,
+  showStationDialog,
+  syncDialogFromUrl,
+  registerBackgroundDialogRefresh,
+} = dialogLifecycle
+
+dialogLifecycleBridge.showStationDialog = (...args) => showStationDialog(...args)
+dialogLifecycleBridge.refreshStationDialog = (...args) => refreshStationDialog(...args)
+registerBackgroundDialogRefresh()
+
 function renderAboutDialogContent() {
   aboutDialogTitle.textContent = copyValue('aboutTitle')
   aboutDialogSummary.textContent = copyValue('aboutSummary')
@@ -2367,6 +1312,79 @@ function closeAboutDialog() {
   closeDialogAnimated(aboutDialog)
 }
 
+registerAppEventHandlers({
+  state,
+  appElements: {
+    boardElement,
+    systemBarElement,
+    tabButtons,
+    stationSearchToggleButton,
+    languageToggleButton,
+    themeToggleButton,
+    statusPillElement,
+    aboutToggleButton,
+    stationSearchDialog,
+    stationSearchInput,
+    stationSearchCloseButton,
+    stationLocationButton,
+    aboutDialog,
+    aboutDialogCloseButton,
+    stationDialogCloseButton,
+    dialogFavoriteButton,
+  },
+  dialogElements,
+  copyValue,
+  toggleDialogDisplayMode,
+  shareArrivals,
+  closeTrainDialog,
+  closeAlertDialog,
+  closeInsightsDetailDialog,
+  openAboutDialog,
+  closeAboutDialog,
+  setLanguage,
+  setTheme,
+  render,
+  renderDialogDirectionView,
+  closeStationDialog,
+  clearDialogParams,
+  stopDialogAutoRefresh,
+  stopDialogDisplayScroll,
+  setDialogDisplayMode,
+  clearStationDialogContent,
+  clearObaQueue,
+  setDialogTitle,
+  openStationSearch,
+  findNearbyStations,
+  closeStationSearch,
+  setStationSearchParams,
+  renderStationSearchResults,
+  getActiveStationSearchResults,
+  handleStationSearchSelection,
+  refreshVisibleRealtime,
+  showToast,
+  setPageParam,
+  findStationAndLineByStopId,
+  getAllVehicles,
+  renderTrainDialog,
+  renderAlertListDialog,
+  buildInsightsDetailContent,
+  showInsightsDetail,
+  showStationDialog,
+  switchSystem,
+  getFavorites,
+  handleFavoriteClick,
+  moveFavorite,
+  removeFavorite,
+  getDialogStations,
+  toggleFavorite,
+  getFavoriteKey,
+  refreshFavoriteArrivals,
+  updateFavoriteButton,
+  getActiveSystemMeta,
+  notificationSuccess,
+  lightImpact,
+})
+
 
 function renderShellCopy() {
   const systemMeta = getActiveSystemMeta()
@@ -2398,10 +1416,9 @@ function renderShellCopy() {
 
 function renderDialogCopy() {
   document.querySelector('#dialog-direction-tabs')?.setAttribute('aria-label', copyValue('boardDirectionView'))
+  document.querySelector('[data-dialog-direction="auto"]')?.remove()
   const dirTabBoth = document.querySelector('#dir-tab-both')
-  const dirTabAuto = document.querySelector('#dir-tab-auto')
   if (dirTabBoth) dirTabBoth.textContent = copyValue('both')
-  if (dirTabAuto) dirTabAuto.textContent = copyValue('auto')
   setArrivalsTitleHtml(arrivalsTitleNb, formatDirectionLabel('▲', getDialogDirectionSummary('▲'), { includeSymbol: true }))
   setArrivalsTitleHtml(arrivalsTitleSb, formatDirectionLabel('▼', getDialogDirectionSummary('▼'), { includeSymbol: true }))
   dialogDisplay.textContent = state.dialogDisplayMode ? copyValue('exit') : copyValue('board')
@@ -2727,7 +1744,21 @@ async function refreshVehicles() {
       recordVehicleGhosts(line.id, vehicles)
     }
 
-    const currentMetrics = computeSystemSummaryMetrics(buildInsightsItems(state.lines))
+    const currentMetrics = computeSystemSummaryMetrics({
+      insightsItems: buildInsightsItems({
+        lines: state.lines,
+        layouts: state.layouts,
+        vehiclesByLine: state.vehiclesByLine,
+        getAlertsForLine,
+      }),
+      classifyHeadwayHealth,
+      computeLineHeadways,
+      copyValue,
+      getDelayBuckets,
+      getLineAttentionReasons,
+      getVehicleLabel,
+      getVehicleLabelPlural,
+    })
     const snapshot = state.systemSnapshots.get(state.activeSystemId)
     state.systemSnapshots.set(state.activeSystemId, {
       previous: snapshot?.current ?? null,
