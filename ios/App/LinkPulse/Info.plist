@@ -24,10 +24,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Link Pulse uses your location to show the nearest transit stations and lines around you.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Link Pulse uses your location to show the nearest transit stations and lines around you.</string>
+	<string>Link Pulse uses your location while the app is open to find nearby transit stations when you choose nearby station search.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

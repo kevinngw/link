@@ -59,8 +59,8 @@ export const APP_SHELL_HTML = `
       <div class="dialog-direction-bar">
         <div id="dialog-direction-tabs" class="dialog-direction-tabs" aria-label="Board direction view">
           <button id="dir-tab-both" class="dialog-direction-tab is-active" data-dialog-direction="both" type="button">Both</button>
-          <button class="dialog-direction-tab" data-dialog-direction="nb" type="button">NB</button>
-          <button class="dialog-direction-tab" data-dialog-direction="sb" type="button">SB</button>
+          <button class="dialog-direction-tab" data-dialog-direction="nb" type="button">上行</button>
+          <button class="dialog-direction-tab" data-dialog-direction="sb" type="button">下行</button>
         </div>
       </div>
       <div id="station-alerts-container"></div>

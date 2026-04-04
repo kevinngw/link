@@ -130,6 +130,7 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
       if (arrival.routeId !== getLineRouteId(line)) continue
       if (stopIdFilter && !stopIdFilter.has(arrival.stopId)) continue
       const isRealtime = Boolean(arrival.predictedArrivalTime)
+      if (!isRealtime) continue
       const arrivalTime = arrival.predictedArrivalTime || arrival.scheduledArrivalTime
       if (!arrivalTime || arrivalTime <= now || arrivalTime > cutoff) continue
 

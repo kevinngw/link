@@ -54,6 +54,9 @@ export function parseVehicle(rawVehicle, line, layout, tripsById, { language, co
   const trip = tripsById.get(tripId)
   if (!trip || trip.routeId !== line.routeKey) return null
 
+  const isPredicted = rawVehicle.tripStatus?.predicted ?? false
+  if (!isPredicted) return null
+
   const closestStop = rawVehicle.tripStatus?.closestStop
   const nextStop = rawVehicle.tripStatus?.nextStop
   const closestIndex = layout.stationIndexByStopId.get(closestStop)
@@ -98,7 +101,6 @@ export function parseVehicle(rawVehicle, line, layout, tripsById, { language, co
   const upcomingStop = layout.stations[upcomingStopIndex] ?? nextStation
 
   const scheduleDeviation = rawVehicle.tripStatus?.scheduleDeviation ?? 0
-  const isPredicted = rawVehicle.tripStatus?.predicted ?? false
   const delayInfo = formatDelay(scheduleDeviation, isPredicted, { language, copyValue })
 
   return {

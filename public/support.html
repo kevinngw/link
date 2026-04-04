@@ -51,9 +51,12 @@
     }
 
     h1 { margin: 0 0 12px; font-size: clamp(2rem, 5vw, 2.75rem); }
-    p { margin: 0 0 12px; }
+    h2 { margin: 24px 0 12px; font-size: 1.05rem; letter-spacing: 0.04em; text-transform: uppercase; }
+    p, li { margin: 0 0 12px; }
+    ul { margin: 0 0 12px; padding-left: 20px; }
     .muted { color: var(--muted); }
     a { color: var(--accent); }
+    .channel-list a { font-weight: 600; }
   </style>
 </head>
 <body>
@@ -61,10 +64,27 @@
     <section class="card">
       <p class="muted">Link Pulse support</p>
       <h1>Get Help</h1>
-      <p>If you find a bug, have a feature request, or need help with Link Pulse, please use one of the links below.</p>
-      <p><a href="https://github.com/kevinngw/link/issues/new">Open a support request</a></p>
-      <p><a href="https://github.com/kevinngw/link">View the project source</a></p>
-      <p><a href="./privacy.html">Read the privacy policy</a></p>
+      <p>If you find a bug, have a feature request, or need help with Link Pulse, use one of the support channels below.</p>
+
+      <h2>Contact</h2>
+      <ul class="channel-list">
+        <li><a href="mailto:mingnanwu@gmail.com?subject=Link%20Pulse%20Support">Email the developer</a> at <a href="mailto:mingnanwu@gmail.com">mingnanwu@gmail.com</a></li>
+        <li><a href="https://github.com/kevinngw/link/issues/new">Open a support request</a> on GitHub</li>
+        <li><a href="https://github.com/kevinngw/link">View the project source</a></li>
+        <li><a href="./privacy.html">Read the privacy policy</a></li>
+      </ul>
+
+      <h2>What to include</h2>
+      <ul>
+        <li>Your device model and iOS version</li>
+        <li>The app version you are using</li>
+        <li>The line, stop, or station involved</li>
+        <li>Screenshots or screen recordings when possible</li>
+      </ul>
+
+      <h2>Support scope</h2>
+      <p>Link Pulse is an independent transit board app for Link, RapidRide, and Swift. Support covers app behavior, rendering issues, favorites, nearby search, sharing, and realtime data presentation.</p>
+      <p>Realtime data quality also depends on upstream public transit feeds. If a problem looks tied to source data, please include the station name, direction, and approximate time so it can be traced more quickly.</p>
     </section>
   </main>
 </body>

@@ -1417,8 +1417,11 @@ function renderShellCopy() {
 function renderDialogCopy() {
   document.querySelector('#dialog-direction-tabs')?.setAttribute('aria-label', copyValue('boardDirectionView'))
   document.querySelector('[data-dialog-direction="auto"]')?.remove()
-  const dirTabBoth = document.querySelector('#dir-tab-both')
-  if (dirTabBoth) dirTabBoth.textContent = copyValue('both')
+  dialogDirectionTabs.forEach((button) => {
+    if (button.dataset.dialogDirection === 'both') button.textContent = copyValue('both')
+    if (button.dataset.dialogDirection === 'nb') button.textContent = copyValue('directionUp')
+    if (button.dataset.dialogDirection === 'sb') button.textContent = copyValue('directionDown')
+  })
   setArrivalsTitleHtml(arrivalsTitleNb, formatDirectionLabel('▲', getDialogDirectionSummary('▲'), { includeSymbol: true }))
   setArrivalsTitleHtml(arrivalsTitleSb, formatDirectionLabel('▼', getDialogDirectionSummary('▼'), { includeSymbol: true }))
   dialogDisplay.textContent = state.dialogDisplayMode ? copyValue('exit') : copyValue('board')
