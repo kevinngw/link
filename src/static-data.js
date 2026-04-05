@@ -167,8 +167,8 @@ export function bootstrapApp({
     setTheme(getPreferredTheme())
     updateViewportState()
     await loadStaticData()
+    await refreshVehicles({ renderAfter: false })
     render()
-    await refreshVehicles()
     await syncDialogFromUrl()
 
     window.addEventListener('popstate', () => {

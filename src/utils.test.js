@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   clamp,
+  closeDialogAnimated,
   formatDistanceMeters,
   getDistanceMeters,
   normalizeName,
@@ -91,6 +92,35 @@ describe('utils', () => {
       await sleep(50)
       const elapsed = Date.now() - start
       expect(elapsed).toBeGreaterThanOrEqual(45)
+    })
+  })
+
+  describe('closeDialogAnimated', () => {
+    it('closes an open dialog after the animation ends', () => {
+      const dialog = document.createElement('dialog')
+      dialog.open = true
+      dialog.close = vi.fn(() => {
+        dialog.open = false
+      })
+
+      closeDialogAnimated(dialog)
+
+      expect(dialog.classList.contains('is-closing')).toBe(true)
+      dialog.dispatchEvent(new Event('animationend'))
+      expect(dialog.classList.contains('is-closing')).toBe(false)
+      expect(dialog.close).toHaveBeenCalledTimes(1)
+      expect(dialog.open).toBe(false)
+    })
+
+    it('does nothing for a closed dialog', () => {
+      const dialog = document.createElement('dialog')
+      dialog.open = false
+      dialog.close = vi.fn()
+
+      closeDialogAnimated(dialog)
+
+      expect(dialog.classList.contains('is-closing')).toBe(false)
+      expect(dialog.close).not.toHaveBeenCalled()
     })
   })
 

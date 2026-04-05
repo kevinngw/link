@@ -18,7 +18,7 @@ export function createDialogLifecycle({
   buildInsightsDetailContent,
   renderTrainDialog,
   renderAlertListDialog,
-  getAllVehicles,
+  getAllVehiclesById,
   findStationByParam,
   getDialogStations,
   getDialogStationTitle,
@@ -112,12 +112,15 @@ export function createDialogLifecycle({
 
     if (skipCache) state.dialogFreshFetchActive = true
     let arrivalFeed = []
+    let fetchError = null
     try {
       arrivalFeed = await fetchArrivalsForStopIds([...allStopIds], signal, skipCache)
     } catch (error) {
       if (error.message?.includes('cancelled') || error.name === 'AbortError') {
         return
       }
+      fetchError = error
+      arrivalFeed = error.partialArrivals ?? arrivalFeed
       console.warn(`Failed to fetch arrivals for station ${station.name}:`, error)
     } finally {
       if (skipCache) state.dialogFreshFetchActive = false
@@ -134,6 +137,10 @@ export function createDialogLifecycle({
     renderArrivalLists(mergeArrivalBuckets(arrivalsByLine))
     renderDialogDirectionView()
     syncDialogTitleMarquee()
+
+    if (fetchError) {
+      throw fetchError
+    }
   }
 
   async function showStationDialog(station, { updateUrl = true } = {}) {
@@ -240,7 +247,7 @@ export function createDialogLifecycle({
           return
         }
 
-        const vehicle = getAllVehicles().find((candidate) => candidate.id === requestedTrainId)
+        const vehicle = getAllVehiclesById().get(requestedTrainId)
         if (!vehicle) {
           closeTrainDialog()
           return

@@ -1,10 +1,21 @@
-import { Preferences } from '@capacitor/preferences'
-
-import { isNativePlatform } from './platform'
+import { IS_NATIVE_BUILD, isNativePlatform } from './platform'
 
 const persistentCache = new Map()
 const sessionCache = new Map()
 let isInitialized = false
+let preferencesPlugin = null
+
+const loadPreferencesPlugin = IS_NATIVE_BUILD
+  ? async function loadPreferencesPluginNative() {
+      if (!preferencesPlugin) {
+        const mod = await import('@capacitor/preferences')
+        preferencesPlugin = mod.Preferences
+      }
+      return preferencesPlugin
+    }
+  : async function loadPreferencesPluginWeb() {
+      return null
+    }
 
 function getScopeCache(scope) {
   return scope === 'session' ? sessionCache : persistentCache
@@ -15,6 +26,8 @@ function getScopedKey(key, scope) {
 }
 
 async function readNativePreference(key, scope) {
+  const Preferences = await loadPreferencesPlugin()
+  if (!Preferences) return null
   const { value } = await Preferences.get({ key: getScopedKey(key, scope) })
   return value ?? null
 }
@@ -29,6 +42,8 @@ function readWebStorage(key, scope) {
 }
 
 async function writeNativePreference(key, value, scope) {
+  const Preferences = await loadPreferencesPlugin()
+  if (!Preferences) return
   await Preferences.set({ key: getScopedKey(key, scope), value })
 }
 
@@ -40,6 +55,8 @@ function writeWebStorage(key, value, scope) {
 }
 
 async function removeNativePreference(key, scope) {
+  const Preferences = await loadPreferencesPlugin()
+  if (!Preferences) return
   await Preferences.remove({ key: getScopedKey(key, scope) })
 }
 

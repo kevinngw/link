@@ -1,26 +1,32 @@
-import { isNativePlatform } from './platform'
+import { IS_NATIVE_BUILD, isNativePlatform } from './platform'
 
 let hapticsPlugin = null
 let hapticsEnums = null
 
-async function loadHapticsModule() {
-  if (!hapticsPlugin || !hapticsEnums) {
-    const mod = await import('@capacitor/haptics')
-    hapticsPlugin = mod.Haptics
-    hapticsEnums = {
-      ImpactStyle: mod.ImpactStyle,
-      NotificationType: mod.NotificationType,
-    }
-  }
+const loadHapticsModule = IS_NATIVE_BUILD
+  ? async function loadHapticsModuleNative() {
+      if (!hapticsPlugin || !hapticsEnums) {
+        const mod = await import('@capacitor/haptics')
+        hapticsPlugin = mod.Haptics
+        hapticsEnums = {
+          ImpactStyle: mod.ImpactStyle,
+          NotificationType: mod.NotificationType,
+        }
+      }
 
-  return { plugin: hapticsPlugin, ...hapticsEnums }
-}
+      return { plugin: hapticsPlugin, ...hapticsEnums }
+    }
+  : async function loadHapticsModuleWeb() {
+      return null
+    }
 
 export async function lightImpact() {
   if (!isNativePlatform()) return false
 
   try {
-    const { plugin, ImpactStyle } = await loadHapticsModule()
+    const loaded = await loadHapticsModule()
+    if (!loaded) return false
+    const { plugin, ImpactStyle } = loaded
     await plugin.impact({ style: ImpactStyle.Light })
     return true
   } catch {
@@ -32,7 +38,9 @@ export async function notificationSuccess() {
   if (!isNativePlatform()) return false
 
   try {
-    const { plugin, NotificationType } = await loadHapticsModule()
+    const loaded = await loadHapticsModule()
+    if (!loaded) return false
+    const { plugin, NotificationType } = loaded
     await plugin.notification({ type: NotificationType.Success })
     return true
   } catch {

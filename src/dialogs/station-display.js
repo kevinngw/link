@@ -107,58 +107,50 @@ export function createStationDialogDisplayController({
     }
   }
 
-  function getVisibleItemCount(listElement) {
+  function measureListLayout(listElement) {
     const items = listElement.querySelectorAll('.arrival-item:not(.muted)')
-    if (!items.length) return 0
+    if (!items.length) return { itemCount: 0, visibleCount: 0, itemHeight: 0 }
     const viewport = listElement.closest('.arrivals-viewport')
-    if (!viewport) return items.length
+    if (!viewport) return { itemCount: items.length, visibleCount: items.length, itemHeight: 0 }
     const vpHeight = viewport.getBoundingClientRect().height
     const rowGap = Number.parseFloat(window.getComputedStyle(listElement).rowGap || '0') || 0
     const itemHeight = items[0].getBoundingClientRect().height + rowGap
-    return itemHeight > 0 ? Math.max(1, Math.floor(vpHeight / itemHeight)) : items.length
+    const visibleCount = itemHeight > 0 ? Math.max(1, Math.floor(vpHeight / itemHeight)) : items.length
+    return { itemCount: items.length, visibleCount, itemHeight }
   }
 
-  function applyDialogDisplayOffset(listElement, key) {
-    const items = [...listElement.querySelectorAll('.arrival-item:not(.muted)')]
+  function applyDialogDisplayOffsetFromLayout(listElement, key, layout) {
     listElement.style.transform = 'translateY(0)'
-
-    const visibleCount = getVisibleItemCount(listElement)
-    if (!state.dialogDisplayMode || items.length <= visibleCount) return
-
-    const rowGap = Number.parseFloat(window.getComputedStyle(listElement).rowGap || '0') || 0
-    const itemHeight = items[0].getBoundingClientRect().height + rowGap
-    const maxIndex = Math.max(0, items.length - visibleCount)
+    if (!state.dialogDisplayMode || layout.itemCount <= layout.visibleCount) return
+    const maxIndex = Math.max(0, layout.itemCount - layout.visibleCount)
     const safeIndex = Math.min(state.dialogDisplayIndexes[key], maxIndex)
-    listElement.style.transform = `translateY(-${safeIndex * itemHeight}px)`
+    listElement.style.transform = `translateY(-${safeIndex * layout.itemHeight}px)`
   }
 
   function syncDialogDisplayScroll() {
     stopDialogDisplayScroll()
     state.dialogDisplayIndexes = { nb: 0, sb: 0 }
-    applyDialogDisplayOffset(arrivalsNb, 'nb')
-    applyDialogDisplayOffset(arrivalsSb, 'sb')
+
+    // Batch all layout reads before any writes
+    const nbLayout = measureListLayout(arrivalsNb)
+    const sbLayout = measureListLayout(arrivalsSb)
+
+    // Now write
+    applyDialogDisplayOffsetFromLayout(arrivalsNb, 'nb', nbLayout)
+    applyDialogDisplayOffsetFromLayout(arrivalsSb, 'sb', sbLayout)
 
     if (!state.dialogDisplayMode) return
 
-    // Snapshot visible item counts at scroll-start; re-query only on next syncDialogDisplayScroll
-    const visibleCounts = {
-      nb: arrivalsNb.querySelectorAll('.arrival-item:not(.muted)').length,
-      sb: arrivalsSb.querySelectorAll('.arrival-item:not(.muted)').length,
-    }
     const listElements = { nb: arrivalsNb, sb: arrivalsSb }
-
-    const fitCounts = {
-      nb: getVisibleItemCount(arrivalsNb),
-      sb: getVisibleItemCount(arrivalsSb),
-    }
+    const layouts = { nb: nbLayout, sb: sbLayout }
 
     state.dialogDisplayTimer = window.setInterval(() => {
       for (const key of ['nb', 'sb']) {
-        if (visibleCounts[key] <= fitCounts[key]) continue
+        if (layouts[key].itemCount <= layouts[key].visibleCount) continue
 
-        const maxIndex = Math.max(0, visibleCounts[key] - fitCounts[key])
+        const maxIndex = Math.max(0, layouts[key].itemCount - layouts[key].visibleCount)
         state.dialogDisplayIndexes[key] = state.dialogDisplayIndexes[key] >= maxIndex ? 0 : state.dialogDisplayIndexes[key] + 1
-        applyDialogDisplayOffset(listElements[key], key)
+        applyDialogDisplayOffsetFromLayout(listElements[key], key, layouts[key])
       }
     }, DIALOG_DISPLAY_SCROLL_INTERVAL_MS)
   }
@@ -170,12 +162,12 @@ export function createStationDialogDisplayController({
     const scheduleNextRefresh = (delay = DIALOG_REFRESH_INTERVAL_MS) => {
       state.dialogRefreshTimer = window.setTimeout(async () => {
         if (!dialog.open || !state.currentDialogStation) return
+
         try {
           await refreshStationDialog(state.currentDialogStation)
           scheduleNextRefresh()
         } catch (error) {
           console.error(error)
-          // Retry sooner if rate-limited, otherwise use normal interval
           const nextDelay = error?.errorType === 'rate-limit'
             ? OBA_RATE_LIMIT_DELAY_MS
             : DIALOG_REFRESH_INTERVAL_MS
@@ -254,7 +246,6 @@ export function createStationDialogDisplayController({
     renderDialogDirectionView,
     stopDialogAutoRefresh,
     stopDialogDisplayScroll,
-    applyDialogDisplayOffset,
     syncDialogDisplayScroll,
     startDialogAutoRefresh,
     cleanupDialogState,

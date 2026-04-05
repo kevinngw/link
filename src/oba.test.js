@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createObaClient } from './oba.js'
+import { OBA_MAX_RETRIES } from './config.js'
 
 function makeState() {
   return {}
@@ -113,6 +114,28 @@ describe('createObaClient', () => {
       controller.abort()
 
       await expect(promise).rejects.toThrow()
+    })
+  })
+
+  describe('fetchJsonWithRetry — rate limiting', () => {
+    it('stops retrying after the configured number of 429 retries', async () => {
+      vi.spyOn(Math, 'random').mockReturnValue(0)
+
+      global.fetch = vi.fn()
+        .mockResolvedValue({
+          ok: false,
+          status: 429,
+          json: async () => ({ code: 429, text: 'rate limit' }),
+        })
+
+      const client = createObaClient(makeState())
+      const promise = client.fetchJsonWithRetry('https://example.com/rate-limit', 'Test')
+      const rejection = expect(promise).rejects.toMatchObject({ errorType: 'rate-limit' })
+
+      await vi.runAllTimersAsync()
+
+      await rejection
+      expect(fetch).toHaveBeenCalledTimes(OBA_MAX_RETRIES + 1)
     })
   })
 

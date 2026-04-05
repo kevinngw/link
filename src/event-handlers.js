@@ -33,7 +33,7 @@ export function registerAppEventHandlers({
   showToast,
   setPageParam,
   findStationAndLineByStopId,
-  getAllVehicles,
+  getAllVehiclesById,
   renderTrainDialog,
   renderAlertListDialog,
   buildInsightsDetailContent,
@@ -213,6 +213,7 @@ export function registerAppEventHandlers({
   stationSearchDialog.addEventListener('click', (event) => {
     if (event.target === stationSearchDialog) closeStationSearch()
   })
+  let searchDebounceTimer = 0
   stationSearchInput.addEventListener('input', () => {
     state.stationSearchQuery = stationSearchInput.value
     state.highlightedStationSearchIndex = 0
@@ -225,7 +226,8 @@ export function registerAppEventHandlers({
     if (stationSearchDialog.open && !state.isSyncingFromUrl) {
       setStationSearchParams(state.stationSearchQuery)
     }
-    renderStationSearchResults()
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = setTimeout(renderStationSearchResults, 150)
   })
   stationSearchInput.addEventListener('keydown', async (event) => {
     const results = getActiveStationSearchResults()
@@ -318,7 +320,7 @@ export function registerAppEventHandlers({
 
     const trainItem = event.target.closest('[data-train-id]')
     if (trainItem) {
-      const vehicle = getAllVehicles().find((candidate) => candidate.id === trainItem.dataset.trainId)
+      const vehicle = getAllVehiclesById().get(trainItem.dataset.trainId)
       if (vehicle) {
         state.currentTrainId = trainItem.dataset.trainId
         renderTrainDialog(vehicle)
@@ -368,7 +370,7 @@ export function registerAppEventHandlers({
   dialog.addEventListener('click', (event) => {
     const item = event.target.closest('[data-arrival-vehicle-id]')
     if (!item) return
-    const vehicle = getAllVehicles().find((candidate) => candidate.id === item.dataset.arrivalVehicleId)
+    const vehicle = getAllVehiclesById().get(item.dataset.arrivalVehicleId)
     if (!vehicle) return
     state.currentTrainId = item.dataset.arrivalVehicleId
     renderTrainDialog(vehicle)

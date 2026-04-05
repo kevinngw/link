@@ -3,7 +3,7 @@ import { registerSW } from 'virtual:pwa-register'
 import { APP_BUNDLE_ID, APP_MARKETING_VERSION, ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, PRIVACY_POLICY_URL, SHARE_BASE_URL, SOURCE_URL, SUPPORT_URL, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
-import { clamp, normalizeName, pluralizeVehicleLabel, slugifyStation } from './utils'
+import { clamp, closeDialogAnimated, normalizeName, pluralizeVehicleLabel, slugifyStation } from './utils'
 import { createObaClient } from './oba'
 import { createArrivalsHelpers, getLineRouteId, getStatusTone } from './arrivals'
 import { parseVehicle } from './vehicles'
@@ -91,15 +91,6 @@ const state = {
   favoriteArrivalsRefreshPromise: null,
 }
 
-function closeDialogAnimated(dialogEl) {
-  if (!dialogEl.open) return
-  dialogEl.classList.add('is-closing')
-  dialogEl.addEventListener('animationend', () => {
-    dialogEl.classList.remove('is-closing')
-    dialogEl.close()
-  }, { once: true })
-}
-
 if (shouldRegisterServiceWorker()) {
   const updateSW = registerSW({
     immediate: true,
@@ -168,6 +159,8 @@ const {
   stationDialogCloseButton,
   dialogFavoriteButton,
 } = getAppElements()
+
+boardElement.innerHTML = renderSkeleton()
 
 const dialogElements = getDialogElements()
 const {
@@ -746,8 +739,20 @@ function renderFocusMetrics(vehicle, extraContent = '') {
   `
 }
 
+let _allVehiclesCache = null
+let _allVehiclesByIdCache = null
+let _allVehiclesCacheKey = null
+
+function invalidateVehicleCache() {
+  _allVehiclesCache = null
+  _allVehiclesByIdCache = null
+  _allVehiclesCacheKey = null
+}
+
 function getAllVehicles() {
-  return state.lines.flatMap((line) =>
+  const cacheKey = state.fetchedAt + '|' + state.lines.length
+  if (_allVehiclesCache && _allVehiclesCacheKey === cacheKey) return _allVehiclesCache
+  _allVehiclesCache = state.lines.flatMap((line) =>
     (state.vehiclesByLine.get(line.id) ?? []).map((vehicle) => ({
       ...vehicle,
       lineColor: line.color,
@@ -756,6 +761,15 @@ function getAllVehicles() {
       lineToken: line.name[0],
     })),
   )
+  _allVehiclesCacheKey = cacheKey
+  _allVehiclesByIdCache = null
+  return _allVehiclesCache
+}
+
+function getAllVehiclesById() {
+  if (_allVehiclesByIdCache) return _allVehiclesByIdCache
+  _allVehiclesByIdCache = new Map(getAllVehicles().map((v) => [v.id, v]))
+  return _allVehiclesByIdCache
 }
 
 const {
@@ -776,6 +790,7 @@ const {
   getArrivalServiceStatus,
   getStatusTone,
   getAllVehicles,
+  getAllVehiclesById,
   getTrainTimelineEntries,
 })
 
@@ -1137,7 +1152,7 @@ const { renderArrivalLists } = createStationDialogRenderers({
   getVehicleLabelPlural,
   getStatusTone,
   getArrivalServiceStatus,
-  getAllVehicles,
+  getAllVehiclesById,
   syncDialogDisplayScroll,
 })
 
@@ -1239,7 +1254,7 @@ const dialogLifecycle = createDialogLifecycle({
   buildInsightsDetailContent,
   renderTrainDialog,
   renderAlertListDialog,
-  getAllVehicles,
+  getAllVehiclesById,
   findStationByParam,
   getDialogStations,
   getDialogStationTitle,
@@ -1364,7 +1379,7 @@ registerAppEventHandlers({
   showToast,
   setPageParam,
   findStationAndLineByStopId,
-  getAllVehicles,
+  getAllVehiclesById,
   renderTrainDialog,
   renderAlertListDialog,
   buildInsightsDetailContent,
@@ -1529,6 +1544,7 @@ function startInsightsTickerRotation() {
 }
 
 function refreshLiveMeta() {
+  if (document.hidden) return
   statusPillElement.textContent = state.error ? copyValue('statusHold') : copyValue('statusSync')
   statusPillElement.classList.toggle('status-pill-error', Boolean(state.error))
   const timeStr = formatCurrentTime()
@@ -1726,7 +1742,7 @@ function parseSituation(situation) {
   }
 }
 
-async function refreshVehicles() {
+async function refreshVehicles({ renderAfter = true } = {}) {
   if (!isPageRequestContextActive()) return
 
   try {
@@ -1779,10 +1795,12 @@ async function refreshVehicles() {
     console.error(error)
   }
 
-  render()
+  if (renderAfter) {
+    render()
+  }
 
-  if (trainDialog.open && state.currentTrainId) {
-    const currentVehicle = getAllVehicles().find((vehicle) => vehicle.id === state.currentTrainId)
+  if (renderAfter && trainDialog.open && state.currentTrainId) {
+    const currentVehicle = getAllVehiclesById().get(state.currentTrainId)
     if (currentVehicle) renderTrainDialog(currentVehicle, { updateUrl: false })
   }
 }

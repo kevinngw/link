@@ -1,6 +1,18 @@
-import { Geolocation } from '@capacitor/geolocation'
+import { IS_NATIVE_BUILD, isNativePlatform } from './platform'
 
-import { isNativePlatform } from './platform'
+let geolocationPlugin = null
+
+const loadGeolocationPlugin = IS_NATIVE_BUILD
+  ? async function loadGeolocationPluginNative() {
+      if (!geolocationPlugin) {
+        const mod = await import('@capacitor/geolocation')
+        geolocationPlugin = mod.Geolocation
+      }
+      return geolocationPlugin
+    }
+  : async function loadGeolocationPluginWeb() {
+      return null
+    }
 
 function getBrowserLocation(options) {
   if (!navigator.geolocation) {
@@ -19,6 +31,8 @@ export async function getCurrentDevicePosition(options) {
     return getBrowserLocation(options)
   }
 
+  const Geolocation = await loadGeolocationPlugin()
+  if (!Geolocation) return getBrowserLocation(options)
   const permissions = await Geolocation.checkPermissions()
   if (permissions.location !== 'granted') {
     await Geolocation.requestPermissions()

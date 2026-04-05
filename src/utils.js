@@ -31,6 +31,15 @@ export function clamp(value, min, max) {
   return Math.max(min, Math.min(value, max))
 }
 
+export function closeDialogAnimated(dialogEl) {
+  if (!dialogEl.open) return
+  dialogEl.classList.add('is-closing')
+  dialogEl.addEventListener('animationend', () => {
+    dialogEl.classList.remove('is-closing')
+    dialogEl.close()
+  }, { once: true })
+}
+
 export function sleep(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }

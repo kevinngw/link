@@ -1,7 +1,9 @@
+import { formatArrivalStatusLabel } from './arrivals'
+
 /**
  * Vehicle status rendering, countdown refresh, and marquee display
  */
-export function createVehicleDisplay({ state, copyValue, formatArrivalTime, formatEtaClockFromNow, getArrivalServiceStatus, getStatusTone, getAllVehicles, getTrainTimelineEntries }) {
+export function createVehicleDisplay({ state, copyValue, formatArrivalTime, formatEtaClockFromNow, getArrivalServiceStatus, getStatusTone, getAllVehicles, getAllVehiclesById, getTrainTimelineEntries }) {
 
   function formatServiceStatus(serviceStatus) {
     switch (serviceStatus) {
@@ -124,9 +126,14 @@ export function createVehicleDisplay({ state, copyValue, formatArrivalTime, form
   }
 
   function refreshVehicleStatusMessages() {
-    const vehiclesById = new Map(getAllVehicles().map((v) => [v.id, v]))
+    if (document.hidden) return
+    const vehiclesById = getAllVehiclesById()
+    if (!vehiclesById.size) return
 
-    document.querySelectorAll('[data-vehicle-status]').forEach((element) => {
+    const statusElements = document.querySelectorAll('[data-vehicle-status]')
+    const marqueeElements = document.querySelectorAll('[data-vehicle-marquee]')
+
+    statusElements.forEach((element) => {
       const vehicle = vehiclesById.get(element.dataset.vehicleStatus)
       if (!vehicle) return
       const liveNextOffset = getRealtimeOffset(vehicle.nextOffset ?? 0)
@@ -134,7 +141,7 @@ export function createVehicleDisplay({ state, copyValue, formatArrivalTime, form
       element.className = `train-list-status ${getVehicleStatusClass(vehicle, liveNextOffset)}`
     })
 
-    document.querySelectorAll('[data-vehicle-marquee]').forEach((element) => {
+    marqueeElements.forEach((element) => {
       const vehicle = vehiclesById.get(element.dataset.vehicleMarquee)
       if (!vehicle) return
       const liveNextOffset = getRealtimeOffset(vehicle.nextOffset ?? 0)
@@ -145,7 +152,9 @@ export function createVehicleDisplay({ state, copyValue, formatArrivalTime, form
   }
 
   function refreshVehicleCountdownDisplays() {
-    const vehiclesById = new Map(getAllVehicles().map((vehicle) => [vehicle.id, vehicle]))
+    if (document.hidden) return
+    const vehiclesById = getAllVehiclesById()
+    if (!vehiclesById.size) return
 
     document.querySelectorAll('[data-vehicle-next-countdown]').forEach((element) => {
       const vehicle = vehiclesById.get(element.dataset.vehicleNextCountdown ?? '')
@@ -183,7 +192,10 @@ export function createVehicleDisplay({ state, copyValue, formatArrivalTime, form
   }
 
   function refreshArrivalCountdowns() {
+    if (document.hidden) return
     const arrivalElements = document.querySelectorAll('.arrival-item[data-arrival-time]')
+    if (!arrivalElements.length) return
+    const now = Date.now()
     arrivalElements.forEach((element) => {
       const arrivalTime = Number(element.dataset.arrivalTime)
       if (!Number.isFinite(arrivalTime)) return
@@ -192,17 +204,13 @@ export function createVehicleDisplay({ state, copyValue, formatArrivalTime, form
       const statusElement = element.querySelector('.arrival-status')
       if (!countdownElement || !statusElement) return
 
-      const diffSeconds = Math.floor((arrivalTime - Date.now()) / 1000)
+      const diffSeconds = Math.floor((arrivalTime - now) / 1000)
       const scheduleDeviation = Number(element.dataset.scheduleDeviation ?? 0)
       const serviceStatus = getArrivalServiceStatus(arrivalTime, scheduleDeviation)
       const serviceTone = getStatusTone(serviceStatus)
 
       countdownElement.textContent = formatArrivalTime(diffSeconds)
-      const statusLabel = serviceStatus === 'ARR'
-        ? (copyValue('arrivingStatus') || 'ARRIVING')
-        : serviceStatus === 'DELAY'
-          ? (copyValue('delayedStatus') || 'DELAYED')
-          : serviceStatus
+      const statusLabel = formatArrivalStatusLabel(serviceStatus, copyValue)
       statusElement.textContent = statusLabel
       statusElement.className = `arrival-status arrival-status-${serviceTone}`
     })

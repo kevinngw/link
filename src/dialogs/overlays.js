@@ -1,3 +1,5 @@
+import { closeDialogAnimated } from '../utils'
+
 export function createOverlayDialogs({
   state,
   elements,
@@ -29,15 +31,6 @@ export function createOverlayDialogs({
     alertDialogBody,
     alertDialogLink,
   } = elements
-
-  function closeDialogAnimated(dialogEl) {
-    if (!dialogEl.open) return
-    dialogEl.classList.add('is-closing')
-    dialogEl.addEventListener('animationend', () => {
-      dialogEl.classList.remove('is-closing')
-      dialogEl.close()
-    }, { once: true })
-  }
 
   function closeTrainDialog() {
     state.currentTrainId = ''
@@ -183,19 +176,20 @@ export function createOverlayDialogs({
     )
 
     if (!trainDialog.open) trainDialog.showModal()
-
-    // Attach click handlers for spine stops and timeline entries
-    trainDialog.querySelectorAll('[data-spine-station-id]').forEach((el) => {
-      const handler = () => onStationClick(el.dataset.spineStationId, vehicle.lineId)
-      el.addEventListener('click', handler)
-      el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler() } })
-    })
-    trainDialog.querySelectorAll('[data-timeline-station-id]').forEach((el) => {
-      const handler = () => onStationClick(el.dataset.timelineStationId, vehicle.lineId)
-      el.addEventListener('click', handler)
-      el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler() } })
-    })
   }
+
+  // Event delegation for spine/timeline station clicks (registered once)
+  function handleTrainDialogInteraction(event) {
+    const el = event.target.closest('[data-spine-station-id], [data-timeline-station-id]')
+    if (!el) return
+    if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return
+    if (event.type === 'keydown') event.preventDefault()
+    const stationId = el.dataset.spineStationId || el.dataset.timelineStationId
+    const lineId = state.lines.find((line) => state.vehiclesByLine.get(line.id)?.some((v) => v.id === state.currentTrainId))?.id
+    if (stationId && lineId) onStationClick(stationId, lineId)
+  }
+  trainDialog.addEventListener('click', handleTrainDialogInteraction)
+  trainDialog.addEventListener('keydown', handleTrainDialogInteraction)
 
   return {
     closeTrainDialog,

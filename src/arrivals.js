@@ -13,6 +13,36 @@ const MAX_ARRIVALS_PER_DIRECTION = 4
 
 const sortByArrivalTime = (arr) => arr.sort((a, b) => a.arrivalTime - b.arrivalTime)
 
+function createCancelledError() {
+  const error = new Error('Request cancelled')
+  error.errorType = 'cancelled'
+  return error
+}
+
+function waitForBatchJitter(ms, signal) {
+  if (!ms) return Promise.resolve()
+
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+
+    const onAbort = () => {
+      clearTimeout(timeoutId)
+      signal?.removeEventListener('abort', onAbort)
+      reject(createCancelledError())
+    }
+
+    if (signal?.aborted) {
+      onAbort()
+      return
+    }
+
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
 // Adaptive concurrency controller
 const concurrency = {
   value: OBA_ARRIVALS_CONCURRENCY,
@@ -62,6 +92,12 @@ export function getArrivalServiceStatus(arrivalTime, scheduleDeviation, copyValu
   return copyValue('onTimeStatus')
 }
 
+export function formatArrivalStatusLabel(serviceStatus, copyValue) {
+  if (serviceStatus === 'ARR') return copyValue('arrivingStatus') || 'ARRIVING'
+  if (serviceStatus === 'DELAY') return copyValue('delayedStatus') || 'DELAYED'
+  return serviceStatus || copyValue('onTimeStatus') || 'ON TIME'
+}
+
 export function getStatusTone(status) {
   if (status === 'DELAY') return 'delay'
   if (status === 'ARR') return 'arr'
@@ -90,26 +126,49 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
     const dedupedStopIds = [...new Set(stopIds)]
     const results = []
     const arrivals = []
-    for (let index = 0; index < dedupedStopIds.length;) {
-      const batchSize = concurrency.value
-      const batch = dedupedStopIds.slice(index, index + batchSize)
-      const batchResults = await Promise.allSettled(
-        batch.map((stopId, i) => {
-          const jitter = i === 0 ? 0 : Math.random() * 50
-          return new Promise(r => setTimeout(r, jitter)).then(() => fetchArrivalsForStop(stopId, signal, forceFresh))
-        })
-      )
-      results.push(...batchResults)
-      index += batch.length
+    const batchController = new AbortController()
+    const relayAbort = () => batchController.abort()
+    signal?.addEventListener('abort', relayAbort, { once: true })
 
-      // Adjust concurrency based on batch success rate
-      const successCount = batchResults.filter(r => r.status === 'fulfilled').length
-      concurrency.adjust(successCount === batch.length)
-    }
+    let rateLimitError = null
 
-    for (const result of results) {
-      if (result.status !== 'fulfilled') continue
-      arrivals.push(...result.value)
+    try {
+      for (let index = 0; index < dedupedStopIds.length;) {
+        const batchSize = concurrency.value
+        const batch = dedupedStopIds.slice(index, index + batchSize)
+        const batchResults = await Promise.allSettled(
+          batch.map((stopId, i) => {
+            const jitter = i === 0 ? 0 : Math.random() * 50
+            return waitForBatchJitter(jitter, batchController.signal)
+              .then(() => fetchArrivalsForStop(stopId, batchController.signal, forceFresh))
+              .catch((error) => {
+                if (error?.errorType === 'rate-limit' && !rateLimitError) {
+                  rateLimitError = error
+                  batchController.abort()
+                }
+                throw error
+              })
+          })
+        )
+
+        results.push(...batchResults)
+        index += batch.length
+
+        const successfulArrivals = batchResults
+          .filter((result) => result.status === 'fulfilled')
+          .flatMap((result) => result.value)
+        arrivals.push(...successfulArrivals)
+
+        const successCount = batchResults.filter((result) => result.status === 'fulfilled').length
+        concurrency.adjust(successCount === batch.length)
+
+        if (rateLimitError) {
+          rateLimitError.partialArrivals = arrivals
+          throw rateLimitError
+        }
+      }
+    } finally {
+      signal?.removeEventListener('abort', relayAbort)
     }
 
     if (results.length > 0 && results.every((result) => result.status !== 'fulfilled')) {

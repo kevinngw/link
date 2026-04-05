@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   classifyArrivalDirection,
   createArrivalsHelpers,
   getLineRouteId,
   formatArrivalDestination,
+  formatArrivalStatusLabel,
   getArrivalServiceStatus,
   getStatusTone,
 } from './arrivals.js'
@@ -95,6 +96,30 @@ describe('arrivals', () => {
     })
   })
 
+  describe('formatArrivalStatusLabel', () => {
+    const mockCopyValue = (key) => ({
+      arrivingStatus: 'ARRIVING',
+      delayedStatus: 'DELAYED',
+      onTimeStatus: 'ON TIME',
+    })[key] ?? key
+
+    it('formats ARR with translated copy', () => {
+      expect(formatArrivalStatusLabel('ARR', mockCopyValue)).toBe('ARRIVING')
+    })
+
+    it('formats DELAY with translated copy', () => {
+      expect(formatArrivalStatusLabel('DELAY', mockCopyValue)).toBe('DELAYED')
+    })
+
+    it('preserves localized on-time values', () => {
+      expect(formatArrivalStatusLabel('准点', mockCopyValue)).toBe('准点')
+    })
+
+    it('falls back to on-time copy when status is empty', () => {
+      expect(formatArrivalStatusLabel('', mockCopyValue)).toBe('ON TIME')
+    })
+  })
+
   describe('getStatusTone', () => {
     it('returns delay tone for DELAY', () => {
       expect(getStatusTone('DELAY')).toBe('delay')
@@ -156,6 +181,32 @@ describe('arrivals', () => {
       expect(arrivals.nb).toHaveLength(1)
       expect(arrivals.nb[0].vehicleId).toBe('100')
       expect(arrivals.nb[0].isRealtime).toBe(true)
+    })
+  })
+
+  describe('fetchArrivalsForStopIds', () => {
+    it('stops requesting additional stops after a rate limit', async () => {
+      const state = { arrivalsCache: new Map(), activeSystemId: 'link' }
+      const rateLimitError = Object.assign(new Error('rate limit'), { errorType: 'rate-limit' })
+      const fetchJsonWithRetry = vi.fn()
+        .mockRejectedValueOnce(rateLimitError)
+        .mockResolvedValue({
+          code: 200,
+          data: { entry: { arrivalsAndDepartures: [] }, references: { trips: [] } },
+        })
+
+      const { fetchArrivalsForStopIds } = createArrivalsHelpers({
+        state,
+        fetchJsonWithRetry,
+        getStationStopIds: () => [],
+        copyValue: (key) => key,
+      })
+
+      await expect(
+        fetchArrivalsForStopIds(['stop-1', 'stop-2']),
+      ).rejects.toMatchObject({ errorType: 'rate-limit' })
+
+      expect(fetchJsonWithRetry).toHaveBeenCalledTimes(1)
     })
   })
 })

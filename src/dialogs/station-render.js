@@ -1,3 +1,5 @@
+import { formatArrivalStatusLabel } from '../arrivals'
+
 export function createStationDialogRenderers({
   state,
   elements,
@@ -10,7 +12,7 @@ export function createStationDialogRenderers({
   getVehicleLabelPlural,
   getStatusTone,
   getArrivalServiceStatus,
-  getAllVehicles,
+  getAllVehiclesById,
   syncDialogDisplayScroll,
 }) {
   const {
@@ -44,14 +46,14 @@ export function createStationDialogRenderers({
       const clockTime = diffSec > 0 ? formatClockTime(arrivalMs) : ''
 
       const liveVehicle = arrival.rawVehicleId
-        ? getAllVehicles().find((vehicle) => vehicle.id === arrival.rawVehicleId)
+        ? getAllVehiclesById().get(arrival.rawVehicleId) ?? null
         : null
       const wrapperTag = liveVehicle ? 'button' : 'div'
       const interactiveAttrs = liveVehicle
         ? ` type="button" data-arrival-vehicle-id="${liveVehicle.id}" aria-label="${arrival.lineName} ${getVehicleLabel()} ${arrival.vehicleId}"`
         : ''
 
-      const statusLabel = serviceStatus === 'ARR' ? (copyValue('arrivingStatus') || 'ARRIVING') : serviceStatus === 'DELAY' ? (copyValue('delayedStatus') || 'DELAYED') : 'ON TIME'
+      const statusLabel = formatArrivalStatusLabel(serviceStatus, copyValue)
       const sourceBadge = arrival.isRealtime ? copyValue('realtimeBadge') : copyValue('scheduleBadge')
       const sourceClass = arrival.isRealtime ? 'live' : 'sched'
 

@@ -1,9 +1,13 @@
 import {
   OBA_CACHE_TTL_MS,
+  OBA_MAX_RETRIES,
   OBA_RETRY_BASE_MS,
 } from './config'
 
 const REQUEST_TIMEOUT_MS = 10_000
+const RATE_LIMIT_RETRY_BASE_MS = 750
+const RATE_LIMIT_RETRY_JITTER_MS = 300
+const MAX_TRANSIENT_RETRIES = 8
 
 /**
  * Classify error type from response/network state
@@ -14,6 +18,47 @@ function classifyError(response, networkError, payload) {
   if (response?.status >= 500 && response?.status < 600) return 'server'
   if (response && !response.ok) return 'client'
   return null
+}
+
+function getRetryDelay(errorType, attempt) {
+  if (errorType === 'rate-limit') {
+    return Math.min(
+      RATE_LIMIT_RETRY_BASE_MS * 2 ** attempt + Math.floor(Math.random() * RATE_LIMIT_RETRY_JITTER_MS),
+      30_000,
+    )
+  }
+
+  return Math.min(OBA_RETRY_BASE_MS * 2 ** attempt, 30_000)
+}
+
+function createCancelledError(message = 'Request cancelled') {
+  const error = new Error(message)
+  error.errorType = 'cancelled'
+  return error
+}
+
+function waitForDelay(ms, signal) {
+  if (!ms || ms <= 0) return Promise.resolve()
+
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+
+    const onAbort = () => {
+      clearTimeout(timeoutId)
+      signal?.removeEventListener('abort', onAbort)
+      reject(createCancelledError())
+    }
+
+    if (signal?.aborted) {
+      onAbort()
+      return
+    }
+
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
 }
 
 /**
@@ -29,6 +74,20 @@ export function createObaClient(state) {
 
   function isRateLimitedPayload(payload) {
     return payload?.code === 429 || /rate limit/i.test(payload?.text ?? '')
+  }
+
+  function rejectQueueItem(item, error) {
+    item.reject(error)
+    if (item.waiting) {
+      item.waiting.forEach(({ reject }) => reject(error))
+    }
+  }
+
+  function resolveQueueItem(item, payload) {
+    item.resolve(payload)
+    if (item.waiting) {
+      item.waiting.forEach(({ resolve }) => resolve(payload))
+    }
   }
 
   /**
@@ -59,7 +118,7 @@ export function createObaClient(state) {
 
       // Check if already aborted
       if (signal?.aborted) {
-        reject(new Error('Request cancelled'))
+        rejectQueueItem(item, createCancelledError())
         continue
       }
 
@@ -80,7 +139,7 @@ export function createObaClient(state) {
         response = result.response
 
         if (result.error === 'ABORTED') {
-          reject(new Error('Request cancelled'))
+          rejectQueueItem(item, createCancelledError())
           signal?.removeEventListener('abort', onAbort)
           clearTimeout(timeoutId)
           continue
@@ -107,44 +166,38 @@ export function createObaClient(state) {
       const isRateLimitedResponse = response?.status === 429 || isRateLimitedPayload(payload)
       if (response?.ok && !isRateLimitedResponse) {
         cache.set(url, { payload, expiresAt: Date.now() + OBA_CACHE_TTL_MS })
-        resolve(payload)
-        if (item.waiting) {
-          item.waiting.forEach(({ resolve: r }) => r(payload))
-        }
+        resolveQueueItem(item, payload)
         continue
       }
 
       const errorType = classifyError(response, networkError, payload)
       const isTransientError = errorType === 'network' || errorType === 'rate-limit' || errorType === 'server'
+      const maxRetries = errorType === 'rate-limit' ? OBA_MAX_RETRIES : MAX_TRANSIENT_RETRIES
 
-      if (attempt >= 8 || !isTransientError) {
+      if (attempt >= maxRetries || !isTransientError) {
         const error = networkError || new Error(payload?.text || `${label} request failed with ${response?.status ?? 'network error'}`)
         error.errorType = errorType
         error.httpStatus = response?.status ?? null
-        reject(error)
-        if (item.waiting) {
-          item.waiting.forEach(({ reject: r }) => r(error))
-        }
+        rejectQueueItem(item, error)
         continue
       }
 
-      // Delay before retry: short fixed delay for rate-limit, exponential backoff for others
-      const retryDelay = errorType === 'rate-limit'
-        ? 200
-        : Math.min(OBA_RETRY_BASE_MS * 2 ** attempt, 30_000)
-      await new Promise(r => setTimeout(r, retryDelay))
+      const retryDelay = getRetryDelay(errorType, attempt)
+      try {
+        await waitForDelay(retryDelay, signal)
+      } catch (error) {
+        rejectQueueItem(item, error)
+        continue
+      }
 
       // Re-check abort after delay
       if (signal?.aborted || cancelled) {
-        reject(new Error('Request cancelled'))
-        if (item.waiting) {
-          item.waiting.forEach(({ reject: r }) => r(new Error('Request cancelled')))
-        }
+        rejectQueueItem(item, createCancelledError())
         continue
       }
 
       // Retry: preserve waiting list and signal
-      queue.push({
+      queue.unshift({
         url,
         label,
         attempt: attempt + 1,
@@ -236,11 +289,8 @@ export function createObaClient(state) {
     // Reject and clear all pending queue items
     while (queue.length > 0) {
       const item = queue.shift()
-      const error = new Error('Request cancelled: dialog closed')
-      item.reject(error)
-      if (item.waiting) {
-        item.waiting.forEach(({ reject }) => reject(error))
-      }
+      const error = createCancelledError('Request cancelled: dialog closed')
+      rejectQueueItem(item, error)
     }
   }
 

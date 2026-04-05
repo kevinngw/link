@@ -127,7 +127,7 @@ export function createTrainRenderers(deps) {
   }
 
   function renderTrainList() {
-    const vehicles = getAllVehicles().sort((left, right) => left.minutePosition - right.minutePosition)
+    const vehicles = [...getAllVehicles()].sort((left, right) => left.minutePosition - right.minutePosition)
     const vehicleLabel = getVehicleLabel()
     const vehicleLabelPlural = getVehicleLabelPlural()
     const vehicleLabelPluralLower = vehicleLabelPlural.toLowerCase()
