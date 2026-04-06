@@ -658,6 +658,7 @@
 
 .train[data-train-id] {
   cursor: pointer;
+  pointer-events: none;
 }
 
 .train-hitbox {
@@ -666,7 +667,8 @@
 }
 
 .train-wave,
-.train-arrow {
+.train-arrow,
+.train-ghost-dot {
   pointer-events: none;
 }
 

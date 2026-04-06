@@ -129,7 +129,7 @@ export function createMapRenderer(deps) {
               )
               .join('')}
             <g transform="translate(0, ${vehicle.y + ((index % 3) - 1) * VEHICLE_Y_STAGGER})">
-              <circle r="18" class="train-hitbox" data-train-id="${vehicle.id}"></circle>
+              <rect x="-24" y="-24" width="48" height="48" rx="24" ry="24" class="train-hitbox" data-train-id="${vehicle.id}"></rect>
               <circle r="13" class="train-wave" style="--line-color:${line.color}; animation-delay:${index * 0.18}s;"></circle>
               <path d="M 0 -8 L 7 6 L -7 6 Z" transform="${vehicle.directionSymbol === '▼' ? 'rotate(180)' : ''}" class="train-arrow" style="--line-color:${line.color};"></path>
             </g>
