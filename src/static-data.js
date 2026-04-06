@@ -158,6 +158,7 @@ export function bootstrapApp({
   setLanguage,
   setTheme,
   boardElement,
+  updateRideModeChip,
   }) {
   return async function init() {
     if (initializeStorage) {
@@ -190,6 +191,7 @@ export function bootstrapApp({
       refreshArrivalCountdowns()
       refreshVehicleStatusMessages()
       refreshVehicleCountdownDisplays()
+      if (updateRideModeChip) updateRideModeChip()
     }, 1000)
   }
 }

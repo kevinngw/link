@@ -52,6 +52,11 @@ export function registerAppEventHandlers({
   getActiveSystemMeta,
   notificationSuccess,
   lightImpact,
+  rideModeChip,
+  deactivateRideMode,
+  isRideModeActive,
+  updateRideModeChip,
+  onRideModeChipClick,
 }) {
   const {
     boardElement,
@@ -427,6 +432,22 @@ export function registerAppEventHandlers({
       }
       showToast(copyValue(result.isFavorite ? 'favoriteAdded' : 'favoriteRemoved'))
       void (result.isFavorite ? notificationSuccess() : lightImpact())
+    })
+  }
+
+  // Ride mode chip
+  if (rideModeChip) {
+    rideModeChip.addEventListener('click', (event) => {
+      const cancelTarget = event.target.closest('[data-ride-mode-cancel]')
+      if (cancelTarget) {
+        deactivateRideMode(copyValue('rideModeDeactivated'))
+        updateRideModeChip()
+        return
+      }
+      // Tap the chip body to reopen the train dialog for the tracked vehicle
+      if (isRideModeActive()) {
+        onRideModeChipClick()
+      }
     })
   }
 }

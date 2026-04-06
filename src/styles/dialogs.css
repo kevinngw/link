@@ -1747,3 +1747,154 @@ button.arrival-item {
     font-size: 0.82rem;
   }
 }
+
+/* ───────── Ride Mode ───────── */
+
+.ride-mode-chip {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 990;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent-strong) 50%, var(--border-color));
+  border-radius: var(--radius-pill);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.3);
+  animation: ride-chip-in 0.28s ease-out both;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ride-mode-chip[hidden] {
+  display: none;
+}
+
+.ride-mode-chip:active {
+  transform: translateX(-50%) scale(0.96);
+}
+
+.ride-mode-chip-label {
+  pointer-events: none;
+}
+
+.ride-mode-chip-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--surface-hover);
+  font-size: 0.82rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ride-mode-chip-close:hover {
+  background: var(--border-strong);
+}
+
+@keyframes ride-chip-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+/* Ride mode banner inside train dialog */
+
+.ride-mode-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent-strong) 40%, var(--border-color));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent-strong) 8%, var(--surface-soft));
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.ride-mode-banner-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ride-mode-banner-cancel {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ride-mode-banner-cancel:hover {
+  background: var(--border-strong);
+}
+
+/* Notify pill on timeline entries */
+
+.ride-mode-notify-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-pill);
+  background: var(--surface-soft);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ride-mode-notify-btn:hover,
+.ride-mode-notify-btn:focus-visible {
+  color: var(--accent-strong);
+  border-color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent-strong) 10%, var(--surface-soft));
+}
+
+.ride-mode-notify-btn.is-active {
+  color: var(--accent-strong);
+  border-color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent-strong) 14%, var(--surface-soft));
+}
+
+/* Highlight destination stop in timeline */
+
+.train-eta-stop.is-ride-destination {
+  border-color: color-mix(in srgb, var(--accent-strong) 50%, var(--border-color));
+  background: color-mix(in srgb, var(--accent-strong) 6%, var(--surface-soft));
+}

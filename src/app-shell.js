@@ -29,6 +29,10 @@ export const APP_SHELL_HTML = `
       </section>
     </div>
     <section id="board" class="board"></section>
+    <button id="ride-mode-chip" class="ride-mode-chip" type="button" hidden aria-label="Ride mode">
+      <span id="ride-mode-chip-label" class="ride-mode-chip-label"></span>
+      <span class="ride-mode-chip-close" data-ride-mode-cancel aria-label="Cancel ride alert">&times;</span>
+    </button>
     <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
   </main>
   <dialog id="station-dialog" class="station-dialog">

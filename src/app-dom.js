@@ -30,5 +30,7 @@ export function getAppElements() {
     aboutDialogCloseButton: document.querySelector('#about-dialog-close'),
     stationDialogCloseButton: document.querySelector('#station-dialog-close'),
     dialogFavoriteButton: document.querySelector('#dialog-favorite'),
+    rideModeChip: document.querySelector('#ride-mode-chip'),
+    rideModeChipLabel: document.querySelector('#ride-mode-chip-label'),
   }
 }

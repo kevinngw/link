@@ -28,6 +28,7 @@ import { createVehicleDisplay } from './vehicle-display'
 import { RECENT_SEARCHES_KEY, createStationSearch } from './station-search'
 import { FAVORITES_STORAGE_KEY, createFavoritesManager } from './favorites'
 import { RECENT_STATIONS_KEY, createRecentStationsManager } from './recent-stations'
+import { createRideMode } from './ride-mode'
 import { shouldRegisterServiceWorker } from './native/platform'
 import { initializeAppStorage, getStoredString, setStoredString } from './native/storage'
 import { copyTextToClipboard, shareTextContent } from './native/share'
@@ -89,6 +90,7 @@ const state = {
   favoriteArrivals: new Map(),
   favoriteArrivalsRequestId: 0,
   favoriteArrivalsRefreshPromise: null,
+  rideMode: null,
 }
 
 if (shouldRegisterServiceWorker()) {
@@ -158,6 +160,8 @@ const {
   aboutDialogCloseButton,
   stationDialogCloseButton,
   dialogFavoriteButton,
+  rideModeChip,
+  rideModeChipLabel,
 } = getAppElements()
 
 boardElement.innerHTML = renderSkeleton()
@@ -794,6 +798,22 @@ const {
   getTrainTimelineEntries,
 })
 
+const {
+  activateRideMode,
+  deactivateRideMode,
+  isRideModeActive,
+  getRideModeStatus,
+  checkRideModeProgress,
+} = createRideMode({
+  state,
+  copyValue,
+  getAllVehiclesById,
+  getTrainTimelineEntries,
+  showToast,
+  lightImpact,
+  notificationSuccess,
+})
+
 async function shareArrivals() {
   if (!state.currentDialogStation) return
   
@@ -1181,6 +1201,41 @@ const overlayDialogs = createOverlayDialogs({
       dialogLifecycleBridge.showStationDialog(station)
     }
   },
+  isRideModeActive,
+  getRideModeStatus,
+  onRideDestinationSelect: (vehicleId, stationId, label) => {
+    const vehicle = getAllVehiclesById().get(vehicleId)
+    if (!vehicle) return
+    if (state.rideMode?.destinationStationId === stationId && state.rideMode?.vehicleId === vehicleId) {
+      showToast(copyValue('rideModeAlreadySet', label))
+      return
+    }
+    const layout = state.layouts.get(vehicle.lineId)
+    if (!layout?.stations?.length) return
+    const destinationIndex = layout.stations.findIndex((s) => s.id === stationId)
+    if (destinationIndex < 0) return
+    activateRideMode({
+      vehicleId,
+      lineId: vehicle.lineId,
+      destinationStationId: stationId,
+      destinationLabel: label,
+      destinationIndex,
+      directionSymbol: vehicle.directionSymbol,
+      currentIndex: vehicle.currentIndex ?? 0,
+    })
+    updateRideModeChip()
+    // Re-render the train dialog to show the banner + active bell
+    renderTrainDialogBase(vehicle)
+  },
+  onRideModeCancel: () => {
+    deactivateRideMode(copyValue('rideModeDeactivated'))
+    updateRideModeChip()
+    // Re-render train dialog if open
+    if (trainDialog.open && state.currentTrainId) {
+      const v = getAllVehiclesById().get(state.currentTrainId)
+      if (v) renderTrainDialogBase(v)
+    }
+  },
 })
 
 const {
@@ -1398,6 +1453,15 @@ registerAppEventHandlers({
   getActiveSystemMeta,
   notificationSuccess,
   lightImpact,
+  rideModeChip,
+  deactivateRideMode,
+  isRideModeActive,
+  updateRideModeChip,
+  onRideModeChipClick: () => {
+    if (!state.rideMode) return
+    const vehicle = getAllVehiclesById().get(state.rideMode.vehicleId)
+    if (vehicle) renderTrainDialog(vehicle)
+  },
 })
 
 
@@ -1557,6 +1621,20 @@ function refreshLiveMeta() {
   dialogStatusPillElement.textContent = statusPillElement.textContent
   dialogStatusPillElement.classList.toggle('status-pill-error', Boolean(state.error))
   dialogUpdatedAtElement.textContent = updatedAtElement.textContent
+}
+
+function updateRideModeChip() {
+  if (!state.rideMode) {
+    rideModeChip.hidden = true
+    return
+  }
+  const status = getRideModeStatus()
+  if (!status) {
+    rideModeChip.hidden = true
+    return
+  }
+  rideModeChip.hidden = false
+  rideModeChipLabel.textContent = copyValue('rideModeChip', status.destinationLabel, status.stopsAway ?? '?')
 }
 
 function stopLiveRefreshLoop() {
@@ -1795,6 +1873,8 @@ async function refreshVehicles({ renderAfter = true } = {}) {
     console.error(error)
   }
 
+  if (state.rideMode) checkRideModeProgress()
+
   if (renderAfter) {
     render()
   }
@@ -1849,6 +1929,7 @@ const init = bootstrapApp({
   setLanguage,
   setTheme,
   boardElement,
+  updateRideModeChip,
 })
 
 init().catch((error) => {

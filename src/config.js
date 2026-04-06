@@ -44,6 +44,11 @@ export const GHOST_MAX_AGE_MS = 4 * 60_000
 export const THEME_STORAGE_KEY = 'link-pulse-theme'
 export const LANGUAGE_STORAGE_KEY = 'link-pulse-language'
 
+export const RIDE_MODE_HEADSUP_STOPS = 3
+export const RIDE_MODE_HEADSUP_STOPS_SHORT_TRIP = 2
+export const RIDE_MODE_SHORT_TRIP_THRESHOLD = 5
+export const RIDE_MODE_MAX_MISSED_TICKS = 3
+
 export const DEFAULT_SYSTEM_ID = 'link'
 
 export const SYSTEM_META = {

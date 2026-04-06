@@ -17,6 +17,10 @@ export function createOverlayDialogs({
   formatArrivalTime,
   formatEtaClockFromNow,
   onStationClick,
+  isRideModeActive,
+  getRideModeStatus,
+  onRideDestinationSelect,
+  onRideModeCancel,
 }) {
   const {
     trainDialog,
@@ -145,6 +149,15 @@ export function createOverlayDialogs({
               <p class="metric-chip-value" data-vehicle-terminal-countdown="${vehicle.id}">${formatArrivalTime(terminalEtaSeconds)}</p>
             </div>
           </div>
+          ${isRideModeActive() && state.rideMode?.vehicleId === vehicle.id ? (() => {
+            const rideStatus = getRideModeStatus()
+            return rideStatus ? `
+              <div class="ride-mode-banner">
+                <span class="ride-mode-banner-label">${copyValue('rideModeBanner', rideStatus.destinationLabel, rideStatus.stopsAway ?? '?')}</span>
+                <button class="ride-mode-banner-cancel" data-ride-mode-cancel type="button" aria-label="${copyValue('rideModeCancel')}">&times;</button>
+              </div>
+            ` : ''
+          })() : ''}
           <div class="train-eta-timeline">
             <div class="train-eta-header">
               <p class="train-detail-label">${copyValue('upcomingStops')}</p>
@@ -153,9 +166,11 @@ export function createOverlayDialogs({
             ${timelineEntries.length
               ? timelineEntries
                 .map(
-                  (entry) => `
+                  (entry) => {
+                    const isRideDestination = isRideModeActive() && state.rideMode?.destinationStationId === entry.stationId && state.rideMode?.vehicleId === vehicle.id
+                    return `
                     <article
-                      class="train-eta-stop${entry.isNext ? ' is-next' : ''}${entry.isTerminal ? ' is-terminal' : ''}"
+                      class="train-eta-stop${entry.isNext ? ' is-next' : ''}${entry.isTerminal ? ' is-terminal' : ''}${isRideDestination ? ' is-ride-destination' : ''}"
                       data-train-timeline-entry
                       data-base-eta-seconds="${entry.etaSeconds}"
                       data-rendered-at="${Date.now()}"
@@ -168,9 +183,10 @@ export function createOverlayDialogs({
                       <div class="train-eta-stop-side">
                         <p class="train-eta-stop-countdown" data-train-timeline-countdown>${formatArrivalTime(entry.etaSeconds)}</p>
                         <p class="train-eta-stop-clock" data-train-timeline-clock>${formatEtaClockFromNow(entry.etaSeconds)}</p>
+                        ${!entry.isNext ? `<button class="ride-mode-notify-btn${isRideDestination ? ' is-active' : ''}" data-ride-destination-id="${entry.stationId}" data-ride-destination-label="${escapeHtml(entry.label)}" data-ride-vehicle-id="${vehicle.id}" type="button" aria-label="${copyValue('rideModeNotifyButton')}"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M8 1.5a4 4 0 0 0-4 4v2.7L2.6 10.4a.75.75 0 0 0 .53 1.28h9.74a.75.75 0 0 0 .53-1.28L12 8.2V5.5a4 4 0 0 0-4-4zM6.5 13a1.5 1.5 0 0 0 3 0" fill="currentColor"/></svg> ${copyValue('rideModeNotifyButton')}</button>` : ''}
                       </div>
                     </article>
-                  `,
+                  `},
                 )
                 .join('')
               : `<p class="train-readout muted">${copyValue('noDownstreamEta')}</p>`}
@@ -182,8 +198,30 @@ export function createOverlayDialogs({
     if (!trainDialog.open) trainDialog.showModal()
   }
 
-  // Event delegation for spine/timeline station clicks (registered once)
+  // Event delegation for spine/timeline station clicks + ride mode (registered once)
   function handleTrainDialogInteraction(event) {
+    // Ride mode cancel button
+    const cancelBtn = event.target.closest('[data-ride-mode-cancel]')
+    if (cancelBtn) {
+      if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return
+      if (event.type === 'keydown') event.preventDefault()
+      onRideModeCancel()
+      return
+    }
+
+    // Ride mode bell button
+    const bellBtn = event.target.closest('[data-ride-destination-id]')
+    if (bellBtn && !bellBtn.closest('[data-train-timeline-entry]')?.dataset.spineStationId) {
+      if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return
+      if (event.type === 'keydown') event.preventDefault()
+      const stationId = bellBtn.dataset.rideDestinationId
+      const label = bellBtn.dataset.rideDestinationLabel
+      const vehicleId = bellBtn.dataset.rideVehicleId
+      if (stationId && vehicleId) onRideDestinationSelect(vehicleId, stationId, label)
+      return
+    }
+
+    // Station navigation clicks
     const el = event.target.closest('[data-spine-station-id], [data-timeline-station-id]')
     if (!el) return
     if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return

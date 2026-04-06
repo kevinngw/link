@@ -350,6 +350,20 @@ export const UI_COPY = {
     bothIssuesSummary: (gap, count) => `Gap ${gap} min · ${count} severely late`,
     noBothIssueLines: 'No lines with both issues right now',
     lineCountText: (count) => `${count} line${count !== 1 ? 's' : ''}`,
+
+    // Ride mode
+    rideModeActivated: (name) => `Riding to ${name}`,
+    rideModeHeadsUp: (name, stops) => `${name} is ${stops} stop${stops === 1 ? '' : 's'} away`,
+    rideModeArrival: (name) => `Next stop: ${name} — get ready!`,
+    rideModeDeactivated: 'Ride mode ended',
+    rideModeChip: (name, stops) => `${name} · ${stops} stop${stops === 1 ? '' : 's'}`,
+    rideModeCancel: 'Cancel ride alert',
+    rideModeLost: 'Lost track of your vehicle. Ride mode ended.',
+    rideModeDirectionChanged: 'Vehicle changed direction. Ride mode ended.',
+    rideModeNotifyButton: 'Alert me here',
+    rideModeBanner: (name, stops) => `Riding to ${name} — ${stops} stop${stops === 1 ? '' : 's'} away`,
+    rideModeAlreadySet: (name) => `Already tracking to ${name}`,
+    rideModeNotifyPermission: 'Enable notifications to get alerted at your stop.',
   },
   'zh-CN': {
     languageToggle: 'EN',
@@ -702,5 +716,19 @@ export const UI_COPY = {
     bothIssuesSummary: (gap, count) => `最大间隔 ${gap} 分钟 · ${count} 辆严重晚点`,
     noBothIssueLines: '当前没有两者都有问题的线路',
     lineCountText: (count) => `${count} 条线路`,
+
+    // Ride mode
+    rideModeActivated: (name) => `正在前往 ${name}`,
+    rideModeHeadsUp: (name, stops) => `距离 ${name} 还有 ${stops} 站`,
+    rideModeArrival: (name) => `下一站: ${name} — 准备下车！`,
+    rideModeDeactivated: '乘车模式已结束',
+    rideModeChip: (name, stops) => `${name} · ${stops} 站`,
+    rideModeCancel: '取消到站提醒',
+    rideModeLost: '无法追踪你的车辆，乘车模式已结束。',
+    rideModeDirectionChanged: '车辆改变了方向，乘车模式已结束。',
+    rideModeNotifyButton: '到站提醒',
+    rideModeBanner: (name, stops) => `前往 ${name} — 还有 ${stops} 站`,
+    rideModeAlreadySet: (name) => `正在追踪到 ${name}`,
+    rideModeNotifyPermission: '开启通知以在到站时提醒你。',
   },
 }
