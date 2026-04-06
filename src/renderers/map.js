@@ -1,3 +1,5 @@
+import { getLineToken, getLineTokenType } from '../utils'
+
 // Vertical stagger for overlapping vehicles on the same line segment
 const VEHICLE_Y_STAGGER = 1.5
 
@@ -76,6 +78,8 @@ export function createMapRenderer(deps) {
     const layout = state.layouts.get(line.id)
     const vehicles = state.vehiclesByLine.get(line.id) ?? []
     const lineAlerts = getAlertsForLine(line.id)
+    const lineToken = getLineToken(line.name)
+    const lineTokenType = getLineTokenType(line.name)
 
     const rows = layout.stations
       .map((station, index) => {
@@ -96,7 +100,7 @@ export function createMapRenderer(deps) {
             <circle cx="${layout.trackX}" cy="0" r="${station.isTerminal ? 11 : 5}" class="${station.isTerminal ? 'terminal-stop' : 'station-stop'}" style="--line-color:${line.color};"></circle>
             ${
               station.isTerminal
-                ? `<text x="${layout.trackX}" y="4" text-anchor="middle" class="terminal-mark">${line.name[0]}</text>`
+                ? `<text x="${layout.trackX}" y="4" text-anchor="middle" class="terminal-mark">${lineToken}</text>`
                 : ''
             }
             ${hasAlert ? `<circle cx="${layout.trackX + alertDotOffset}" cy="-8" r="4" class="station-alert-dot"></circle>` : ''}
@@ -125,6 +129,7 @@ export function createMapRenderer(deps) {
               )
               .join('')}
             <g transform="translate(0, ${vehicle.y + ((index % 3) - 1) * VEHICLE_Y_STAGGER})">
+              <circle r="18" class="train-hitbox" data-train-id="${vehicle.id}"></circle>
               <circle r="13" class="train-wave" style="--line-color:${line.color}; animation-delay:${index * 0.18}s;"></circle>
               <path d="M 0 -8 L 7 6 L -7 6 Z" transform="${vehicle.directionSymbol === '▼' ? 'rotate(180)' : ''}" class="train-arrow" style="--line-color:${line.color};"></path>
             </g>
@@ -138,7 +143,7 @@ export function createMapRenderer(deps) {
       <article class="line-card" data-line-id="${line.id}">
         <header class="line-card-header">
           <div class="line-title">
-            <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
+            <span class="line-token" data-line-token-type="${lineTokenType}" style="--line-color:${line.color};">${lineToken}</span>
             <div class="line-title-copy">
               <div class="line-title-row">
                 <h2>${line.name}</h2>
@@ -150,7 +155,7 @@ export function createMapRenderer(deps) {
           </div>
           ${renderServiceReminderChip(line)}
         </header>
-        ${renderLineStatusMarquee(line.color, vehicles.map((vehicle) => ({ ...vehicle, lineToken: line.name[0] })))}
+        ${renderLineStatusMarquee(line.color, vehicles.map((vehicle) => ({ ...vehicle, lineToken })))}
         <svg viewBox="0 0 ${state.compactLayout ? 320 : 460} ${layout.height}" class="line-diagram" role="img" aria-label="${copyValue('lineDiagramAria', line.name)}">
           <line x1="${layout.trackX}" x2="${layout.trackX}" y1="${layout.stations[0].y}" y2="${layout.stations.at(-1).y}" class="spine" style="--line-color:${line.color};"></line>
           ${rows}

@@ -41,12 +41,12 @@ export function registerAppEventHandlers({
   showInsightsDetail,
   showStationDialog,
   switchSystem,
-  getFavorites,
-  getFavoriteTrains,
+  getFavoriteItem,
   handleFavoriteClick,
   handleFavoriteTrainClick,
   moveFavorite,
   removeFavorite,
+  removeFavoriteTrain,
   getDialogStations,
   toggleFavorite,
   toggleFavoriteTrain,
@@ -55,7 +55,6 @@ export function registerAppEventHandlers({
   updateFavoriteButton,
   getTrainFavoriteTarget,
   updateTrainFavoriteButton,
-  getActiveSystemMeta,
   notificationSuccess,
   lightImpact,
   rideModeChip,
@@ -65,6 +64,26 @@ export function registerAppEventHandlers({
   onRideModeChipClick,
   requestRideModeNotificationPermission,
 }) {
+  function findDataTarget(event, attributeName) {
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : []
+    for (const node of path) {
+      if (!(node instanceof Element)) continue
+      if (node.hasAttribute(attributeName)) return node
+      if (typeof node.closest === 'function') {
+        const matched = node.closest(`[${attributeName}]`)
+        if (matched) return matched
+      }
+    }
+
+    const target = event.target
+    if (target instanceof Element) {
+      if (target.hasAttribute(attributeName)) return target
+      if (typeof target.closest === 'function') return target.closest(`[${attributeName}]`)
+    }
+
+    return null
+  }
+
   const {
     boardElement,
     systemBarElement,
@@ -334,14 +353,14 @@ export function registerAppEventHandlers({
   })
 
   boardElement.addEventListener('click', (event) => {
-    const lineSwitchBtn = event.target.closest('[data-line-switch]')
+    const lineSwitchBtn = findDataTarget(event, 'data-line-switch')
     if (lineSwitchBtn) {
       state.activeLineId = lineSwitchBtn.dataset.lineSwitch
       render()
       return
     }
 
-    const dirFilterBtn = event.target.closest('[data-direction-filter]')
+    const dirFilterBtn = findDataTarget(event, 'data-direction-filter')
     if (dirFilterBtn) {
       const lineId = dirFilterBtn.dataset.directionLine
       const direction = dirFilterBtn.dataset.directionFilter
@@ -350,7 +369,7 @@ export function registerAppEventHandlers({
       return
     }
 
-    const trainItem = event.target.closest('[data-train-id]')
+    const trainItem = findDataTarget(event, 'data-train-id')
     if (trainItem) {
       const vehicle = getAllVehiclesById().get(trainItem.dataset.trainId)
       if (vehicle) {
@@ -360,21 +379,21 @@ export function registerAppEventHandlers({
       return
     }
 
-    const alertBtn = event.target.closest('[data-alert-line-id]')
+    const alertBtn = findDataTarget(event, 'data-alert-line-id')
     if (alertBtn) {
       const line = state.lines.find((candidate) => candidate.id === alertBtn.dataset.alertLineId)
       if (line) renderAlertListDialog(line)
       return
     }
 
-    const stationGroup = event.target.closest('.station-group')
+    const stationGroup = event.target instanceof Element ? event.target.closest('.station-group') : null
     if (stationGroup) {
       const result = findStationAndLineByStopId(stationGroup.dataset.stopId)
       if (result) showStationDialog(result.station)
       return
     }
 
-    const insightsEl = event.target.closest('[data-insights-type]')
+    const insightsEl = findDataTarget(event, 'data-insights-type')
     if (insightsEl) {
       const lineId = insightsEl.dataset.insightsLineId ?? null
       const type = insightsEl.dataset.insightsType
@@ -413,46 +432,43 @@ export function registerAppEventHandlers({
   })
 
   boardElement.addEventListener('click', (event) => {
-    const moveBtn = event.target.closest('[data-fav-move]')
+    const moveBtn = findDataTarget(event, 'data-fav-item-move')
     if (moveBtn) {
+      event.preventDefault()
       event.stopPropagation()
-      moveFavorite(moveBtn.dataset.favStation, moveBtn.dataset.favLine, moveBtn.dataset.favSystem, moveBtn.dataset.favMove)
+      moveFavorite(moveBtn.dataset.favItemKey, moveBtn.dataset.favItemMove)
       render()
       return
     }
 
-    const removeBtn = event.target.closest('[data-fav-remove]')
+    const removeBtn = findDataTarget(event, 'data-fav-remove-key')
     if (removeBtn) {
+      event.preventDefault()
       event.stopPropagation()
-      removeFavorite(removeBtn.dataset.favStation, removeBtn.dataset.favLine, removeBtn.dataset.favSystem)
+      const favorite = getFavoriteItem(removeBtn.dataset.favRemoveKey)
+      if (!favorite) return
+      if (favorite.type === 'station') {
+        removeFavorite(favorite.stationId, favorite.lineId, favorite.systemId)
+        state.favoriteArrivals.delete(getFavoriteKey(favorite))
+      } else {
+        removeFavoriteTrain(favorite.vehicleId, favorite.systemId)
+        updateTrainFavoriteButton()
+      }
       showToast(copyValue('favoriteRemoved'))
       render()
       return
     }
 
-    const removeTrainBtn = event.target.closest('[data-fav-train-remove]')
-    if (removeTrainBtn) {
-      event.stopPropagation()
-      const target = getFavoriteTrains().find((item) => item.vehicleId === removeTrainBtn.dataset.favTrainId && item.systemId === removeTrainBtn.dataset.favTrainSystem)
-      if (!target) return
-      toggleFavoriteTrain({ id: target.vehicleId }, target.systemId)
-      updateTrainFavoriteButton()
-      showToast(copyValue('favoriteRemoved'))
-      render()
+    const favItem = findDataTarget(event, 'data-favorite-item-key')
+    if (!favItem) return
+    event.preventDefault()
+    const favorite = getFavoriteItem(favItem.dataset.favoriteItemKey)
+    if (!favorite) return
+    if (favorite.type === 'station') {
+      void handleFavoriteClick(favorite)
       return
     }
-
-    const favItem = event.target.closest('[data-favorite-key]')
-    if (favItem) {
-      const favorite = getFavorites().find((item) => `${item.systemId}:${item.lineId}:${item.stationId}` === favItem.dataset.favoriteKey)
-      if (favorite) handleFavoriteClick(favorite)
-      return
-    }
-
-    const favoriteTrainItem = event.target.closest('[data-favorite-train-key]')
-    if (!favoriteTrainItem) return
-    const favoriteTrain = getFavoriteTrains().find((item) => `${item.systemId}:${item.vehicleId}` === favoriteTrainItem.dataset.favoriteTrainKey)
-    if (favoriteTrain) void handleFavoriteTrainClick(favoriteTrain)
+    void handleFavoriteTrainClick(favorite)
   })
 
   if (dialogFavoriteButton) {
@@ -491,7 +507,6 @@ export function registerAppEventHandlers({
       if (!target) return
 
       const result = toggleFavoriteTrain(target.vehicle, target.systemId)
-
       updateTrainFavoriteButton()
 
       if (state.activeTab === 'favorites') {

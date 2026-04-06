@@ -83,14 +83,89 @@
   margin-top: 12px;
 }
 
-.favorite-train-preview {
-  display: grid;
-  gap: 6px;
+.favorite-train-item-inactive {
+  opacity: 0.78;
+}
+
+.favorite-train-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 2px;
+}
+
+.favorite-train-head {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.favorite-train-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.06rem;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.favorite-train-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.favorite-train-side {
+  min-width: 72px;
+  text-align: right;
+}
+
+.favorite-train-time,
+.favorite-train-clock {
+  margin: 0;
+}
+
+.favorite-train-time {
+  color: var(--text-primary);
+  font-size: 1.08rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.favorite-train-clock {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.favorite-train-item .train-list-status {
   margin-top: 12px;
 }
 
-.favorite-train-item-inactive {
-  opacity: 0.78;
+.favorite-train-item .train-focus-metric {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 90%, transparent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+    var(--surface-strong);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line-color, var(--accent-strong)) 10%, transparent);
+}
+
+.favorite-train-item .train-focus-metric-label {
+  color: var(--text-secondary);
+}
+
+.favorite-train-item .train-focus-metric-copy {
+  color: var(--text-secondary);
+}
+
+.favorite-train-offline {
+  margin-top: 12px;
 }
 
 .favorite-arrivals-grid {
@@ -105,7 +180,10 @@
   padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--border-color) 90%, transparent);
-  background: color-mix(in srgb, var(--surface) 55%, var(--surface-soft));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+    var(--surface-strong);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line-color, var(--accent-strong)) 10%, transparent);
 }
 
 .favorite-arrival-direction {
@@ -233,6 +311,15 @@
 
   .favorite-item-title {
     font-size: 0.92rem;
+  }
+
+  .favorite-train-header {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .favorite-train-side {
+    text-align: left;
   }
 
   .favorite-item-meta,

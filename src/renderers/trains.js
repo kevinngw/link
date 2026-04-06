@@ -1,3 +1,5 @@
+import { getLineToken, getLineTokenType } from '../utils'
+
 export function createTrainRenderers(deps) {
   const {
     state,
@@ -148,6 +150,8 @@ export function createTrainRenderers(deps) {
       .map((line) => {
         const lineVehicles = vehicles.filter((vehicle) => vehicle.lineId === line.id)
         const lineAlerts = getAlertsForLine(line.id)
+        const lineToken = getLineToken(line.name)
+        const lineTokenType = getLineTokenType(line.name)
         const sortedLineVehicles = [...lineVehicles].sort((left, right) => {
           // Group NB (▲) before SB (▼)
           if (left.directionSymbol !== right.directionSymbol) {
@@ -170,7 +174,7 @@ export function createTrainRenderers(deps) {
           <article class="line-card train-line-card" style="--line-color:${line.color};">
             <header class="line-card-header train-list-section-header">
               <div class="line-title">
-                <span class="line-token" style="--line-color:${line.color};">${line.name[0]}</span>
+                <span class="line-token" data-line-token-type="${lineTokenType}" style="--line-color:${line.color};">${lineToken}</span>
                 <div class="line-title-copy">
                   <div class="line-title-row">
                     <h2>${line.name}</h2>

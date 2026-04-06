@@ -3,7 +3,7 @@ import { registerSW } from 'virtual:pwa-register'
 import { APP_BUNDLE_ID, APP_MARKETING_VERSION, ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, PRIVACY_POLICY_URL, SHARE_BASE_URL, SOURCE_URL, SUPPORT_URL, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
-import { clamp, closeDialogAnimated, normalizeName, pluralizeVehicleLabel, slugifyStation } from './utils'
+import { clamp, closeDialogAnimated, getLineToken, getLineTokenType, normalizeName, pluralizeVehicleLabel, slugifyStation } from './utils'
 import { createObaClient } from './oba'
 import { createArrivalsHelpers, getLineRouteId, getStatusTone } from './arrivals'
 import { parseVehicle } from './vehicles'
@@ -27,8 +27,6 @@ import { createToast } from './toast'
 import { createVehicleDisplay } from './vehicle-display'
 import { RECENT_SEARCHES_KEY, createStationSearch } from './station-search'
 import { FAVORITES_STORAGE_KEY, createFavoritesManager } from './favorites'
-import { createFavoriteTrainsManager } from './favorite-trains'
-import { FAVORITE_TRAINS_STORAGE_KEY } from './favorite-trains'
 import { RECENT_STATIONS_KEY, createRecentStationsManager } from './recent-stations'
 import { createRideMode } from './ride-mode'
 import { resolveVehicleForArrival } from './arrival-vehicle'
@@ -255,10 +253,15 @@ const {
 
 const {
   getFavorites,
+  getStationFavorites,
+  getFavoriteItem,
   isFavorite,
+  isFavoriteTrain,
   toggleFavorite,
+  toggleFavoriteTrain,
   moveFavorite,
   removeFavorite,
+  removeFavoriteTrain,
   getFavoriteDisplayData,
   handleFavoriteClick,
 } = createFavoritesManager({
@@ -266,14 +269,6 @@ const {
   showStationDialog: (...args) => dialogLifecycleBridge.showStationDialog(...args),
   switchSystem,
   showToast,
-})
-
-const {
-  getFavoriteTrains,
-  isFavoriteTrain,
-  toggleFavoriteTrain,
-} = createFavoriteTrainsManager({
-  state,
 })
 
 function updateFavoriteButton() {
@@ -296,7 +291,6 @@ function getTrainFavoriteTarget(trainId = state.currentTrainId) {
   return {
     vehicle,
     systemId: state.activeSystemId,
-    favoriteKey: `${state.activeSystemId}:${vehicle.id}`,
   }
 }
 
@@ -395,38 +389,58 @@ function renderFavoriteTrainCard(favorite) {
     : null
   const isLive = Boolean(liveVehicle)
   const vehicleLabel = getSystemVehicleLabel(favorite.systemId)
-  const detailLine = isLive
+  const directionLabel = isLive
     ? formatDirectionLabel(
       liveVehicle.directionSymbol,
       getVehicleDestinationLabel(liveVehicle, state.layouts.get(liveVehicle.lineId)),
       { includeSymbol: true },
     )
-    : `${favorite.directionSymbol || ''} ${favorite.systemName}`.trim()
-  const statusLine = isLive
-    ? `${formatArrivalTime(Math.max(0, getRealtimeOffset(liveVehicle.nextOffset ?? 0)))} · ${liveVehicle.currentStopLabel}`
-    : copyValue('favoriteTrainUnavailable')
-  const supportingLine = isLive && liveVehicle.upcomingLabel
-    ? `${copyValue('nextStop')}: ${liveVehicle.upcomingLabel}`
-    : copyValue('favoriteTrainLiveHint')
+    : formatDirectionLabel(favorite.directionSymbol, '', { includeSymbol: true })
+  const nextOffset = isLive ? Math.max(0, getRealtimeOffset(liveVehicle.nextOffset ?? 0)) : null
+  const statusTone = isLive ? getVehicleStatusClass(liveVehicle, nextOffset) : 'status-muted'
+  const delayBadge = isLive && liveVehicle.isPredicted && liveVehicle.scheduleDeviation > 180
+    ? `<span class="train-delay-badge ${liveVehicle.delayInfo.colorClass}">${liveVehicle.delayInfo.text}</span>`
+    : ''
+  const liveStatus = isLive
+    ? `
+        ${renderFocusMetrics(liveVehicle)}
+        <p class="train-list-status ${statusTone}" data-vehicle-status="${liveVehicle.id}">${formatVehicleStatus(liveVehicle)}</p>
+      `
+    : `
+        <div class="favorite-train-offline">
+          <p class="train-list-status"><span class="status-chip status-muted">${copyValue('favoriteTrainUnavailable')}</span></p>
+          <p class="favorite-arrival-status">${copyValue('favoriteTrainLiveHint')}</p>
+        </div>
+      `
+  const tokenLabel = getLineToken(favorite.lineName)
+  const tokenType = getLineTokenType(favorite.lineName)
 
   return `
-    <div class="favorite-item${isLive ? '' : ' favorite-train-item-inactive'}"
-         data-favorite-train-key="${favorite.systemId}:${favorite.vehicleId}"
+    <div class="favorite-item favorite-train-item${isLive ? '' : ' favorite-train-item-inactive'}"
+         style="--line-color:${favorite.lineColor};"
+         data-favorite-item-key="${favorite.itemKey}"
          role="button" tabindex="0">
-      <span class="arrival-line-token" style="--line-color:${favorite.lineColor};">${favorite.lineName[0]}</span>
+      <span class="arrival-line-token" data-line-token-type="${tokenType}" style="--line-color:${favorite.lineColor};">${tokenLabel}</span>
       <div class="favorite-item-content">
-        <div class="favorite-item-header">
-          <div>
-            <p class="favorite-item-title">${favorite.lineName} ${vehicleLabel} ${favorite.vehicleLabel}</p>
-            <p class="favorite-item-meta">${detailLine}</p>
+        <div class="favorite-train-header">
+          <div class="favorite-train-head">
+            <p class="favorite-train-title">${favorite.lineName} ${vehicleLabel} ${favorite.vehicleLabel}</p>
+            <div class="favorite-train-meta">
+              <span class="train-direction-badge">${directionLabel}</span>
+              ${delayBadge}
+            </div>
+          </div>
+          <div class="favorite-train-side">
+            ${isLive ? `<p class="favorite-train-time" data-vehicle-next-countdown="${liveVehicle.id}">${formatArrivalTime(nextOffset)}</p>` : ''}
+            ${isLive ? `<p class="favorite-train-clock" data-vehicle-next-clock="${liveVehicle.id}">${formatEtaClockFromNow(nextOffset)}</p>` : ''}
+            ${!isLive ? `<p class="favorite-item-meta">${favorite.systemName}</p>` : ''}
           </div>
         </div>
-        <div class="favorite-train-preview">
-          <p class="favorite-arrival-status">${statusLine}</p>
-          <p class="favorite-arrival-status">${supportingLine}</p>
-        </div>
+        ${liveStatus}
         <div class="favorite-item-actions">
-          <button type="button" class="favorite-action-btn favorite-action-remove" data-fav-train-remove data-fav-train-id="${favorite.vehicleId}" data-fav-train-system="${favorite.systemId}" aria-label="${copyValue('removeFavorite')}">× ${copyValue('removeFavorite')}</button>
+          <button type="button" class="favorite-action-btn" data-fav-item-move="up" data-fav-item-key="${favorite.itemKey}" aria-label="${copyValue('moveUp')}">▲ ${copyValue('moveUp')}</button>
+          <button type="button" class="favorite-action-btn" data-fav-item-move="down" data-fav-item-key="${favorite.itemKey}" aria-label="${copyValue('moveDown')}">▼ ${copyValue('moveDown')}</button>
+          <button type="button" class="favorite-action-btn favorite-action-remove" data-fav-remove-key="${favorite.itemKey}" aria-label="${copyValue('removeFavorite')}">× ${copyValue('removeFavorite')}</button>
         </div>
       </div>
     </div>
@@ -448,44 +462,35 @@ async function handleFavoriteTrainClick(favorite) {
 }
 
 function renderFavoritesView() {
-  const favorites = getFavoriteDisplayData()
-  const favoriteTrains = getFavoriteTrains()
+  const favoriteItems = getFavoriteDisplayData()
 
-  if (!favorites.length && !favoriteTrains.length) {
+  if (!favoriteItems.length) {
     return `
       <section class="board" style="grid-template-columns: 1fr;">
         <article class="panel-card">
-          <h2>${copyValue('favoriteTrainsTitle')}</h2>
-          <p class="muted">${copyValue('noFavoriteTrains')}</p>
-          <p class="muted">${copyValue('favoriteTrainsHint')}</p>
+          <h2>${copyValue('favoritesTitle')}</h2>
           <p class="muted">${copyValue('noFavorites')}</p>
+          <p class="muted">${copyValue('favoritesHint')}</p>
         </article>
       </section>
     `
   }
 
-  const trainSection = `
-    <article class="panel-card panel-card-wide">
-      <header class="panel-header">
-        <div>
-          <h2>${copyValue('favoriteTrainsTitle')}</h2>
-          <p class="updated-at">${copyValue('favoriteTrainLiveHint')}</p>
-        </div>
-      </header>
-      ${favoriteTrains.length
-        ? `<div class="favorites-list">${favoriteTrains.map((favorite) => renderFavoriteTrainCard(favorite)).join('')}</div>`
-        : `<p class="muted">${copyValue('noFavoriteTrains')}</p><p class="muted">${copyValue('favoriteTrainsHint')}</p>`}
-    </article>
-  `
+  const items = favoriteItems.map((item) => {
+    if (item.type === 'train') {
+      return renderFavoriteTrainCard(item)
+    }
 
-  const items = favorites.map((fav) => {
+    const fav = item
     const isCurrentSystem = fav.systemId === state.activeSystemId
     const snapshot = state.favoriteArrivals.get(getFavoriteKey(fav))
+    const tokenLabel = getLineToken(fav.lineName)
+    const tokenType = getLineTokenType(fav.lineName)
     return `
       <div class="favorite-item ${fav.exists ? '' : 'favorite-item-missing'}" 
-           data-favorite-key="${getFavoriteKey(fav)}"
+           data-favorite-item-key="${fav.itemKey}"
            role="button" tabindex="0">
-        <span class="arrival-line-token" style="--line-color:${fav.lineColor};">${fav.lineName[0]}</span>
+        <span class="arrival-line-token" data-line-token-type="${tokenType}" style="--line-color:${fav.lineColor};">${tokenLabel}</span>
         <div class="favorite-item-content">
           <div class="favorite-item-header">
             <div>
@@ -495,9 +500,9 @@ function renderFavoritesView() {
           </div>
           ${renderFavoriteArrivalPreview(fav, snapshot)}
           <div class="favorite-item-actions">
-            <button type="button" class="favorite-action-btn" data-fav-move="up" data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('moveUp')}">▲ ${copyValue('moveUp')}</button>
-            <button type="button" class="favorite-action-btn" data-fav-move="down" data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('moveDown')}">▼ ${copyValue('moveDown')}</button>
-            <button type="button" class="favorite-action-btn favorite-action-remove" data-fav-remove data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('removeFavorite')}">× ${copyValue('removeFavorite')}</button>
+            <button type="button" class="favorite-action-btn" data-fav-item-move="up" data-fav-item-key="${fav.itemKey}" aria-label="${copyValue('moveUp')}">▲ ${copyValue('moveUp')}</button>
+            <button type="button" class="favorite-action-btn" data-fav-item-move="down" data-fav-item-key="${fav.itemKey}" aria-label="${copyValue('moveDown')}">▼ ${copyValue('moveDown')}</button>
+            <button type="button" class="favorite-action-btn favorite-action-remove" data-fav-remove-key="${fav.itemKey}" aria-label="${copyValue('removeFavorite')}">× ${copyValue('removeFavorite')}</button>
           </div>
         </div>
       </div>
@@ -505,17 +510,16 @@ function renderFavoritesView() {
   }).join('')
 
   return `
-    ${trainSection}
     <article class="panel-card panel-card-wide">
       <header class="panel-header">
         <div>
           <h2>${copyValue('favoritesTitle')}</h2>
-          <p class="updated-at">${copyValue('favoritesLiveHint')}</p>
+          <p class="updated-at">${copyValue('favoriteTrainLiveHint')} · ${copyValue('favoritesLiveHint')}</p>
         </div>
       </header>
-      ${items
-        ? `<div class="favorites-list">${items}</div>`
-        : `<p class="muted">${copyValue('noFavorites')}</p><p class="muted">${copyValue('favoritesHint')}</p>`}
+      <div class="favorites-list">
+        ${items}
+      </div>
     </article>
   `
 }
@@ -1133,6 +1137,8 @@ function renderLineSwitcher() {
   const buttons = state.lines
     .map((line) => {
       const compactLabel = getLineSwitcherLabel(line)
+      const tokenLabel = getLineToken(line.name)
+      const tokenType = getLineTokenType(line.name)
       return `
         <button
           class="line-switcher-button ${line.id === state.activeLineId ? 'is-active' : ''}"
@@ -1142,7 +1148,7 @@ function renderLineSwitcher() {
           aria-label="${line.name}"
           style="--line-color:${line.color};"
         >
-          <span class="line-token line-switcher-token" style="--line-color:${line.color};">${line.name[0]}</span>
+          <span class="line-token line-switcher-token" data-line-token-type="${tokenType}" style="--line-color:${line.color};">${tokenLabel}</span>
           <span class="line-switcher-label-group">
             <span class="line-switcher-label-compact">${compactLabel}</span>
             <span class="line-switcher-label-full">${line.name}</span>
@@ -1684,12 +1690,12 @@ registerAppEventHandlers({
   showInsightsDetail,
   showStationDialog,
   switchSystem,
-  getFavorites,
-  getFavoriteTrains,
+  getFavoriteItem,
   handleFavoriteClick,
   handleFavoriteTrainClick,
   moveFavorite,
   removeFavorite,
+  removeFavoriteTrain,
   getDialogStations,
   toggleFavorite,
   toggleFavoriteTrain,
@@ -1698,7 +1704,6 @@ registerAppEventHandlers({
   updateFavoriteButton,
   getTrainFavoriteTarget,
   updateTrainFavoriteButton,
-  getActiveSystemMeta,
   notificationSuccess,
   lightImpact,
   rideModeChip,
@@ -1950,7 +1955,7 @@ async function refreshFavoriteArrivals({ force = false } = {}) {
   if (state.favoriteArrivalsRefreshPromise && !force) return state.favoriteArrivalsRefreshPromise
 
   const run = (async () => {
-    const favorites = getFavorites()
+    const favorites = getStationFavorites()
     const validKeys = new Set(favorites.map((favorite) => getFavoriteKey(favorite)))
 
     for (const key of [...state.favoriteArrivals.keys()]) {
@@ -2172,7 +2177,6 @@ const init = bootstrapApp({
       THEME_STORAGE_KEY,
       LANGUAGE_STORAGE_KEY,
       FAVORITES_STORAGE_KEY,
-      FAVORITE_TRAINS_STORAGE_KEY,
       RECENT_SEARCHES_KEY,
     ],
     sessionKeys: [

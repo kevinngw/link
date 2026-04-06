@@ -1,31 +1,23 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { createFavoritesManager } from './favorites.js'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createFavoritesManager } from './favorites'
 
-function createLocalStorageMock() {
-  let store = {}
+const storage = vi.hoisted(() => {
+  let favorites = []
   return {
-    getItem(key) {
-      return Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null
-    },
-    setItem(key, value) {
-      store[key] = String(value)
-    },
-    removeItem(key) {
-      delete store[key]
-    },
-    clear() {
-      store = {}
+    getStoredJSON: vi.fn(() => favorites),
+    setStoredJSON: vi.fn(async (_key, nextFavorites) => {
+      favorites = nextFavorites
+    }),
+    reset() {
+      favorites = []
     },
   }
-}
+})
 
-function makeState(systemsById = new Map()) {
-  return {
-    activeSystemId: 'system-a',
-    lines: [],
-    systemsById,
-  }
-}
+vi.mock('./native/storage', () => ({
+  getStoredJSON: storage.getStoredJSON,
+  setStoredJSON: storage.setStoredJSON,
+}))
 
 function makeSystem() {
   return {
@@ -42,202 +34,163 @@ function makeSystem() {
   }
 }
 
+function makeState(system = makeSystem()) {
+  return {
+    activeSystemId: system.id,
+    lines: system.lines,
+    systemsById: new Map([[system.id, system]]),
+  }
+}
+
+function createManager(state = makeState()) {
+  return createFavoritesManager({
+    state,
+    showStationDialog: vi.fn(),
+    switchSystem: vi.fn(),
+    showToast: vi.fn(),
+  })
+}
+
 describe('createFavoritesManager', () => {
   beforeEach(() => {
-    const storage = createLocalStorageMock()
-    Object.defineProperty(window, 'localStorage', {
-      value: storage,
-      configurable: true,
-    })
-    Object.defineProperty(globalThis, 'localStorage', {
-      value: storage,
-      configurable: true,
-    })
-    vi.restoreAllMocks()
+    storage.reset()
+    storage.getStoredJSON.mockClear()
+    storage.setStoredJSON.mockClear()
   })
 
-  describe('addFavorite / isFavorite', () => {
-    it('adds a favorite and reports it as favorite', () => {
-      const state = makeState(new Map([['system-a', makeSystem()]]))
-      const { addFavorite, isFavorite } = createFavoritesManager({
-        state,
-        showStationDialog: vi.fn(),
-        switchSystem: vi.fn(),
-        showToast: vi.fn(),
-      })
+  it('adds a station favorite and reports favorite state', async () => {
+    const system = makeSystem()
+    const manager = createManager(makeState(system))
 
-      const line = makeSystem().lines[0]
-      const station = line.stops[0]
-      addFavorite(station, line, 'system-a')
+    manager.addFavorite(system.lines[0].stops[0], system.lines[0], system.id)
+    await Promise.resolve()
 
-      expect(isFavorite('stop-1', 'line-1', 'system-a')).toBe(true)
-    })
-
-    it('moves existing favorite to front on re-add', () => {
-      const state = makeState(new Map([['system-a', makeSystem()]]))
-      const { addFavorite, getFavorites } = createFavoritesManager({
-        state,
-        showStationDialog: vi.fn(),
-        switchSystem: vi.fn(),
-        showToast: vi.fn(),
-      })
-
-      const line = makeSystem().lines[0]
-      const station = line.stops[0]
-
-      // Add two entries
-      addFavorite({ id: 'stop-2', name: 'Station Two' }, { id: 'line-2', name: 'Line 2', color: '#00ff00' }, 'system-a')
-      addFavorite(station, line, 'system-a')
-      // Re-add first
-      addFavorite(station, line, 'system-a')
-
-      const favs = getFavorites()
-      expect(favs[0].stationId).toBe('stop-1')
+    expect(manager.isFavorite('stop-1', 'line-1', system.id)).toBe(true)
+    expect(manager.getFavorites()[0]).toMatchObject({
+      type: 'station',
+      itemKey: 'station:system-a:line-1:stop-1',
+      stationName: 'Station One',
     })
   })
 
-  describe('removeFavorite', () => {
-    it('removes a favorite', () => {
-      const state = makeState(new Map([['system-a', makeSystem()]]))
-      const { addFavorite, removeFavorite, isFavorite } = createFavoritesManager({
-        state,
-        showStationDialog: vi.fn(),
-        switchSystem: vi.fn(),
-        showToast: vi.fn(),
-      })
+  it('adds a train favorite and reports train favorite state', async () => {
+    const manager = createManager()
 
-      const line = makeSystem().lines[0]
-      const station = line.stops[0]
-      addFavorite(station, line, 'system-a')
-      removeFavorite('stop-1', 'line-1', 'system-a')
+    manager.addFavoriteTrain({
+      id: '1_100',
+      label: '100',
+      lineId: 'line-1',
+      lineName: 'Line 1',
+      lineColor: '#ff0000',
+      directionSymbol: '▲',
+    }, 'system-a')
+    await Promise.resolve()
 
-      expect(isFavorite('stop-1', 'line-1', 'system-a')).toBe(false)
+    expect(manager.isFavoriteTrain('1_100', 'system-a')).toBe(true)
+    expect(manager.getFavorites()[0]).toMatchObject({
+      type: 'train',
+      itemKey: 'train:system-a:1_100',
+      vehicleLabel: '100',
     })
   })
 
-  describe('getFavoriteDisplayData', () => {
-    it('marks existing stations as exists=true', () => {
-      const system = makeSystem()
-      const state = makeState(new Map([['system-a', system]]))
-      state.lines = system.lines
+  it('moves mixed favorites in stored order', async () => {
+    const system = makeSystem()
+    const manager = createManager(makeState(system))
 
-      const { addFavorite, getFavoriteDisplayData } = createFavoritesManager({
-        state,
-        showStationDialog: vi.fn(),
-        switchSystem: vi.fn(),
-        showToast: vi.fn(),
-      })
+    manager.addFavorite(system.lines[0].stops[0], system.lines[0], system.id)
+    await Promise.resolve()
+    manager.addFavoriteTrain({
+      id: '1_100',
+      label: '100',
+      lineId: 'line-1',
+      lineName: 'Line 1',
+      lineColor: '#ff0000',
+      directionSymbol: '▲',
+    }, system.id)
+    await Promise.resolve()
 
-      addFavorite(system.lines[0].stops[0], system.lines[0], 'system-a')
-      const data = getFavoriteDisplayData()
+    manager.moveFavorite('station:system-a:line-1:stop-1', 'up')
+    await Promise.resolve()
 
-      expect(data[0].exists).toBe(true)
-      expect(data[0].station.id).toBe('stop-1')
+    expect(manager.getFavorites().map((favorite) => favorite.itemKey)).toEqual([
+      'station:system-a:line-1:stop-1',
+      'train:system-a:1_100',
+    ])
+  })
+
+  it('returns mixed display data with station resolution metadata', async () => {
+    const system = makeSystem()
+    const manager = createManager(makeState(system))
+
+    manager.addFavoriteTrain({
+      id: '1_100',
+      label: '100',
+      lineId: 'line-1',
+      lineName: 'Line 1',
+      lineColor: '#ff0000',
+      directionSymbol: '▲',
+    }, system.id)
+    await Promise.resolve()
+    manager.addFavorite(system.lines[0].stops[0], system.lines[0], system.id)
+    await Promise.resolve()
+
+    const displayData = manager.getFavoriteDisplayData()
+
+    expect(displayData[0]).toMatchObject({
+      type: 'station',
+      exists: true,
+      station: { id: 'stop-1' },
     })
-
-    it('marks removed stations as exists=false', () => {
-      const system = makeSystem()
-      const state = makeState(new Map([['system-a', system]]))
-      state.lines = system.lines
-
-      const { addFavorite, getFavoriteDisplayData } = createFavoritesManager({
-        state,
-        showStationDialog: vi.fn(),
-        switchSystem: vi.fn(),
-        showToast: vi.fn(),
-      })
-
-      // Add favorite for a station not in the system
-      addFavorite({ id: 'stop-deleted', name: 'Deleted Station' }, system.lines[0], 'system-a')
-      const data = getFavoriteDisplayData()
-
-      expect(data[0].exists).toBe(false)
+    expect(displayData[1]).toMatchObject({
+      type: 'train',
+      vehicleId: '1_100',
     })
   })
 
-  describe('handleFavoriteClick', () => {
-    it('calls showStationDialog for existing station', async () => {
-      const system = makeSystem()
-      const state = makeState(new Map([['system-a', system]]))
-      state.lines = system.lines
-      const showStationDialog = vi.fn().mockResolvedValue(undefined)
-
-      const { handleFavoriteClick } = createFavoritesManager({
-        state,
-        showStationDialog,
-        switchSystem: vi.fn(),
-        showToast: vi.fn(),
-      })
-
-      await handleFavoriteClick({
-        systemId: 'system-a',
-        lineId: 'line-1',
-        stationId: 'stop-1',
-        stationName: 'Station One',
-      })
-
-      expect(showStationDialog).toHaveBeenCalledWith(system.lines[0].stops[0])
+  it('opens a station favorite when it still exists', async () => {
+    const system = makeSystem()
+    const showStationDialog = vi.fn().mockResolvedValue(undefined)
+    const manager = createFavoritesManager({
+      state: makeState(system),
+      showStationDialog,
+      switchSystem: vi.fn(),
+      showToast: vi.fn(),
     })
 
-    it('shows toast for missing station', async () => {
-      const system = makeSystem()
-      const state = makeState(new Map([['system-a', system]]))
-      state.lines = system.lines
-      const showToast = vi.fn()
-
-      const { handleFavoriteClick } = createFavoritesManager({
-        state,
-        showStationDialog: vi.fn(),
-        switchSystem: vi.fn(),
-        showToast,
-      })
-
-      await handleFavoriteClick({
-        systemId: 'system-a',
-        lineId: 'line-1',
-        stationId: 'stop-deleted',
-        stationName: 'Old Station',
-      })
-
-      expect(showToast).toHaveBeenCalledWith(
-        expect.stringContaining('Old Station'),
-        expect.objectContaining({ tone: 'warn' }),
-      )
+    await manager.handleFavoriteClick({
+      type: 'station',
+      itemKey: 'station:system-a:line-1:stop-1',
+      systemId: 'system-a',
+      lineId: 'line-1',
+      stationId: 'stop-1',
+      stationName: 'Station One',
     })
+
+    expect(showStationDialog).toHaveBeenCalledWith(system.lines[0].stops[0])
   })
 
-  describe('localStorage error handling', () => {
-    it('returns empty array when localStorage read fails', () => {
-      vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
-        throw new Error('QuotaExceededError')
-      })
-
-      const { getFavorites } = createFavoritesManager({
-        state: makeState(),
-        showStationDialog: vi.fn(),
-        switchSystem: vi.fn(),
-        showToast: vi.fn(),
-      })
-
-      expect(getFavorites()).toEqual([])
+  it('shows a warning toast when a station favorite is missing', async () => {
+    const showToast = vi.fn()
+    const manager = createFavoritesManager({
+      state: makeState(),
+      showStationDialog: vi.fn(),
+      switchSystem: vi.fn(),
+      showToast,
     })
 
-    it('does not throw when localStorage write fails', () => {
-      vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
-        throw new Error('QuotaExceededError')
-      })
-
-      const state = makeState(new Map([['system-a', makeSystem()]]))
-      const { addFavorite } = createFavoritesManager({
-        state,
-        showStationDialog: vi.fn(),
-        switchSystem: vi.fn(),
-        showToast: vi.fn(),
-      })
-
-      expect(() =>
-        addFavorite(makeSystem().lines[0].stops[0], makeSystem().lines[0], 'system-a'),
-      ).not.toThrow()
+    await manager.handleFavoriteClick({
+      type: 'station',
+      itemKey: 'station:system-a:line-1:stop-deleted',
+      systemId: 'system-a',
+      lineId: 'line-1',
+      stationId: 'stop-deleted',
+      stationName: 'Old Station',
     })
+
+    expect(showToast).toHaveBeenCalledWith(
+      expect.stringContaining('Old Station'),
+      expect.objectContaining({ tone: 'warn' }),
+    )
   })
 })

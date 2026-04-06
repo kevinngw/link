@@ -6,6 +6,18 @@ export function pluralizeVehicleLabel(label) {
   return `${label}s`
 }
 
+export function getLineToken(lineName) {
+  const normalizedName = String(lineName ?? '').trim()
+  return normalizedName.charAt(0).toUpperCase() || '?'
+}
+
+export function getLineTokenType(lineName) {
+  const token = getLineToken(lineName)
+  if (/[A-Z]/.test(token)) return 'alpha'
+  if (/[0-9]/.test(token)) return 'numeric'
+  return 'other'
+}
+
 const NAME_REPLACEMENTS = [
   ['Station', ''],
   ['Univ of Washington', 'UW'],
