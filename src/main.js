@@ -27,6 +27,8 @@ import { createToast } from './toast'
 import { createVehicleDisplay } from './vehicle-display'
 import { RECENT_SEARCHES_KEY, createStationSearch } from './station-search'
 import { FAVORITES_STORAGE_KEY, createFavoritesManager } from './favorites'
+import { createFavoriteTrainsManager } from './favorite-trains'
+import { FAVORITE_TRAINS_STORAGE_KEY } from './favorite-trains'
 import { RECENT_STATIONS_KEY, createRecentStationsManager } from './recent-stations'
 import { createRideMode } from './ride-mode'
 import { resolveVehicleForArrival } from './arrival-vehicle'
@@ -187,6 +189,7 @@ const {
   trainDialog,
   trainDialogTitle,
   trainDialogSubtitle,
+  trainDialogFavorite,
   trainDialogClose,
   alertDialog,
   alertDialogTitle,
@@ -265,6 +268,14 @@ const {
   showToast,
 })
 
+const {
+  getFavoriteTrains,
+  isFavoriteTrain,
+  toggleFavoriteTrain,
+} = createFavoriteTrainsManager({
+  state,
+})
+
 function updateFavoriteButton() {
   if (!dialogFavoriteButton || !state.currentDialogStation) return
   const dialogStations = getDialogStations(state.currentDialogStation)
@@ -275,6 +286,36 @@ function updateFavoriteButton() {
   dialogFavoriteButton.textContent = fav ? '★' : '☆'
   dialogFavoriteButton.setAttribute('aria-label', fav ? copyValue('removeFavorite') : copyValue('addFavorite'))
   dialogFavoriteButton.classList.toggle('is-favorite', fav)
+}
+
+function getTrainFavoriteTarget(trainId = state.currentTrainId) {
+  if (!trainId) return null
+  const vehicle = getAllVehiclesById().get(trainId)
+  if (!vehicle?.lineId) return null
+
+  return {
+    vehicle,
+    systemId: state.activeSystemId,
+    favoriteKey: `${state.activeSystemId}:${vehicle.id}`,
+  }
+}
+
+function updateTrainFavoriteButton() {
+  if (!trainDialogFavorite) return
+  const target = getTrainFavoriteTarget()
+  if (!target) {
+    trainDialogFavorite.textContent = '☆'
+    trainDialogFavorite.setAttribute('aria-label', copyValue('addFavorite'))
+    trainDialogFavorite.classList.remove('is-favorite')
+    trainDialogFavorite.disabled = true
+    return
+  }
+
+  const fav = isFavoriteTrain(target.vehicle.id, target.systemId)
+  trainDialogFavorite.textContent = fav ? '★' : '☆'
+  trainDialogFavorite.setAttribute('aria-label', fav ? copyValue('removeFavorite') : copyValue('addFavorite'))
+  trainDialogFavorite.classList.toggle('is-favorite', fav)
+  trainDialogFavorite.disabled = false
 }
 
 function getSystemVehicleLabel(systemId, { plural = false } = {}) {
@@ -348,20 +389,94 @@ function renderFavoriteArrivalPreview(favorite, snapshot) {
   `
 }
 
+function renderFavoriteTrainCard(favorite) {
+  const liveVehicle = favorite.systemId === state.activeSystemId
+    ? getAllVehiclesById().get(favorite.vehicleId) ?? null
+    : null
+  const isLive = Boolean(liveVehicle)
+  const vehicleLabel = getSystemVehicleLabel(favorite.systemId)
+  const detailLine = isLive
+    ? formatDirectionLabel(
+      liveVehicle.directionSymbol,
+      getVehicleDestinationLabel(liveVehicle, state.layouts.get(liveVehicle.lineId)),
+      { includeSymbol: true },
+    )
+    : `${favorite.directionSymbol || ''} ${favorite.systemName}`.trim()
+  const statusLine = isLive
+    ? `${formatArrivalTime(Math.max(0, getRealtimeOffset(liveVehicle.nextOffset ?? 0)))} · ${liveVehicle.currentStopLabel}`
+    : copyValue('favoriteTrainUnavailable')
+  const supportingLine = isLive && liveVehicle.upcomingLabel
+    ? `${copyValue('nextStop')}: ${liveVehicle.upcomingLabel}`
+    : copyValue('favoriteTrainLiveHint')
+
+  return `
+    <div class="favorite-item${isLive ? '' : ' favorite-train-item-inactive'}"
+         data-favorite-train-key="${favorite.systemId}:${favorite.vehicleId}"
+         role="button" tabindex="0">
+      <span class="arrival-line-token" style="--line-color:${favorite.lineColor};">${favorite.lineName[0]}</span>
+      <div class="favorite-item-content">
+        <div class="favorite-item-header">
+          <div>
+            <p class="favorite-item-title">${favorite.lineName} ${vehicleLabel} ${favorite.vehicleLabel}</p>
+            <p class="favorite-item-meta">${detailLine}</p>
+          </div>
+        </div>
+        <div class="favorite-train-preview">
+          <p class="favorite-arrival-status">${statusLine}</p>
+          <p class="favorite-arrival-status">${supportingLine}</p>
+        </div>
+        <div class="favorite-item-actions">
+          <button type="button" class="favorite-action-btn favorite-action-remove" data-fav-train-remove data-fav-train-id="${favorite.vehicleId}" data-fav-train-system="${favorite.systemId}" aria-label="${copyValue('removeFavorite')}">× ${copyValue('removeFavorite')}</button>
+        </div>
+      </div>
+    </div>
+  `
+}
+
+async function handleFavoriteTrainClick(favorite) {
+  if (favorite.systemId !== state.activeSystemId) {
+    await switchSystem(favorite.systemId, { updateUrl: true, preserveDialog: false })
+  }
+
+  const vehicle = getAllVehiclesById().get(favorite.vehicleId)
+  if (vehicle) {
+    renderTrainDialog(vehicle)
+    return
+  }
+
+  showToast(copyValue('favoriteTrainUnavailable'))
+}
+
 function renderFavoritesView() {
   const favorites = getFavoriteDisplayData()
+  const favoriteTrains = getFavoriteTrains()
 
-  if (!favorites.length) {
+  if (!favorites.length && !favoriteTrains.length) {
     return `
       <section class="board" style="grid-template-columns: 1fr;">
         <article class="panel-card">
-          <h2>${copyValue('favoritesTitle')}</h2>
+          <h2>${copyValue('favoriteTrainsTitle')}</h2>
+          <p class="muted">${copyValue('noFavoriteTrains')}</p>
+          <p class="muted">${copyValue('favoriteTrainsHint')}</p>
           <p class="muted">${copyValue('noFavorites')}</p>
-          <p class="muted">${copyValue('favoritesHint')}</p>
         </article>
       </section>
     `
   }
+
+  const trainSection = `
+    <article class="panel-card panel-card-wide">
+      <header class="panel-header">
+        <div>
+          <h2>${copyValue('favoriteTrainsTitle')}</h2>
+          <p class="updated-at">${copyValue('favoriteTrainLiveHint')}</p>
+        </div>
+      </header>
+      ${favoriteTrains.length
+        ? `<div class="favorites-list">${favoriteTrains.map((favorite) => renderFavoriteTrainCard(favorite)).join('')}</div>`
+        : `<p class="muted">${copyValue('noFavoriteTrains')}</p><p class="muted">${copyValue('favoriteTrainsHint')}</p>`}
+    </article>
+  `
 
   const items = favorites.map((fav) => {
     const isCurrentSystem = fav.systemId === state.activeSystemId
@@ -390,6 +505,7 @@ function renderFavoritesView() {
   }).join('')
 
   return `
+    ${trainSection}
     <article class="panel-card panel-card-wide">
       <header class="panel-header">
         <div>
@@ -397,9 +513,9 @@ function renderFavoritesView() {
           <p class="updated-at">${copyValue('favoritesLiveHint')}</p>
         </div>
       </header>
-      <div class="favorites-list">
-        ${items}
-      </div>
+      ${items
+        ? `<div class="favorites-list">${items}</div>`
+        : `<p class="muted">${copyValue('noFavorites')}</p><p class="muted">${copyValue('favoritesHint')}</p>`}
     </article>
   `
 }
@@ -1386,6 +1502,7 @@ function renderTrainDialog(vehicle, { updateUrl = true } = {}) {
   state.activeDialogType = 'train'
   if (updateUrl) void lightImpact()
   renderTrainDialogBase(vehicle)
+  updateTrainFavoriteButton()
   if (updateUrl) setTrainDialogParams(vehicle.id)
 }
 
@@ -1568,14 +1685,19 @@ registerAppEventHandlers({
   showStationDialog,
   switchSystem,
   getFavorites,
+  getFavoriteTrains,
   handleFavoriteClick,
+  handleFavoriteTrainClick,
   moveFavorite,
   removeFavorite,
   getDialogStations,
   toggleFavorite,
+  toggleFavoriteTrain,
   getFavoriteKey,
   refreshFavoriteArrivals,
   updateFavoriteButton,
+  getTrainFavoriteTarget,
+  updateTrainFavoriteButton,
   getActiveSystemMeta,
   notificationSuccess,
   lightImpact,
@@ -1667,6 +1789,7 @@ function renderDialogCopy() {
     trainDialogTitle.textContent = copyValue('train')
     trainDialogSubtitle.textContent = copyValue('currentMovement')
   }
+  updateTrainFavoriteButton()
   if (!alertDialog.open) {
     alertDialogTitle.textContent = copyValue('serviceAlert')
     alertDialogSubtitle.textContent = copyValue('transitAdvisory')
@@ -2025,6 +2148,8 @@ async function refreshVehicles({ renderAfter = true } = {}) {
     const currentVehicle = getAllVehiclesById().get(state.currentTrainId)
     if (currentVehicle) renderTrainDialog(currentVehicle, { updateUrl: false })
   }
+
+  if (trainDialog.open) updateTrainFavoriteButton()
 }
 
 const handleViewportResize = () => {
@@ -2047,6 +2172,7 @@ const init = bootstrapApp({
       THEME_STORAGE_KEY,
       LANGUAGE_STORAGE_KEY,
       FAVORITES_STORAGE_KEY,
+      FAVORITE_TRAINS_STORAGE_KEY,
       RECENT_SEARCHES_KEY,
     ],
     sessionKeys: [

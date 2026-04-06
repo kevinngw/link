@@ -83,6 +83,16 @@
   margin-top: 12px;
 }
 
+.favorite-train-preview {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.favorite-train-item-inactive {
+  opacity: 0.78;
+}
+
 .favorite-arrivals-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -231,4 +241,3 @@
     font-size: 0.74rem;
   }
 }
-

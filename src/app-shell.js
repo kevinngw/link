@@ -101,6 +101,7 @@ export const APP_SHELL_HTML = `
           <p id="train-dialog-subtitle" class="updated-at">Current movement</p>
         </div>
         <div class="dialog-actions">
+          <button id="train-dialog-favorite" class="dialog-close dialog-favorite-button" type="button" aria-label="Add to favorites">☆</button>
           <button id="train-dialog-close" class="dialog-close" type="button" aria-label="Close train dialog">&times;</button>
         </div>
       </header>

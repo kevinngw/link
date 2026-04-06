@@ -42,14 +42,19 @@ export function registerAppEventHandlers({
   showStationDialog,
   switchSystem,
   getFavorites,
+  getFavoriteTrains,
   handleFavoriteClick,
+  handleFavoriteTrainClick,
   moveFavorite,
   removeFavorite,
   getDialogStations,
   toggleFavorite,
+  toggleFavoriteTrain,
   getFavoriteKey,
   refreshFavoriteArrivals,
   updateFavoriteButton,
+  getTrainFavoriteTarget,
+  updateTrainFavoriteButton,
   getActiveSystemMeta,
   notificationSuccess,
   lightImpact,
@@ -86,6 +91,7 @@ export function registerAppEventHandlers({
     dialogDisplay,
     dialogDirectionTabs,
     trainDialog,
+    trainDialogFavorite,
     trainDialogClose,
     alertDialog,
     alertDialogClose,
@@ -424,10 +430,29 @@ export function registerAppEventHandlers({
       return
     }
 
+    const removeTrainBtn = event.target.closest('[data-fav-train-remove]')
+    if (removeTrainBtn) {
+      event.stopPropagation()
+      const target = getFavoriteTrains().find((item) => item.vehicleId === removeTrainBtn.dataset.favTrainId && item.systemId === removeTrainBtn.dataset.favTrainSystem)
+      if (!target) return
+      toggleFavoriteTrain({ id: target.vehicleId }, target.systemId)
+      updateTrainFavoriteButton()
+      showToast(copyValue('favoriteRemoved'))
+      render()
+      return
+    }
+
     const favItem = event.target.closest('[data-favorite-key]')
-    if (!favItem) return
-    const favorite = getFavorites().find((item) => `${item.systemId}:${item.lineId}:${item.stationId}` === favItem.dataset.favoriteKey)
-    if (favorite) handleFavoriteClick(favorite)
+    if (favItem) {
+      const favorite = getFavorites().find((item) => `${item.systemId}:${item.lineId}:${item.stationId}` === favItem.dataset.favoriteKey)
+      if (favorite) handleFavoriteClick(favorite)
+      return
+    }
+
+    const favoriteTrainItem = event.target.closest('[data-favorite-train-key]')
+    if (!favoriteTrainItem) return
+    const favoriteTrain = getFavoriteTrains().find((item) => `${item.systemId}:${item.vehicleId}` === favoriteTrainItem.dataset.favoriteTrainKey)
+    if (favoriteTrain) void handleFavoriteTrainClick(favoriteTrain)
   })
 
   if (dialogFavoriteButton) {
@@ -455,6 +480,24 @@ export function registerAppEventHandlers({
           refreshFavoriteArrivals({ force: true }).catch(console.error)
         }
       }
+      showToast(copyValue(result.isFavorite ? 'favoriteAdded' : 'favoriteRemoved'))
+      void (result.isFavorite ? notificationSuccess() : lightImpact())
+    })
+  }
+
+  if (trainDialogFavorite) {
+    trainDialogFavorite.addEventListener('click', () => {
+      const target = getTrainFavoriteTarget()
+      if (!target) return
+
+      const result = toggleFavoriteTrain(target.vehicle, target.systemId)
+
+      updateTrainFavoriteButton()
+
+      if (state.activeTab === 'favorites') {
+        render()
+      }
+
       showToast(copyValue(result.isFavorite ? 'favoriteAdded' : 'favoriteRemoved'))
       void (result.isFavorite ? notificationSuccess() : lightImpact())
     })
