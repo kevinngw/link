@@ -33,6 +33,20 @@ export function createStationSearch({
   let _stationSearchEntriesCache = null
   let _stationSearchEntriesSystemKey = ''
   let _allSystemsLoaded = false
+  let _lastRenderedResults = []
+
+  // Event delegation: registered once, handles all search result clicks
+  async function handleSearchResultInteraction(event) {
+    const el = event.target.closest('[data-station-search-index]')
+    if (!el) return
+    if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return
+    if (event.type === 'keydown') event.preventDefault()
+    const index = Number(el.dataset.stationSearchIndex)
+    const selected = _lastRenderedResults[index]
+    if (selected) await handleStationSearchSelection(selected)
+  }
+  stationSearchResultsElement.addEventListener('click', handleSearchResultInteraction)
+  stationSearchResultsElement.addEventListener('keydown', handleSearchResultInteraction)
 
   async function ensureAllSystemsLoaded() {
     if (_allSystemsLoaded) return
@@ -279,6 +293,9 @@ export function createStationSearch({
         ? copyValue('noStationSearchResults')
         : (state.geolocationError || state.geolocationStatus || copyValue('nearbyStationsHint')))
 
+    // Store the current results list so the delegated handler can resolve by index
+    _lastRenderedResults = results
+
     stationSearchResultsElement.innerHTML = results.length
       ? results.map((result, index) => {
           const isNearby = !hasQuery && !isShowingRecentStations && !isShowingRecents
@@ -311,21 +328,6 @@ export function createStationSearch({
           `
         }).join('')
       : `<div class="arrival-item muted">${hasQuery ? copyValue('noStationSearchResults') : (state.geolocationError || state.geolocationStatus || copyValue('nearbyStationsHint'))}</div>`
-
-    const buttons = stationSearchResultsElement.querySelectorAll('[data-station-search-index]')
-    buttons.forEach((button) => {
-      const selectResult = async () => {
-        const source = hasQuery ? state.stationSearchResults : (nearbyResults.length ? state.nearbyStations : (recentStationResults.length ? recentStationResults : recentResults))
-        const selected = source[Number(button.dataset.stationSearchIndex)]
-        if (selected) await handleStationSearchSelection(selected)
-      }
-      button.addEventListener('click', selectResult)
-      button.addEventListener('keydown', async (event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') return
-        event.preventDefault()
-        await selectResult()
-      })
-    })
   }
 
   async function openStationSearch(prefill = '', { updateUrl = true } = {}) {

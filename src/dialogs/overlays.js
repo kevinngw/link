@@ -1,4 +1,4 @@
-import { closeDialogAnimated } from '../utils'
+import { closeDialogAnimated, escapeHtml, sanitizeUrl } from '../utils'
 
 export function createOverlayDialogs({
   state,
@@ -50,18 +50,22 @@ export function createOverlayDialogs({
     alertDialogBody.innerHTML = lineAlerts.length
       ? lineAlerts
           .map(
-            (alert) => `
+            (alert) => {
+              const safeTitle = escapeHtml(alert.title) || copyValue('serviceAlert')
+              const safeDescription = escapeHtml(alert.description) || copyValue('noAdditionalAlertDetails')
+              const safeUrl = sanitizeUrl(alert.url)
+              return `
               <article class="alert-dialog-item">
                 <p class="alert-dialog-item-meta">${formatAlertSeverity(alert.severity)} • ${formatAlertEffect(alert.effect)}</p>
-                <p class="alert-dialog-item-title">${alert.title || copyValue('serviceAlert')}</p>
-                <p class="alert-dialog-item-copy">${alert.description || copyValue('noAdditionalAlertDetails')}</p>
+                <p class="alert-dialog-item-title">${safeTitle}</p>
+                <p class="alert-dialog-item-copy">${safeDescription}</p>
                 ${
-                  alert.url
-                    ? `<p class="alert-dialog-item-link-wrap"><a class="alert-dialog-link" href="${alert.url}" target="_blank" rel="noreferrer">${copyValue('readOfficialAlert')}</a></p>`
+                  safeUrl
+                    ? `<p class="alert-dialog-item-link-wrap"><a class="alert-dialog-link" href="${safeUrl}" target="_blank" rel="noreferrer">${copyValue('readOfficialAlert')}</a></p>`
                     : ''
                 }
               </article>
-            `,
+            `},
           )
           .join('')
       : `<p class="alert-dialog-item-copy">${copyValue('noActiveAlerts')}</p>`
@@ -101,21 +105,21 @@ export function createOverlayDialogs({
           </svg>
         </span>
       </div>
-      <div class="train-detail-stop train-detail-stop-clickable" data-spine-station-id="${vehicle.previousStopId}" role="button" tabindex="0">
+      <div class="train-detail-stop train-detail-stop-clickable" data-spine-station-id="${vehicle.previousStopId}" role="button" tabindex="0" aria-label="${escapeHtml(previousName)}">
         <span class="train-detail-marker"></span>
         <div>
           <p class="train-detail-label">${copyValue('previous')}</p>
           <p class="train-detail-name">${previousName}</p>
         </div>
       </div>
-      <div class="train-detail-stop is-current train-detail-stop-clickable" data-spine-station-id="${vehicle.currentStopId}" role="button" tabindex="0">
+      <div class="train-detail-stop is-current train-detail-stop-clickable" data-spine-station-id="${vehicle.currentStopId}" role="button" tabindex="0" aria-label="${escapeHtml(currentName)}">
         <span class="train-detail-marker train-detail-marker-ghost"></span>
         <div>
           <p class="train-detail-label">${currentLabel === 'Between' ? copyValue('betweenLabel') : copyValue('now')}</p>
           <p class="train-detail-name">${currentName}</p>
         </div>
       </div>
-      <div class="train-detail-stop train-detail-stop-clickable" data-spine-station-id="${vehicle.upcomingStopId}" role="button" tabindex="0">
+      <div class="train-detail-stop train-detail-stop-clickable" data-spine-station-id="${vehicle.upcomingStopId}" role="button" tabindex="0" aria-label="${escapeHtml(nextName)}">
         <span class="train-detail-marker"></span>
         <div>
           <p class="train-detail-label">${copyValue('next')}</p>
@@ -155,7 +159,7 @@ export function createOverlayDialogs({
                       data-train-timeline-entry
                       data-base-eta-seconds="${entry.etaSeconds}"
                       data-rendered-at="${Date.now()}"
-                      ${entry.stationId ? `data-timeline-station-id="${entry.stationId}" role="button" tabindex="0"` : ''}
+                      ${entry.stationId ? `data-timeline-station-id="${entry.stationId}" role="button" tabindex="0" aria-label="${escapeHtml(entry.label)}"` : ''}
                     >
                       <div>
                         <p class="train-eta-stop-label">${entry.isNext ? copyValue('nextStop') : entry.isTerminal ? copyValue('terminal') : copyValue('upcoming')}</p>

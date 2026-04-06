@@ -31,6 +31,20 @@ export function clamp(value, min, max) {
   return Math.max(min, Math.min(value, max))
 }
 
+const HTML_ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
+
+export function escapeHtml(str) {
+  if (typeof str !== 'string') return ''
+  return str.replace(/[&<>"']/g, (ch) => HTML_ESCAPE_MAP[ch])
+}
+
+export function sanitizeUrl(url) {
+  if (typeof url !== 'string') return ''
+  const trimmed = url.trim()
+  if (/^https?:\/\//i.test(trimmed)) return escapeHtml(trimmed)
+  return ''
+}
+
 export function closeDialogAnimated(dialogEl) {
   if (!dialogEl.open) return
   dialogEl.classList.add('is-closing')

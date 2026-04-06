@@ -1,3 +1,5 @@
+import { escapeHtml } from './utils'
+
 export function createDialogLifecycle({
   state,
   obaClient,
@@ -86,7 +88,7 @@ export function createDialogLifecycle({
     stationAlertsContainer.innerHTML = stationAlerts.length
       ? stationAlerts.map((alert) => `
           <article class="insight-exception insight-exception-warn">
-            <p>${alert.title || copyValue('serviceAlert')}</p>
+            <p>${escapeHtml(alert.title) || copyValue('serviceAlert')}</p>
           </article>
         `).join('')
       : ''
