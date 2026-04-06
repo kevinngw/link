@@ -15,6 +15,7 @@ export function getDialogElements() {
     arrivalsTitleNb: document.querySelector('#arrivals-title-nb'),
     arrivalsTitleSb: document.querySelector('#arrivals-title-sb'),
     stationAlertsContainer: document.querySelector('#station-alerts-container'),
+    dialogRideModeContainer: document.querySelector('#dialog-ride-mode-container'),
     arrivalsSectionNb: document.querySelector('[data-direction-section="nb"]'),
     arrivalsNbPinned: document.querySelector('#arrivals-nb-pinned'),
     arrivalsNb: document.querySelector('#arrivals-nb'),

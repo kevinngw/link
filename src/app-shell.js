@@ -68,6 +68,7 @@ export const APP_SHELL_HTML = `
         </div>
       </div>
       <div id="station-alerts-container"></div>
+      <div id="dialog-ride-mode-container" hidden></div>
       <div class="dialog-body">
         <div class="arrivals-section" data-direction-section="nb">
           <h4 id="arrivals-title-nb" class="arrivals-title">

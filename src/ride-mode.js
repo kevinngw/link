@@ -7,6 +7,10 @@ import { RIDE_MODE_HEADSUP_STOPS, RIDE_MODE_HEADSUP_STOPS_SHORT_TRIP, RIDE_MODE_
  * Two notification thresholds: heads-up (3 stops) and arrival (1 stop / next stop).
  */
 export function createRideMode({ state, copyValue, getAllVehiclesById, getTrainTimelineEntries, showToast, lightImpact, notificationSuccess }) {
+  function getNotificationPermissionState() {
+    if (!('Notification' in window)) return 'unsupported'
+    return Notification.permission
+  }
 
   /**
    * Activate ride mode for a specific vehicle + destination.
@@ -154,16 +158,21 @@ export function createRideMode({ state, copyValue, getAllVehiclesById, getTrainT
 
   // --- Web Notification API ---
 
-  function requestNotificationPermission() {
-    if (!('Notification' in window)) return
-    if (Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => {})
+  async function requestNotificationPermission() {
+    const permissionState = getNotificationPermissionState()
+    if (permissionState === 'unsupported' || permissionState === 'granted' || permissionState === 'denied') {
+      return permissionState
+    }
+
+    try {
+      return await Notification.requestPermission()
+    } catch {
+      return getNotificationPermissionState()
     }
   }
 
   function sendWebNotification(title, body) {
-    if (!('Notification' in window)) return
-    if (Notification.permission !== 'granted') return
+    if (getNotificationPermissionState() !== 'granted') return
     try {
       new Notification(title, { body, icon: '/link/icon-192.png', tag: 'ride-mode' })
     } catch {
@@ -177,5 +186,7 @@ export function createRideMode({ state, copyValue, getAllVehiclesById, getTrainT
     isRideModeActive,
     getRideModeStatus,
     checkRideModeProgress,
+    getNotificationPermissionState,
+    requestNotificationPermission,
   }
 }

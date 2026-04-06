@@ -18,8 +18,10 @@ export function createOverlayDialogs({
   formatEtaClockFromNow,
   onStationClick,
   isRideModeActive,
-  getRideModeStatus,
+  getRideModePresentation,
   onRideDestinationSelect,
+  onRideModeOpen,
+  onRideModeNotificationRequest,
   onRideModeCancel,
 }) {
   const {
@@ -91,6 +93,14 @@ export function createOverlayDialogs({
     const destinationLabel = layout ? getVehicleDestinationLabel(vehicle, layout) : vehicle.upcomingLabel
     const terminalEtaSeconds = timelineEntries.at(-1)?.etaSeconds ?? Math.max(0, vehicle.nextOffset ?? 0)
     const directionLabel = getDirectionBaseLabel(vehicle.directionSymbol)
+    const ridePresentation = getRideModePresentation()
+    const isTrackedVehicle = isRideModeActive() && ridePresentation?.vehicleId === vehicle.id
+    const rideMetaParts = [
+      ridePresentation?.vehicleLabel,
+      ridePresentation?.etaSeconds === null || ridePresentation?.etaSeconds === undefined
+        ? ''
+        : copyValue('rideModeEta', formatArrivalTime(ridePresentation.etaSeconds)),
+    ].filter(Boolean)
 
     trainDialogTitle.textContent = `${vehicle.lineName} ${getVehicleLabel()} ${vehicle.label}`
     trainDialogSubtitle.textContent = copyValue('directionTo', directionLabel, destinationLabel)
@@ -149,15 +159,25 @@ export function createOverlayDialogs({
               <p class="metric-chip-value" data-vehicle-terminal-countdown="${vehicle.id}">${formatArrivalTime(terminalEtaSeconds)}</p>
             </div>
           </div>
-          ${isRideModeActive() && state.rideMode?.vehicleId === vehicle.id ? (() => {
-            const rideStatus = getRideModeStatus()
-            return rideStatus ? `
-              <div class="ride-mode-banner">
-                <span class="ride-mode-banner-label">${copyValue('rideModeBanner', rideStatus.destinationLabel, rideStatus.stopsAway ?? '?')}</span>
+          ${ridePresentation ? `
+            <div class="ride-mode-banner${isTrackedVehicle ? ' is-active' : ''}">
+              <div class="ride-mode-banner-copy">
+                <p class="ride-mode-banner-kicker">${copyValue(isTrackedVehicle ? 'rideModeActiveTitle' : 'rideModeTrackingOther')}</p>
+                <span class="ride-mode-banner-label">${ridePresentation.statusLabel}</span>
+                ${rideMetaParts.length ? `<span class="ride-mode-banner-meta">${rideMetaParts.join(' · ')}</span>` : ''}
+                ${ridePresentation.notification ? `
+                  <div class="ride-mode-notification-note is-${ridePresentation.notification.permission}">
+                    <span>${ridePresentation.notification.message}</span>
+                    ${ridePresentation.notification.showAction ? `<button class="ride-mode-notification-action" data-ride-mode-request-notification type="button">${ridePresentation.notification.actionLabel}</button>` : ''}
+                  </div>
+                ` : ''}
+              </div>
+              <div class="ride-mode-banner-actions">
+                ${!isTrackedVehicle && ridePresentation.canOpenVehicle ? `<button class="ride-mode-banner-open" data-ride-mode-open type="button">${copyValue('rideModeOpenTracked')}</button>` : ''}
                 <button class="ride-mode-banner-cancel" data-ride-mode-cancel type="button" aria-label="${copyValue('rideModeCancel')}">&times;</button>
               </div>
-            ` : ''
-          })() : ''}
+            </div>
+          ` : ''}
           <div class="train-eta-timeline">
             <div class="train-eta-header">
               <p class="train-detail-label">${copyValue('upcomingStops')}</p>
@@ -200,6 +220,22 @@ export function createOverlayDialogs({
 
   // Event delegation for spine/timeline station clicks + ride mode (registered once)
   function handleTrainDialogInteraction(event) {
+    const requestNotificationBtn = event.target.closest('[data-ride-mode-request-notification]')
+    if (requestNotificationBtn) {
+      if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return
+      if (event.type === 'keydown') event.preventDefault()
+      void onRideModeNotificationRequest()
+      return
+    }
+
+    const openBtn = event.target.closest('[data-ride-mode-open]')
+    if (openBtn) {
+      if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return
+      if (event.type === 'keydown') event.preventDefault()
+      onRideModeOpen()
+      return
+    }
+
     // Ride mode cancel button
     const cancelBtn = event.target.closest('[data-ride-mode-cancel]')
     if (cancelBtn) {

@@ -1814,6 +1814,7 @@ button.arrival-item {
 
 /* Ride mode banner inside train dialog */
 
+.ride-mode-context-panel,
 .ride-mode-banner {
   display: flex;
   align-items: center;
@@ -1829,12 +1830,117 @@ button.arrival-item {
   font-weight: 600;
 }
 
-.ride-mode-banner-label {
+.ride-mode-context-panel {
+  margin: 0 0 12px;
+}
+
+.ride-mode-context-copy,
+.ride-mode-banner-copy {
   flex: 1 1 auto;
   min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.ride-mode-context-kicker,
+.ride-mode-banner-kicker {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ride-mode-banner-label {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ride-mode-context-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+.ride-mode-context-meta,
+.ride-mode-banner-meta {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.ride-mode-notification-note {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.ride-mode-notification-note.is-granted {
+  color: var(--accent-strong);
+}
+
+.ride-mode-notification-note.is-denied,
+.ride-mode-notification-note.is-unsupported {
+  color: var(--status-warn, #e69a2d);
+}
+
+.ride-mode-notification-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent-strong) 45%, var(--border-color));
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ride-mode-notification-action:hover,
+.ride-mode-notification-action:focus-visible {
+  background: color-mix(in srgb, var(--accent-strong) 10%, var(--surface-soft));
+}
+
+.ride-mode-context-actions,
+.ride-mode-banner-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ride-mode-banner-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-strong) 45%, var(--border-color));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent-strong) 10%, var(--surface-soft));
+  color: var(--accent-strong);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.ride-mode-banner-open:hover,
+.ride-mode-banner-open:focus-visible {
+  background: color-mix(in srgb, var(--accent-strong) 16%, var(--surface-soft));
 }
 
 .ride-mode-banner-cancel {
@@ -1851,6 +1957,11 @@ button.arrival-item {
   font-size: 1rem;
   line-height: 1;
   cursor: pointer;
+}
+
+.ride-mode-banner.is-active {
+  border-color: color-mix(in srgb, var(--accent-strong) 58%, var(--border-color));
+  background: color-mix(in srgb, var(--accent-strong) 10%, var(--surface-soft));
 }
 
 .ride-mode-banner-cancel:hover {

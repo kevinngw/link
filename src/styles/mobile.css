@@ -39,7 +39,9 @@
   .train-eta-panel,
   .train-eta-stop > div:first-child,
   .train-eta-stop-side,
-  .metric-chip {
+  .metric-chip,
+  .ride-mode-context-copy,
+  .ride-mode-banner-copy {
     min-width: 0;
     max-width: 100%;
   }
@@ -107,6 +109,18 @@
 
   .train-eta-stop-side {
     text-align: left;
+  }
+
+  .ride-mode-context-panel,
+  .ride-mode-banner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ride-mode-context-actions,
+  .ride-mode-banner-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .station-dialog.is-display-mode > .dialog-content {

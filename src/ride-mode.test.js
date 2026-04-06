@@ -49,6 +49,16 @@ function makeTimeline(stopsAway = 5) {
 }
 
 describe('ride-mode', () => {
+  const originalNotification = globalThis.Notification
+
+  beforeEach(() => {
+    if (originalNotification) {
+      globalThis.Notification = originalNotification
+    } else {
+      delete globalThis.Notification
+    }
+  })
+
   describe('activateRideMode', () => {
     it('sets state.rideMode with the correct shape', () => {
       const { state, rideMode, showToast, lightImpact } = buildTestHarness()
@@ -144,6 +154,26 @@ describe('ride-mode', () => {
       expect(status.stopsAway).toBe(3)
       expect(status.destinationLabel).toBe('Station 3')
       expect(status.etaSeconds).toBe(360)
+    })
+  })
+
+  describe('notification permissions', () => {
+    it('reports unsupported when Notification API is unavailable', () => {
+      delete globalThis.Notification
+      const { rideMode } = buildTestHarness()
+      expect(rideMode.getNotificationPermissionState()).toBe('unsupported')
+    })
+
+    it('requests notification permission when the browser is still undecided', async () => {
+      const requestPermission = vi.fn(async () => 'granted')
+      globalThis.Notification = {
+        permission: 'default',
+        requestPermission,
+      }
+
+      const { rideMode } = buildTestHarness()
+      await expect(rideMode.requestNotificationPermission()).resolves.toBe('granted')
+      expect(requestPermission).toHaveBeenCalledTimes(1)
     })
   })
 

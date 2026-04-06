@@ -57,6 +57,7 @@ export function registerAppEventHandlers({
   isRideModeActive,
   updateRideModeChip,
   onRideModeChipClick,
+  requestRideModeNotificationPermission,
 }) {
   const {
     boardElement,
@@ -129,6 +130,25 @@ export function registerAppEventHandlers({
   })
 
   dialog.addEventListener('click', (event) => {
+    const cancelRideModeTarget = event.target.closest('[data-ride-mode-cancel]')
+    if (cancelRideModeTarget) {
+      deactivateRideMode(copyValue('rideModeDeactivated'))
+      updateRideModeChip()
+      return
+    }
+
+    const openRideModeTarget = event.target.closest('[data-ride-mode-open]')
+    if (openRideModeTarget) {
+      if (isRideModeActive()) onRideModeChipClick()
+      return
+    }
+
+    const requestNotificationTarget = event.target.closest('[data-ride-mode-request-notification]')
+    if (requestNotificationTarget) {
+      void requestRideModeNotificationPermission()
+      return
+    }
+
     if (event.target === dialog) closeStationDialog()
   })
   stationDialogCloseButton?.addEventListener('click', () => closeStationDialog())

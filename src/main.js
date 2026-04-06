@@ -178,6 +178,7 @@ const {
   arrivalsTitleNb,
   arrivalsTitleSb,
   stationAlertsContainer,
+  dialogRideModeContainer,
   arrivalsNbPinned,
   arrivalsNb,
   arrivalsSbPinned,
@@ -804,6 +805,8 @@ const {
   isRideModeActive,
   getRideModeStatus,
   checkRideModeProgress,
+  getNotificationPermissionState,
+  requestNotificationPermission,
 } = createRideMode({
   state,
   copyValue,
@@ -813,6 +816,100 @@ const {
   lightImpact,
   notificationSuccess,
 })
+
+function getRideModeNotificationPresentation() {
+  const permission = getNotificationPermissionState()
+  if (permission === 'unsupported') {
+    return {
+      permission,
+      message: copyValue('rideModeNotifyUnsupported'),
+      showAction: false,
+    }
+  }
+
+  if (permission === 'granted') {
+    return {
+      permission,
+      message: copyValue('rideModeNotifyEnabled'),
+      showAction: false,
+    }
+  }
+
+  if (permission === 'denied') {
+    return {
+      permission,
+      message: copyValue('rideModeNotifyBlocked'),
+      showAction: false,
+    }
+  }
+
+  return {
+    permission,
+    message: copyValue('rideModeNotifyPermission'),
+    actionLabel: copyValue('rideModeNotifyPermissionAction'),
+    showAction: true,
+  }
+}
+
+function getRideModePresentation() {
+  if (!state.rideMode) return null
+
+  const status = getRideModeStatus()
+  const trackedVehicle = getAllVehiclesById().get(state.rideMode.vehicleId) ?? null
+  const destinationLabel = status?.destinationLabel ?? state.rideMode.destinationLabel
+  const stopsAway = status?.stopsAway ?? null
+  const etaSeconds = status?.etaSeconds ?? null
+
+  return {
+    vehicleId: state.rideMode.vehicleId,
+    destinationLabel,
+    stopsAway,
+    etaSeconds,
+    statusLabel: stopsAway === null
+      ? copyValue('rideModeActivated', destinationLabel)
+      : copyValue('rideModeBanner', destinationLabel, stopsAway),
+    vehicleLabel: trackedVehicle ? `${trackedVehicle.lineName} ${getVehicleLabel()} ${trackedVehicle.label}` : '',
+    canOpenVehicle: Boolean(trackedVehicle),
+    notification: getRideModeNotificationPresentation(),
+  }
+}
+
+function renderStationRideModePanel() {
+  if (!dialogRideModeContainer) return
+
+  const ridePresentation = getRideModePresentation()
+  if (!ridePresentation) {
+    dialogRideModeContainer.hidden = true
+    dialogRideModeContainer.innerHTML = ''
+    return
+  }
+
+  const metaParts = [
+    ridePresentation.vehicleLabel,
+    ridePresentation.etaSeconds === null ? '' : copyValue('rideModeEta', formatArrivalTime(ridePresentation.etaSeconds)),
+  ].filter(Boolean)
+
+  dialogRideModeContainer.hidden = false
+  dialogRideModeContainer.innerHTML = `
+    <section class="ride-mode-context-panel">
+      <div class="ride-mode-context-copy">
+        <p class="ride-mode-context-kicker">${copyValue('rideModeActiveTitle')}</p>
+        <p class="ride-mode-context-title">${ridePresentation.statusLabel}</p>
+        ${metaParts.length ? `<p class="ride-mode-context-meta">${metaParts.join(' · ')}</p>` : ''}
+        ${ridePresentation.notification ? `
+          <div class="ride-mode-notification-note is-${ridePresentation.notification.permission}">
+            <span>${ridePresentation.notification.message}</span>
+            ${ridePresentation.notification.showAction ? `<button class="ride-mode-notification-action" data-ride-mode-request-notification type="button">${ridePresentation.notification.actionLabel}</button>` : ''}
+          </div>
+        ` : ''}
+      </div>
+      <div class="ride-mode-context-actions">
+        ${ridePresentation.canOpenVehicle ? `<button class="ride-mode-banner-open" data-ride-mode-open type="button">${copyValue('rideModeOpenTracked')}</button>` : ''}
+        <button class="ride-mode-banner-cancel" data-ride-mode-cancel type="button" aria-label="${copyValue('rideModeCancel')}">&times;</button>
+      </div>
+    </section>
+  `
+}
 
 async function shareArrivals() {
   if (!state.currentDialogStation) return
@@ -1202,7 +1299,7 @@ const overlayDialogs = createOverlayDialogs({
     }
   },
   isRideModeActive,
-  getRideModeStatus,
+  getRideModePresentation,
   onRideDestinationSelect: (vehicleId, stationId, label) => {
     const vehicle = getAllVehiclesById().get(vehicleId)
     if (!vehicle) return
@@ -1226,6 +1323,26 @@ const overlayDialogs = createOverlayDialogs({
     updateRideModeChip()
     // Re-render the train dialog to show the banner + active bell
     renderTrainDialogBase(vehicle)
+  },
+  onRideModeOpen: () => {
+    if (!state.rideMode) return
+    const vehicle = getAllVehiclesById().get(state.rideMode.vehicleId)
+    if (vehicle) renderTrainDialog(vehicle)
+  },
+  onRideModeNotificationRequest: async () => {
+    const permission = await requestNotificationPermission()
+    updateRideModeChip()
+    if (trainDialog.open && state.currentTrainId) {
+      const vehicle = getAllVehiclesById().get(state.currentTrainId)
+      if (vehicle) renderTrainDialogBase(vehicle)
+    }
+    if (permission === 'granted') {
+      showToast(copyValue('rideModeNotifyEnabled'))
+    } else if (permission === 'denied') {
+      showToast(copyValue('rideModeNotifyBlocked'))
+    } else if (permission === 'unsupported') {
+      showToast(copyValue('rideModeNotifyUnsupported'))
+    }
   },
   onRideModeCancel: () => {
     deactivateRideMode(copyValue('rideModeDeactivated'))
@@ -1462,6 +1579,21 @@ registerAppEventHandlers({
     const vehicle = getAllVehiclesById().get(state.rideMode.vehicleId)
     if (vehicle) renderTrainDialog(vehicle)
   },
+  requestRideModeNotificationPermission: async () => {
+    const permission = await requestNotificationPermission()
+    updateRideModeChip()
+    if (trainDialog.open && state.currentTrainId) {
+      const vehicle = getAllVehiclesById().get(state.currentTrainId)
+      if (vehicle) renderTrainDialogBase(vehicle)
+    }
+    if (permission === 'granted') {
+      showToast(copyValue('rideModeNotifyEnabled'))
+    } else if (permission === 'denied') {
+      showToast(copyValue('rideModeNotifyBlocked'))
+    } else if (permission === 'unsupported') {
+      showToast(copyValue('rideModeNotifyUnsupported'))
+    }
+  },
 })
 
 
@@ -1521,6 +1653,7 @@ function renderDialogCopy() {
     setDialogTitle(copyValue('station'))
     dialogServiceSummary.textContent = copyValue('serviceSummary')
   }
+  renderStationRideModePanel()
   if (!trainDialog.open) {
     trainDialogTitle.textContent = copyValue('train')
     trainDialogSubtitle.textContent = copyValue('currentMovement')
@@ -1624,17 +1757,17 @@ function refreshLiveMeta() {
 }
 
 function updateRideModeChip() {
-  if (!state.rideMode) {
-    rideModeChip.hidden = true
-    return
-  }
-  const status = getRideModeStatus()
-  if (!status) {
+  const ridePresentation = getRideModePresentation()
+  renderStationRideModePanel()
+
+  if (!ridePresentation) {
     rideModeChip.hidden = true
     return
   }
   rideModeChip.hidden = false
-  rideModeChipLabel.textContent = copyValue('rideModeChip', status.destinationLabel, status.stopsAway ?? '?')
+  rideModeChipLabel.textContent = ridePresentation.stopsAway === null
+    ? copyValue('rideModeActivated', ridePresentation.destinationLabel)
+    : copyValue('rideModeChip', ridePresentation.destinationLabel, ridePresentation.stopsAway)
 }
 
 function stopLiveRefreshLoop() {
