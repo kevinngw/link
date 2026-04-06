@@ -36,7 +36,7 @@ function normalizeFavoriteRecord(favorite) {
 /**
  * Create favorites manager
  */
-export function createFavoritesManager({ state, showStationDialog, switchSystem, showToast }) {
+export function createFavoritesManager({ state, showStationDialog, switchSystem, showToast, copyValue }) {
   function getFavorites() {
     const favorites = getStoredJSON(FAVORITES_STORAGE_KEY, { fallback: [] })
     if (!Array.isArray(favorites)) return []
@@ -76,6 +76,7 @@ export function createFavoritesManager({ state, showStationDialog, switchSystem,
       lineId: line.id,
       systemId,
     })
+    const willOverflow = getFavorites().length >= FAVORITES_MAX_COUNT
     const favorites = getFavorites().filter((favorite) => favorite.itemKey !== itemKey)
 
     favorites.unshift({
@@ -91,6 +92,10 @@ export function createFavoritesManager({ state, showStationDialog, switchSystem,
       addedAt: Date.now(),
     })
 
+    if (willOverflow) {
+      showToast?.(copyValue?.('favoritesFull'), { tone: 'warn' })
+    }
+
     saveFavorites(favorites)
     return favorites
   }
@@ -100,6 +105,7 @@ export function createFavoritesManager({ state, showStationDialog, switchSystem,
       vehicleId: vehicle.id,
       systemId,
     })
+    const willOverflow = getFavorites().length >= FAVORITES_MAX_COUNT
     const favorites = getFavorites().filter((favorite) => favorite.itemKey !== itemKey)
 
     favorites.unshift({
@@ -115,6 +121,10 @@ export function createFavoritesManager({ state, showStationDialog, switchSystem,
       systemName: state.systemsById.get(systemId)?.name || systemId,
       addedAt: Date.now(),
     })
+
+    if (willOverflow) {
+      showToast?.(copyValue?.('favoritesFull'), { tone: 'warn' })
+    }
 
     saveFavorites(favorites)
     return favorites
@@ -195,7 +205,7 @@ export function createFavoritesManager({ state, showStationDialog, switchSystem,
     if (station) {
       await showStationDialog(station)
     } else {
-      showToast?.(`"${favorite.stationName}" is no longer available`, { tone: 'warn' })
+      showToast?.(copyValue?.('favoritesStationUnavailable', favorite.stationName) || `"${favorite.stationName}" is no longer available`, { tone: 'warn' })
     }
   }
 

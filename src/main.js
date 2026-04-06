@@ -255,6 +255,7 @@ const {
   getFavorites,
   getStationFavorites,
   getFavoriteItem,
+  saveFavorites,
   isFavorite,
   isFavoriteTrain,
   toggleFavorite,
@@ -269,6 +270,7 @@ const {
   showStationDialog: (...args) => dialogLifecycleBridge.showStationDialog(...args),
   switchSystem,
   showToast,
+  copyValue,
 })
 
 function updateFavoriteButton() {
@@ -486,8 +488,31 @@ function renderFavoritesView() {
     const snapshot = state.favoriteArrivals.get(getFavoriteKey(fav))
     const tokenLabel = getLineToken(fav.lineName)
     const tokenType = getLineTokenType(fav.lineName)
+    const removeBtn = `<button type="button" class="favorite-action-btn favorite-action-remove" data-fav-remove-key="${fav.itemKey}" aria-label="${copyValue('removeFavorite')}">× ${copyValue('removeFavorite')}</button>`
+
+    if (!fav.exists) {
+      return `
+        <div class="favorite-item favorite-item-missing"
+             data-favorite-item-key="${fav.itemKey}">
+          <span class="arrival-line-token" data-line-token-type="${tokenType}" style="--line-color:${fav.lineColor};">${tokenLabel}</span>
+          <div class="favorite-item-content">
+            <div class="favorite-item-header">
+              <div>
+                <p class="favorite-item-title">${fav.stationName}</p>
+                <p class="favorite-item-meta">${fav.lineName}${isCurrentSystem ? '' : ` · ${fav.systemName}`}</p>
+              </div>
+            </div>
+            ${renderFavoriteArrivalPreview(fav, snapshot)}
+            <div class="favorite-item-actions">
+              ${removeBtn}
+            </div>
+          </div>
+        </div>
+      `
+    }
+
     return `
-      <div class="favorite-item ${fav.exists ? '' : 'favorite-item-missing'}" 
+      <div class="favorite-item"
            data-favorite-item-key="${fav.itemKey}"
            role="button" tabindex="0">
         <span class="arrival-line-token" data-line-token-type="${tokenType}" style="--line-color:${fav.lineColor};">${tokenLabel}</span>
@@ -502,7 +527,7 @@ function renderFavoritesView() {
           <div class="favorite-item-actions">
             <button type="button" class="favorite-action-btn" data-fav-item-move="up" data-fav-item-key="${fav.itemKey}" aria-label="${copyValue('moveUp')}">▲ ${copyValue('moveUp')}</button>
             <button type="button" class="favorite-action-btn" data-fav-item-move="down" data-fav-item-key="${fav.itemKey}" aria-label="${copyValue('moveDown')}">▼ ${copyValue('moveDown')}</button>
-            <button type="button" class="favorite-action-btn favorite-action-remove" data-fav-remove-key="${fav.itemKey}" aria-label="${copyValue('removeFavorite')}">× ${copyValue('removeFavorite')}</button>
+            ${removeBtn}
           </div>
         </div>
       </div>
@@ -943,6 +968,7 @@ const {
   showToast,
   lightImpact,
   notificationSuccess,
+  basePath: import.meta.env.BASE_URL,
 })
 
 function getRideModeNotificationPresentation() {
@@ -1690,7 +1716,9 @@ registerAppEventHandlers({
   showInsightsDetail,
   showStationDialog,
   switchSystem,
+  getFavorites,
   getFavoriteItem,
+  saveFavorites,
   handleFavoriteClick,
   handleFavoriteTrainClick,
   moveFavorite,
@@ -1902,9 +1930,9 @@ function updateRideModeChip() {
     return
   }
   rideModeChip.hidden = false
-  rideModeChipLabel.textContent = ridePresentation.stopsAway === null
-    ? copyValue('rideModeActivated', ridePresentation.destinationLabel)
-    : copyValue('rideModeChip', ridePresentation.destinationLabel, ridePresentation.stopsAway)
+  rideModeChipLabel.textContent = ridePresentation.stopsAway !== null
+    ? copyValue('rideModeChip', ridePresentation.destinationLabel, ridePresentation.stopsAway)
+    : copyValue('rideModeChipTracking', ridePresentation.destinationLabel)
 }
 
 function stopLiveRefreshLoop() {
@@ -1983,41 +2011,49 @@ async function refreshFavoriteArrivals({ force = false } = {}) {
 
     if (didPrimeLoadingState && state.activeTab === 'favorites') render()
 
-    for (const favorite of favorites) {
-      if (state.favoriteArrivalsRequestId !== requestId) return
-
+    // Fetch arrivals concurrently in small batches for responsiveness
+    const BATCH_SIZE = 3
+    const stale = favorites.filter((favorite) => {
+      if (state.favoriteArrivalsRequestId !== requestId) return false
       const key = getFavoriteKey(favorite)
       const cached = state.favoriteArrivals.get(key)
       const isFresh = cached?.fetchedAt && (Date.now() - cached.fetchedAt) < ARRIVALS_CACHE_TTL_MS && !cached?.error
-      if (!force && (cached?.loading === false && isFresh)) continue
+      return !((!force && (cached?.loading === false && isFresh)))
+    })
 
-      try {
-        const { line, station } = await resolveFavoriteRecord(favorite)
-        if (!line || !station) {
-          state.favoriteArrivals.set(key, { loading: false, error: 'missing', fetchedAt: Date.now(), arrivals: { nb: [], sb: [] } })
-          if (state.activeTab === 'favorites') render()
-          continue
+    for (let i = 0; i < stale.length; i += BATCH_SIZE) {
+      if (state.favoriteArrivalsRequestId !== requestId) return
+      const batch = stale.slice(i, i + BATCH_SIZE)
+
+      await Promise.allSettled(batch.map(async (favorite) => {
+        const key = getFavoriteKey(favorite)
+        try {
+          const { line, station } = await resolveFavoriteRecord(favorite)
+          if (!line || !station) {
+            state.favoriteArrivals.set(key, { loading: false, error: 'missing', fetchedAt: Date.now(), arrivals: { nb: [], sb: [] } })
+            return
+          }
+
+          const stopIds = getStationStopIds(station, line)
+          const arrivalFeed = await fetchArrivalsForStopIds(stopIds)
+          const arrivals = buildArrivalsForLine(arrivalFeed, line, stopIds)
+
+          state.favoriteArrivals.set(key, {
+            loading: false,
+            error: '',
+            fetchedAt: Date.now(),
+            arrivals,
+          })
+        } catch (error) {
+          console.warn(`Failed to refresh favorite arrivals for ${favorite.stationName}:`, error)
+          state.favoriteArrivals.set(key, {
+            loading: false,
+            error: error?.errorType || error?.message || 'request-failed',
+            fetchedAt: Date.now(),
+            arrivals: { nb: [], sb: [] },
+          })
         }
-
-        const stopIds = getStationStopIds(station, line)
-        const arrivalFeed = await fetchArrivalsForStopIds(stopIds)
-        const arrivals = buildArrivalsForLine(arrivalFeed, line, stopIds)
-
-        state.favoriteArrivals.set(key, {
-          loading: false,
-          error: '',
-          fetchedAt: Date.now(),
-          arrivals,
-        })
-      } catch (error) {
-        console.warn(`Failed to refresh favorite arrivals for ${favorite.stationName}:`, error)
-        state.favoriteArrivals.set(key, {
-          loading: false,
-          error: error?.errorType || error?.message || 'request-failed',
-          fetchedAt: Date.now(),
-          arrivals: { nb: [], sb: [] },
-        })
-      }
+      }))
 
       if (state.activeTab === 'favorites') render()
     }
@@ -2057,6 +2093,11 @@ async function switchSystem(systemId, { updateUrl = true, preserveDialog = false
       showToast(copyValue('startupRequestFailed'))
       return
     }
+  }
+
+  if (state.rideMode) {
+    deactivateRideMode(copyValue('rideModeDeactivated'))
+    updateRideModeChip()
   }
 
   applySystem(systemId)
@@ -2143,7 +2184,10 @@ async function refreshVehicles({ renderAfter = true } = {}) {
     console.error(error)
   }
 
-  if (state.rideMode) checkRideModeProgress()
+  if (state.rideMode) {
+    checkRideModeProgress()
+    updateRideModeChip()
+  }
 
   if (renderAfter) {
     render()

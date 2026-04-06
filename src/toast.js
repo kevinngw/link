@@ -37,7 +37,7 @@ export function createToast(toastRegionElement) {
     }
   }
 
-  function showToast(message, { tone = 'error', dedupeMs = 15_000 } = {}) {
+  function showToast(message, { tone = 'error', dedupeMs = 15_000, action = null } = {}) {
     if (!message) return
 
     const now = Date.now()
@@ -46,11 +46,26 @@ export function createToast(toastRegionElement) {
     lastToastMessage = message
     lastToastAt = now
     syncToastHost()
-    toastRegionElement.innerHTML = `<div class="toast toast-${tone}">${message}</div>`
+
+    const actionHtml = action
+      ? ` <button class="toast-action" type="button">${action.label}</button>`
+      : ''
+    toastRegionElement.innerHTML = `<div class="toast toast-${tone}">${message}${actionHtml}</div>`
+
+    if (action) {
+      const actionBtn = toastRegionElement.querySelector('.toast-action')
+      if (actionBtn) {
+        actionBtn.addEventListener('click', () => {
+          action.onClick()
+          hideToast()
+        }, { once: true })
+      }
+    }
+
     window.clearTimeout(toastHideTimer)
     toastHideTimer = window.setTimeout(() => {
       hideToast()
-    }, 4500)
+    }, action ? 6000 : 4500)
   }
 
   return { showToast, hideToast }

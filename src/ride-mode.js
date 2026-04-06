@@ -6,7 +6,7 @@ import { RIDE_MODE_HEADSUP_STOPS, RIDE_MODE_HEADSUP_STOPS_SHORT_TRIP, RIDE_MODE_
  * Uses existing vehicle position data (no GPS) to track stops-away count.
  * Two notification thresholds: heads-up (3 stops) and arrival (1 stop / next stop).
  */
-export function createRideMode({ state, copyValue, getAllVehiclesById, getTrainTimelineEntries, showToast, lightImpact, notificationSuccess }) {
+export function createRideMode({ state, copyValue, getAllVehiclesById, getTrainTimelineEntries, showToast, lightImpact, notificationSuccess, basePath = '/link/' }) {
   function getNotificationPermissionState() {
     if (!('Notification' in window)) return 'unsupported'
     return Notification.permission
@@ -174,7 +174,7 @@ export function createRideMode({ state, copyValue, getAllVehiclesById, getTrainT
   function sendWebNotification(title, body) {
     if (getNotificationPermissionState() !== 'granted') return
     try {
-      new Notification(title, { body, icon: '/link/icon-192.png', tag: 'ride-mode' })
+      new Notification(title, { body, icon: `${basePath}icon-192.png`, tag: 'ride-mode' })
     } catch {
       // Notification constructor can throw on some platforms
     }

@@ -41,7 +41,9 @@ export function registerAppEventHandlers({
   showInsightsDetail,
   showStationDialog,
   switchSystem,
+  getFavorites,
   getFavoriteItem,
+  saveFavorites,
   handleFavoriteClick,
   handleFavoriteTrainClick,
   moveFavorite,
@@ -445,6 +447,7 @@ export function registerAppEventHandlers({
     if (removeBtn) {
       event.preventDefault()
       event.stopPropagation()
+      const snapshotBeforeRemove = getFavorites()
       const favorite = getFavoriteItem(removeBtn.dataset.favRemoveKey)
       if (!favorite) return
       if (favorite.type === 'station') {
@@ -454,7 +457,16 @@ export function registerAppEventHandlers({
         removeFavoriteTrain(favorite.vehicleId, favorite.systemId)
         updateTrainFavoriteButton()
       }
-      showToast(copyValue('favoriteRemoved'))
+      showToast(copyValue('favoriteRemoved'), {
+        tone: 'error',
+        action: {
+          label: copyValue('favoriteRemovedUndo'),
+          onClick: () => {
+            saveFavorites(snapshotBeforeRemove)
+            render()
+          },
+        },
+      })
       render()
       return
     }
