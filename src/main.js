@@ -29,6 +29,7 @@ import { RECENT_SEARCHES_KEY, createStationSearch } from './station-search'
 import { FAVORITES_STORAGE_KEY, createFavoritesManager } from './favorites'
 import { RECENT_STATIONS_KEY, createRecentStationsManager } from './recent-stations'
 import { createRideMode } from './ride-mode'
+import { resolveVehicleForArrival } from './arrival-vehicle'
 import { shouldRegisterServiceWorker } from './native/platform'
 import { initializeAppStorage, getStoredString, setStoredString } from './native/storage'
 import { copyTextToClipboard, shareTextContent } from './native/share'
@@ -209,6 +210,13 @@ function findStationAndLineByStopId(stopId) {
 }
 
 const { showToast } = createToast(toastRegionElement)
+
+function resolveArrivalVehicle(arrival) {
+  return resolveVehicleForArrival(arrival, {
+    getAllVehiclesById,
+    getAllVehicles,
+  })
+}
 
 const { getRecentStations, addRecentStation } = createRecentStationsManager()
 const dialogLifecycleBridge = {
@@ -1269,7 +1277,7 @@ const { renderArrivalLists } = createStationDialogRenderers({
   getVehicleLabelPlural,
   getStatusTone,
   getArrivalServiceStatus,
-  getAllVehiclesById,
+  resolveVehicleForArrival: resolveArrivalVehicle,
   syncDialogDisplayScroll,
 })
 
@@ -1552,6 +1560,7 @@ registerAppEventHandlers({
   setPageParam,
   findStationAndLineByStopId,
   getAllVehiclesById,
+  resolveArrivalVehicle,
   renderTrainDialog,
   renderAlertListDialog,
   buildInsightsDetailContent,

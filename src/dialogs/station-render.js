@@ -12,7 +12,7 @@ export function createStationDialogRenderers({
   getVehicleLabelPlural,
   getStatusTone,
   getArrivalServiceStatus,
-  getAllVehiclesById,
+  resolveVehicleForArrival,
   syncDialogDisplayScroll,
 }) {
   const {
@@ -45,12 +45,11 @@ export function createStationDialogRenderers({
 
       const clockTime = diffSec > 0 ? formatClockTime(arrivalMs) : ''
 
-      const liveVehicle = arrival.rawVehicleId
-        ? getAllVehiclesById().get(arrival.rawVehicleId) ?? null
-        : null
-      const wrapperTag = liveVehicle ? 'button' : 'div'
-      const interactiveAttrs = liveVehicle
-        ? ` type="button" data-arrival-vehicle-id="${liveVehicle.id}" aria-label="${arrival.lineName} ${getVehicleLabel()} ${arrival.vehicleId}"`
+      const resolvedVehicle = resolveVehicleForArrival(arrival)
+      const hasVehicleLink = Boolean(resolvedVehicle || arrival.rawVehicleId || arrival.vehicleId !== '--')
+      const wrapperTag = hasVehicleLink ? 'button' : 'div'
+      const interactiveAttrs = hasVehicleLink
+        ? ` type="button" data-arrival-vehicle-id="${arrival.rawVehicleId || ''}" data-arrival-vehicle-label="${arrival.vehicleId || ''}" data-arrival-line-id="${arrival.lineId || ''}" aria-label="${arrival.lineName} ${getVehicleLabel()} ${arrival.vehicleId}"`
         : ''
 
       const statusLabel = formatArrivalStatusLabel(serviceStatus, copyValue)
@@ -59,7 +58,7 @@ export function createStationDialogRenderers({
 
       return `
         <div class="arrival-card">
-          <${wrapperTag} class="arrival-item${liveVehicle ? ' arrival-item-clickable' : ''}" data-arrival-time="${arrival.arrivalTime}" data-schedule-deviation="${arrival.scheduleDeviation ?? 0}"${interactiveAttrs}>
+          <${wrapperTag} class="arrival-item${hasVehicleLink ? ' arrival-item-clickable' : ''}" data-arrival-time="${arrival.arrivalTime}" data-schedule-deviation="${arrival.scheduleDeviation ?? 0}"${interactiveAttrs}>
             <span class="arrival-row arrival-row-top">
               <span class="arrival-meta">
                 <span class="arrival-line-token" style="--line-color:${arrival.lineColor};">${arrival.lineToken}</span>

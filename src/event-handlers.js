@@ -34,6 +34,7 @@ export function registerAppEventHandlers({
   setPageParam,
   findStationAndLineByStopId,
   getAllVehiclesById,
+  resolveArrivalVehicle,
   renderTrainDialog,
   renderAlertListDialog,
   buildInsightsDetailContent,
@@ -395,9 +396,13 @@ export function registerAppEventHandlers({
   dialog.addEventListener('click', (event) => {
     const item = event.target.closest('[data-arrival-vehicle-id]')
     if (!item) return
-    const vehicle = getAllVehiclesById().get(item.dataset.arrivalVehicleId)
+    const vehicle = resolveArrivalVehicle({
+      rawVehicleId: item.dataset.arrivalVehicleId ?? '',
+      vehicleId: item.dataset.arrivalVehicleLabel ?? '',
+      lineId: item.dataset.arrivalLineId ?? '',
+    })
     if (!vehicle) return
-    state.currentTrainId = item.dataset.arrivalVehicleId
+    state.currentTrainId = vehicle.id
     renderTrainDialog(vehicle)
   })
 

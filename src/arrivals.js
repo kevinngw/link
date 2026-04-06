@@ -201,6 +201,7 @@ export function createArrivalsHelpers({ state, fetchJsonWithRetry, getStationSto
       seen.add(dedupeKey)
 
       arrivals[bucket].push({
+        lineId: line.id,
         vehicleId: (arrival.vehicleId || '').replace(/^\d+_/, '') || '--',
         rawVehicleId: arrival.vehicleId || '',
         arrivalTime,
