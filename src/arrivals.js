@@ -58,6 +58,10 @@ export function classifyArrivalDirection(arrival, line) {
   if (lookedUpDirection === '1') return 'nb'
   if (lookedUpDirection === '0') return 'sb'
 
+  const directionId = String(arrival.directionId ?? '')
+  if (directionId === '1') return 'nb'
+  if (directionId === '0') return 'sb'
+
   const headsign = arrival.tripHeadsign ?? ''
   const headsignLower = headsign.toLowerCase()
 
@@ -66,10 +70,6 @@ export function classifyArrivalDirection(arrival, line) {
 
   if (/Lynnwood|Downtown Redmond/i.test(headsign)) return 'nb'
   if (/Federal Way|South Bellevue/i.test(headsign)) return 'sb'
-
-  const directionId = String(arrival.directionId ?? '')
-  if (directionId === '1') return 'nb'
-  if (directionId === '0') return 'sb'
 
   return ''
 }

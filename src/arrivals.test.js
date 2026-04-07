@@ -33,6 +33,20 @@ describe('arrivals', () => {
       
       expect(classifyArrivalDirection(arrival, line)).toBe('sb')
     })
+
+    it('prefers directionId over conflicting headsign keywords', () => {
+      const line = {}
+
+      expect(classifyArrivalDirection({
+        tripHeadsign: 'to South Bellevue',
+        directionId: '1',
+      }, line)).toBe('nb')
+
+      expect(classifyArrivalDirection({
+        tripHeadsign: 'to Downtown Redmond',
+        directionId: '0',
+      }, line)).toBe('sb')
+    })
     
     it('returns empty for unknown', () => {
       const line = {}
