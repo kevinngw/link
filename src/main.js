@@ -23,6 +23,24 @@ import { createStationSearch } from './station-search'
 import { createFavoritesManager } from './favorites'
 import { createRecentStationsManager } from './recent-stations'
 
+const ALERT_STRIP_DISMISS_STORAGE_KEY = 'link-pulse-alert-strip-dismissed'
+
+function getStoredAlertStripDismissKey() {
+  try {
+    return localStorage.getItem(ALERT_STRIP_DISMISS_STORAGE_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function setStoredAlertStripDismissKey(key) {
+  try {
+    localStorage.setItem(ALERT_STRIP_DISMISS_STORAGE_KEY, key)
+  } catch {
+    // Ignore storage errors; the in-memory state still dismisses for this session.
+  }
+}
+
 const state = {
   fetchedAt: '',
   error: '',
@@ -59,6 +77,7 @@ const state = {
   insightsTickerTimer: 0,
   currentTrainId: '',
   alerts: [],
+  dismissedAlertStripKey: getStoredAlertStripDismissKey(),
   systemSnapshots: new Map(),
   vehicleGhosts: new Map(),
   language: 'en',
@@ -114,6 +133,7 @@ document.querySelector('#app').innerHTML = `
         <p id="updated-at" class="status-pill updated-at-pill">Waiting for snapshot</p>
       </div>
     </header>
+    <div id="alert-strip" class="alert-strip" role="alert" hidden></div>
     <div class="switcher-stack">
       <section id="system-bar" class="tab-bar system-bar" aria-label="Transit systems"></section>
       <section id="view-bar" class="tab-bar" aria-label="Board views">
@@ -269,6 +289,7 @@ const tabButtons = [...document.querySelectorAll('.tab-button')]
 const stationSearchToggleButton = document.querySelector('#station-search-toggle')
 const languageToggleButton = document.querySelector('#language-toggle')
 const themeToggleButton = document.querySelector('#theme-toggle')
+const alertStripElement = document.querySelector('#alert-strip')
 const statusPillElement = document.querySelector('#status-pill')
 const currentTimeElement = document.querySelector('#current-time')
 const updatedAtElement = document.querySelector('#updated-at')
@@ -509,6 +530,21 @@ dialogStatusPillElement.addEventListener('click', async () => {
   showToast(copyValue('refreshingData'))
   await refreshVisibleRealtime()
   showToast(copyValue('dataRefreshed'))
+})
+
+alertStripElement.addEventListener('click', (event) => {
+  if (event.target.closest('.alert-strip-close')) {
+    event.stopPropagation()
+    dismissAlertStrip()
+    return
+  }
+  renderSystemAlertDialog()
+})
+
+alertStripElement.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  renderSystemAlertDialog()
 })
 
 // ---------------------------------------------------------------------------
@@ -1297,6 +1333,109 @@ function renderInlineAlerts(lineAlerts, lineId) {
       <span class="line-alert-badge-copy">${copyValue('alertsWord', lineAlerts.length)}</span>
     </button>
   `
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value).replaceAll('`', '&#96;')
+}
+
+function getAlertStripKey() {
+  if (!state.alerts.length) return ''
+  const alertIds = state.alerts.map((alert) => alert.id).sort().join('|')
+  return `${state.activeSystemId}:${alertIds}`
+}
+
+function getAlertLineNames(alert) {
+  return alert.lineIds
+    .map((lineId) => state.lines.find((line) => line.id === lineId)?.name)
+    .filter(Boolean)
+}
+
+function getAlertStripSummary(alerts) {
+  const lineNames = [...new Set(alerts.flatMap(getAlertLineNames))]
+  const firstAlert = alerts[0]
+  const firstLine = getAlertLineNames(firstAlert)[0]
+  const firstTitle = firstAlert?.title || copyValue('serviceAlert')
+  const prefix = copyValue('alertStripCount', alerts.length)
+  const scope = lineNames.length > 1
+    ? copyValue('alertsAcrossLines', alerts.length, lineNames.length)
+    : firstLine
+      ? copyValue('alertsAffecting', firstLine, alerts.length)
+      : prefix
+  return `${prefix}. ${scope} ${firstTitle}`
+}
+
+function renderAlertStrip() {
+  const stripKey = getAlertStripKey()
+  const shouldShow = Boolean(stripKey && state.dismissedAlertStripKey !== stripKey)
+  alertStripElement.hidden = !shouldShow
+  if (!shouldShow) {
+    alertStripElement.innerHTML = ''
+    return
+  }
+
+  alertStripElement.innerHTML = `
+    <span class="alert-strip-badge" aria-hidden="true">${state.alerts.length}</span>
+    <span class="alert-strip-text">${escapeHtml(getAlertStripSummary(state.alerts))}</span>
+    <button class="alert-strip-close" type="button" aria-label="${escapeAttribute(copyValue('alertStripDismiss'))}">&times;</button>
+  `
+  alertStripElement.setAttribute('tabindex', '0')
+  alertStripElement.setAttribute('aria-label', getAlertStripSummary(state.alerts))
+}
+
+function dismissAlertStrip() {
+  const stripKey = getAlertStripKey()
+  if (!stripKey) return
+  state.dismissedAlertStripKey = stripKey
+  setStoredAlertStripDismissKey(stripKey)
+  renderAlertStrip()
+}
+
+function renderSystemAlertDialog({ updateUrl = false } = {}) {
+  const alerts = state.alerts
+  if (!alerts.length) return
+
+  const lineNames = [...new Set(alerts.flatMap(getAlertLineNames))]
+  alertDialogTitle.textContent = copyValue('activeAlerts', alerts.length)
+  alertDialogSubtitle.textContent = lineNames.length
+    ? copyValue('alertsAcrossLines', alerts.length, lineNames.length)
+    : copyValue('transitAdvisory')
+  alertDialogLines.textContent = lineNames.join(' • ')
+  alertDialogBody.innerHTML = alerts
+    .map((alert) => {
+      const affectedLines = getAlertLineNames(alert).join(' • ')
+      return `
+        <article class="alert-dialog-item">
+          <p class="alert-dialog-item-meta">${escapeHtml(formatAlertSeverity(alert.severity))} • ${escapeHtml(formatAlertEffect(alert.effect))}${affectedLines ? ` • ${escapeHtml(affectedLines)}` : ''}</p>
+          <p class="alert-dialog-item-title">${escapeHtml(alert.title || copyValue('serviceAlert'))}</p>
+          <p class="alert-dialog-item-copy">${escapeHtml(alert.description || copyValue('noAdditionalAlertDetails'))}</p>
+          ${
+            alert.url
+              ? `<p class="alert-dialog-item-link-wrap"><a class="alert-dialog-link" href="${escapeAttribute(alert.url)}" target="_blank" rel="noreferrer">${escapeHtml(copyValue('readOfficialAlert'))}</a></p>`
+              : ''
+          }
+        </article>
+      `
+    })
+    .join('')
+  alertDialogLink.hidden = true
+  alertDialogLink.removeAttribute('href')
+
+  state.activeDialogType = 'alerts'
+  if (updateUrl) {
+    const firstLineId = alerts.flatMap((alert) => alert.lineIds)[0]
+    if (firstLineId) setAlertDialogParams(firstLineId)
+  }
+  if (!alertDialog.open) alertDialog.showModal()
 }
 
 function formatVehicleSegment(vehicle) {
@@ -2355,6 +2494,7 @@ function render() {
   renderShellCopy()
   renderDialogCopy()
   refreshLiveMeta()
+  renderAlertStrip()
 
   systemBarElement.hidden = state.systemsById.size < 2
   systemBarElement.innerHTML = renderSystemSwitcher()
