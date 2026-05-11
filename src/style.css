@@ -4552,6 +4552,46 @@ dialog.is-closing::backdrop {
 
 /* ─── Favorites feature styles ─── */
 
+.favorites-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.favorites-sort {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-pill);
+  background: var(--surface-soft);
+  flex: 0 0 auto;
+}
+
+.favorites-sort-button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+
+.favorites-sort-button:hover {
+  color: var(--text-primary);
+  background: var(--surface-active);
+}
+
+.favorites-sort-button.is-active {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-strong) 20%, var(--surface-active));
+}
+
 .dialog-favorite-button {
   width: 44px;
   height: 44px;
@@ -4759,6 +4799,18 @@ dialog.is-closing::backdrop {
 }
 
 @media (max-width: 700px) {
+  .favorites-panel-header {
+    display: grid;
+  }
+
+  .favorites-sort {
+    width: 100%;
+  }
+
+  .favorites-sort-button {
+    flex: 1;
+  }
+
   .dialog-favorite-button {
     width: 36px;
     height: 36px;

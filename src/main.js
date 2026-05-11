@@ -24,6 +24,9 @@ import { createFavoritesManager } from './favorites'
 import { createRecentStationsManager } from './recent-stations'
 
 const ALERT_STRIP_DISMISS_STORAGE_KEY = 'link-pulse-alert-strip-dismissed'
+const FAVORITES_SORT_STORAGE_KEY = 'link-pulse-favorites-sort'
+const FAVORITES_SORT_CUSTOM = 'custom'
+const FAVORITES_SORT_SOONEST = 'soonest'
 
 function getStoredAlertStripDismissKey() {
   try {
@@ -38,6 +41,23 @@ function setStoredAlertStripDismissKey(key) {
     localStorage.setItem(ALERT_STRIP_DISMISS_STORAGE_KEY, key)
   } catch {
     // Ignore storage errors; the in-memory state still dismisses for this session.
+  }
+}
+
+function getStoredFavoritesSort() {
+  try {
+    const value = localStorage.getItem(FAVORITES_SORT_STORAGE_KEY)
+    return value === FAVORITES_SORT_SOONEST ? FAVORITES_SORT_SOONEST : FAVORITES_SORT_CUSTOM
+  } catch {
+    return FAVORITES_SORT_CUSTOM
+  }
+}
+
+function setStoredFavoritesSort(value) {
+  try {
+    localStorage.setItem(FAVORITES_SORT_STORAGE_KEY, value)
+  } catch {
+    // Ignore storage errors; the current session state still updates.
   }
 }
 
@@ -99,6 +119,7 @@ const state = {
   favoriteArrivals: new Map(),
   favoriteArrivalsRequestId: 0,
   favoriteArrivalsRefreshPromise: null,
+  favoritesSort: getStoredFavoritesSort(),
 }
 
 function closeDialogAnimated(dialogEl) {
@@ -777,8 +798,57 @@ function renderFavoriteArrivalPreview(favorite, snapshot) {
   `
 }
 
+function getFavoriteNextArrivalTime(favorite) {
+  const snapshot = state.favoriteArrivals.get(getFavoriteKey(favorite))
+  if (!snapshot || snapshot.loading || snapshot.error) return Number.POSITIVE_INFINITY
+
+  const now = Date.now() - 30_000
+  const arrivals = [
+    ...(snapshot.arrivals?.nb ?? []),
+    ...(snapshot.arrivals?.sb ?? []),
+  ]
+    .map((arrival) => Number(arrival.arrivalTime))
+    .filter((time) => Number.isFinite(time) && time >= now)
+
+  return arrivals.length ? Math.min(...arrivals) : Number.POSITIVE_INFINITY
+}
+
+function sortFavoritesForDisplay(favorites) {
+  if (state.favoritesSort !== FAVORITES_SORT_SOONEST) return favorites
+
+  return favorites
+    .map((favorite, index) => ({ favorite, index, nextArrivalTime: getFavoriteNextArrivalTime(favorite) }))
+    .sort((left, right) => {
+      const leftHasArrival = Number.isFinite(left.nextArrivalTime)
+      const rightHasArrival = Number.isFinite(right.nextArrivalTime)
+      if (leftHasArrival !== rightHasArrival) return leftHasArrival ? -1 : 1
+      return left.nextArrivalTime - right.nextArrivalTime || left.index - right.index
+    })
+    .map((entry) => entry.favorite)
+}
+
+function renderFavoritesSortControls() {
+  const options = [
+    { value: FAVORITES_SORT_CUSTOM, label: copyValue('favoritesSortCustom') },
+    { value: FAVORITES_SORT_SOONEST, label: copyValue('favoritesSortSoonest') },
+  ]
+
+  return `
+    <div class="favorites-sort" role="group" aria-label="${copyValue('favoritesSortAria')}">
+      ${options.map((option) => `
+        <button
+          type="button"
+          class="favorites-sort-button${state.favoritesSort === option.value ? ' is-active' : ''}"
+          data-fav-sort="${option.value}"
+          aria-pressed="${state.favoritesSort === option.value}"
+        >${option.label}</button>
+      `).join('')}
+    </div>
+  `
+}
+
 function renderFavoritesView() {
-  const favorites = getFavoriteDisplayData()
+  const favorites = sortFavoritesForDisplay(getFavoriteDisplayData())
 
   if (!favorites.length) {
     return `
@@ -809,8 +879,10 @@ function renderFavoritesView() {
           </div>
           ${renderFavoriteArrivalPreview(fav, snapshot)}
           <div class="favorite-item-actions">
-            <button type="button" class="favorite-action-btn" data-fav-move="up" data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('moveUp')}">▲ ${copyValue('moveUp')}</button>
-            <button type="button" class="favorite-action-btn" data-fav-move="down" data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('moveDown')}">▼ ${copyValue('moveDown')}</button>
+            ${state.favoritesSort === FAVORITES_SORT_CUSTOM ? `
+              <button type="button" class="favorite-action-btn" data-fav-move="up" data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('moveUp')}">▲ ${copyValue('moveUp')}</button>
+              <button type="button" class="favorite-action-btn" data-fav-move="down" data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('moveDown')}">▼ ${copyValue('moveDown')}</button>
+            ` : ''}
             <button type="button" class="favorite-action-btn favorite-action-remove" data-fav-remove data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('removeFavorite')}">× ${copyValue('removeFavorite')}</button>
           </div>
         </div>
@@ -820,11 +892,12 @@ function renderFavoritesView() {
 
   return `
     <article class="panel-card panel-card-wide">
-      <header class="panel-header">
+      <header class="panel-header favorites-panel-header">
         <div>
           <h2>${copyValue('favoritesTitle')}</h2>
-          <p class="updated-at">${copyValue('favoritesLiveHint')}</p>
+          <p class="updated-at">${state.favoritesSort === FAVORITES_SORT_SOONEST ? copyValue('favoritesSoonestHint') : copyValue('favoritesLiveHint')}</p>
         </div>
+        ${renderFavoritesSortControls()}
       </header>
       <div class="favorites-list">
         ${items}
@@ -834,6 +907,15 @@ function renderFavoritesView() {
 }
 
 boardElement.addEventListener('click', (e) => {
+  const sortBtn = e.target.closest('[data-fav-sort]')
+  if (sortBtn) {
+    e.stopPropagation()
+    state.favoritesSort = sortBtn.dataset.favSort === FAVORITES_SORT_SOONEST ? FAVORITES_SORT_SOONEST : FAVORITES_SORT_CUSTOM
+    setStoredFavoritesSort(state.favoritesSort)
+    renderBoard()
+    return
+  }
+
   const moveBtn = e.target.closest('[data-fav-move]')
   if (moveBtn) {
     e.stopPropagation()
