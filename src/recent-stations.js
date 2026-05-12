@@ -1,14 +1,29 @@
 const RECENT_STATIONS_KEY = 'link-pulse-recent-stations'
 const RECENT_STATIONS_MAX_COUNT = 10
 
+function parseStoredRecentStations(raw) {
+  if (!raw) return []
+  const parsed = JSON.parse(raw)
+  return Array.isArray(parsed) ? parsed : []
+}
+
 /**
  * Create recent stations manager
  */
 export function createRecentStationsManager() {
   function getRecentStations() {
     try {
-      const raw = window.sessionStorage.getItem(RECENT_STATIONS_KEY)
-      return raw ? JSON.parse(raw) : []
+      const raw = window.localStorage.getItem(RECENT_STATIONS_KEY)
+      if (raw) return parseStoredRecentStations(raw)
+    } catch {
+      // Fall through to the legacy sessionStorage read below.
+    }
+
+    try {
+      const legacyRaw = window.sessionStorage.getItem(RECENT_STATIONS_KEY)
+      const legacyStations = parseStoredRecentStations(legacyRaw)
+      if (legacyStations.length) saveRecentStations(legacyStations)
+      return legacyStations
     } catch {
       return []
     }
@@ -16,7 +31,7 @@ export function createRecentStationsManager() {
 
   function saveRecentStations(stations) {
     try {
-      window.sessionStorage.setItem(RECENT_STATIONS_KEY, JSON.stringify(stations.slice(0, RECENT_STATIONS_MAX_COUNT)))
+      window.localStorage.setItem(RECENT_STATIONS_KEY, JSON.stringify(stations.slice(0, RECENT_STATIONS_MAX_COUNT)))
     } catch {}
   }
 
@@ -39,13 +54,14 @@ export function createRecentStationsManager() {
       systemName,
       viewedAt: Date.now(),
     })
-    
+
     saveRecentStations(filtered)
     return filtered
   }
 
   function clearRecentStations() {
     try {
+      window.localStorage.removeItem(RECENT_STATIONS_KEY)
       window.sessionStorage.removeItem(RECENT_STATIONS_KEY)
     } catch {}
   }
