@@ -1,6 +1,13 @@
 import { DEFAULT_SYSTEM_ID } from './config'
 import { slugifyStation } from './utils'
 
+const PAGE_IDS = ['map', 'trains', 'favorites', 'insights']
+
+function normalizePage(page) {
+  const requestedPage = (page ?? '').trim().toLowerCase()
+  return PAGE_IDS.includes(requestedPage) ? requestedPage : 'map'
+}
+
 export function updateUrlParams(mutator) {
   const url = new URL(window.location.href)
   const before = url.search
@@ -10,7 +17,7 @@ export function updateUrlParams(mutator) {
 }
 
 export function setPageParam(page) {
-  const nextPage = ['map', 'trains', 'insights'].includes(page) ? page : 'map'
+  const nextPage = normalizePage(page)
   updateUrlParams((params) => {
     if (nextPage === 'map') params.delete('page')
     else params.set('page', nextPage)
@@ -19,8 +26,7 @@ export function setPageParam(page) {
 
 export function getPageFromUrl() {
   const url = new URL(window.location.href)
-  const requestedPage = (url.searchParams.get('page') ?? '').trim().toLowerCase()
-  return ['map', 'trains', 'insights'].includes(requestedPage) ? requestedPage : 'map'
+  return normalizePage(url.searchParams.get('page'))
 }
 
 export function setSystemParam(systemId) {
