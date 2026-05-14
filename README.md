@@ -11,6 +11,7 @@ Realtime PWA for Puget Sound transit, tracking live vehicles, arrivals, and serv
 - **Four views** — `Map`, `Trains/Buses`, `Favorites`, and `Insights` tabs
 - **Map view** — SVG visualization of stations and live vehicle positions with ghost trails
 - **Station arrivals dialog** — click any station to see upcoming arrivals (next 60 min), service summary, alerts, and sharing options
+- **Shareable vehicle status** — open any live train/bus to share its direction, current location, next stop ETA, and deep link
 - **Board display mode** — fullscreen station view with auto-rotating directions, optimized for glanceable public displays
 - **Station search** — press `/` to search by name, line, or system; supports location-based nearby station search
 - **Favorites** — save frequently used stations for quick access

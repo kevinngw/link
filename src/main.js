@@ -233,6 +233,7 @@ document.querySelector('#app').innerHTML = `
           <p id="train-dialog-subtitle" class="updated-at">Current movement</p>
         </div>
         <div class="dialog-actions">
+          <button id="train-dialog-share" class="dialog-close dialog-share-button" type="button" aria-label="Share vehicle status">Share</button>
           <button id="train-dialog-close" class="dialog-close" type="button" aria-label="Close train dialog">&times;</button>
         </div>
       </header>
@@ -344,6 +345,7 @@ const {
   trainDialog,
   trainDialogTitle,
   trainDialogSubtitle,
+  trainDialogShare,
   trainDialogClose,
   alertDialog,
   alertDialogTitle,
@@ -370,6 +372,7 @@ if (dialogShareButton) {
   })
 }
 
+trainDialogShare.addEventListener('click', () => shareTrainStatus())
 trainDialogClose.addEventListener('click', () => closeTrainDialog())
 alertDialogClose.addEventListener('click', () => closeAlertDialog())
 insightsDetailClose.addEventListener('click', () => closeInsightsDetailDialog())
@@ -1630,6 +1633,24 @@ const {
   getTrainTimelineEntries,
 })
 
+async function sharePayload(title, text, successKey = 'shareSuccess', copiedKey = 'shareCopied') {
+  try {
+    if (navigator.share) {
+      await navigator.share({ title, text })
+      showToast(copyValue(successKey))
+    } else if (navigator.clipboard) {
+      await navigator.clipboard.writeText(text)
+      showToast(copyValue(copiedKey))
+    } else {
+      showToast(copyValue('shareFailed'))
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      showToast(copyValue('shareFailed'))
+    }
+  }
+}
+
 async function shareArrivals() {
   if (!state.currentDialogStation) return
   
@@ -1669,24 +1690,39 @@ async function shareArrivals() {
   const stationParam = encodeURIComponent(station.name.toLowerCase().replace(/\s+/g, '-'))
   shareText += `\n${baseUrl}?system=${state.activeSystemId}&station=${stationParam}`
   
-  try {
-    if (navigator.share) {
-      await navigator.share({
-        title: `${station.name} - ${getActiveSystemMeta().title}`,
-        text: shareText,
-      })
-      showToast(copyValue('shareSuccess'))
-    } else if (navigator.clipboard) {
-      await navigator.clipboard.writeText(shareText)
-      showToast(copyValue('shareCopied'))
-    } else {
-      showToast(copyValue('shareFailed'))
-    }
-  } catch (err) {
-    if (err.name !== 'AbortError') {
-      showToast(copyValue('shareFailed'))
-    }
+  await sharePayload(`${station.name} - ${getActiveSystemMeta().title}`, shareText)
+}
+
+async function shareTrainStatus() {
+  const vehicle = getAllVehicles().find((candidate) => candidate.id === state.currentTrainId)
+  if (!vehicle) {
+    showToast(copyValue('shareTrainUnavailable'))
+    return
   }
+
+  const layout = state.layouts.get(vehicle.lineId)
+  const destinationLabel = layout ? getVehicleDestinationLabel(vehicle, layout) : vehicle.upcomingLabel
+  const directionLabel = getDirectionBaseLabel(vehicle.directionSymbol)
+  const terminalEtaSeconds = getTrainTimelineEntries(vehicle, layout).at(-1)?.etaSeconds ?? Math.max(0, vehicle.nextOffset ?? 0)
+  const nextEtaSeconds = Math.max(0, vehicle.nextOffset ?? 0)
+  const baseUrl = window.location.origin + window.location.pathname
+  const vehicleUrl = `${baseUrl}?system=${state.activeSystemId}&dialog=train&train=${encodeURIComponent(vehicle.id)}`
+  const vehicleTitle = `${vehicle.lineName} ${getVehicleLabel()} ${vehicle.label}`
+  const lines = [
+    vehicleTitle,
+    copyValue('shareTrainDirectionLine', directionLabel, destinationLabel),
+    copyValue('shareTrainLocationLine', formatVehicleLocationSummary(vehicle)),
+  ]
+
+  if (vehicle.upcomingLabel) {
+    lines.push(copyValue('shareTrainNextLine', vehicle.upcomingLabel, formatArrivalTime(nextEtaSeconds), formatEtaClockFromNow(nextEtaSeconds)))
+  }
+  if (destinationLabel) {
+    lines.push(copyValue('shareTrainTerminalLine', destinationLabel, formatArrivalTime(terminalEtaSeconds), formatEtaClockFromNow(terminalEtaSeconds)))
+  }
+
+  lines.push('', vehicleUrl)
+  await sharePayload(`${vehicleTitle} - ${getActiveSystemMeta().title}`, lines.join('\n'), 'shareTrainSuccess', 'shareTrainCopied')
 }
 
 function renderSystemSwitcher() {
@@ -2511,6 +2547,10 @@ function renderDialogCopy() {
   if (dialogShare) {
     dialogShare.textContent = copyValue('shareArrivals')
     dialogShare.setAttribute('aria-label', copyValue('shareArrivalsAria'))
+  }
+  if (trainDialogShare) {
+    trainDialogShare.textContent = copyValue('shareTrainStatus')
+    trainDialogShare.setAttribute('aria-label', copyValue('shareTrainStatusAria'))
   }
   trainDialogClose.setAttribute('aria-label', copyValue('closeTrainDialog'))
   alertDialogClose.setAttribute('aria-label', copyValue('closeAlertDialog'))

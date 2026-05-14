@@ -25,6 +25,7 @@ export function getDialogElements() {
     trainDialogSubtitle: document.querySelector('#train-dialog-subtitle'),
     trainDialogLine: document.querySelector('#train-dialog-line'),
     trainDialogStatus: document.querySelector('#train-dialog-status'),
+    trainDialogShare: document.querySelector('#train-dialog-share'),
     trainDialogClose: document.querySelector('#train-dialog-close'),
     alertDialog: document.querySelector('#alert-dialog'),
     alertDialogTitle: document.querySelector('#alert-dialog-title'),
