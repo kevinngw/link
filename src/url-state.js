@@ -39,6 +39,21 @@ export function setSystemParam(systemId) {
   })
 }
 
+export function setActiveLineParam(lineId, defaultLineId = '') {
+  updateUrlParams((params) => {
+    if (!lineId || lineId === defaultLineId) {
+      params.delete('route')
+    } else {
+      params.set('route', lineId)
+    }
+  })
+}
+
+export function getActiveLineFromUrl() {
+  const url = new URL(window.location.href)
+  return (url.searchParams.get('route') ?? '').trim()
+}
+
 export function setStationParam(station) {
   updateUrlParams((params) => {
     params.set('dialog', 'station')

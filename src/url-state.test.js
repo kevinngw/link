@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getPageFromUrl, setPageParam } from './url-state'
+import { getActiveLineFromUrl, getPageFromUrl, setActiveLineParam, setPageParam } from './url-state'
 
 function setLocation(path) {
   window.history.replaceState({}, '', path)
@@ -39,5 +39,25 @@ describe('url-state page params', () => {
     setLocation('/link/?page=settings')
 
     expect(getPageFromUrl()).toBe('map')
+  })
+
+  it('reads active route params for shareable line selection', () => {
+    setLocation('/link/?system=rapidride&route=e-line')
+
+    expect(getActiveLineFromUrl()).toBe('e-line')
+  })
+
+  it('writes active route params when a non-default line is selected', () => {
+    setActiveLineParam('e-line', 'a-line')
+
+    expect(window.location.search).toBe('?route=e-line')
+  })
+
+  it('keeps the default line as a clean URL', () => {
+    setLocation('/link/?route=e-line')
+
+    setActiveLineParam('a-line', 'a-line')
+
+    expect(window.location.search).toBe('')
   })
 })

@@ -16,7 +16,7 @@ import { createStationDialogDisplayController } from './dialogs/station-display'
 import { createStationDialogRenderers } from './dialogs/station-render'
 import { createOverlayDialogs } from './dialogs/overlays'
 import { applySystemState, bootstrapApp, loadStaticData, loadSystemDataById } from './static-data'
-import { clearDialogParams, clearStationParam, getPageFromUrl, isOptionalNavigationEnabled, setAlertDialogParams, setInsightsDialogParams, setPageParam, setStationParam, setStationSearchParams, setSystemParam, setTrainDialogParams } from './url-state'
+import { clearDialogParams, clearStationParam, getActiveLineFromUrl, getPageFromUrl, isOptionalNavigationEnabled, setActiveLineParam, setAlertDialogParams, setInsightsDialogParams, setPageParam, setStationParam, setStationSearchParams, setSystemParam, setTrainDialogParams } from './url-state'
 import { createToast } from './toast'
 import { createVehicleDisplay } from './vehicle-display'
 import { createStationSearch } from './station-search'
@@ -598,6 +598,7 @@ boardElement.addEventListener('click', (e) => {
   const lineSwitchBtn = e.target.closest('[data-line-switch]')
   if (lineSwitchBtn) {
     state.activeLineId = lineSwitchBtn.dataset.lineSwitch
+    syncActiveLineToUrl()
     render()
     return
   }
@@ -1886,6 +1887,25 @@ function getSystemIdFromUrl() {
   return DEFAULT_SYSTEM_ID
 }
 
+function getLineUrlKey(line) {
+  return line ? slugifyStation(line.name) : ''
+}
+
+function syncActiveLineToUrl() {
+  const selectedLine = state.lines.find((line) => line.id === state.activeLineId)
+  setActiveLineParam(getLineUrlKey(selectedLine), getLineUrlKey(state.lines[0]))
+}
+
+function applyActiveLineFromUrl() {
+  const requestedLine = getActiveLineFromUrl()
+  if (!requestedLine) {
+    state.activeLineId = state.lines[0]?.id ?? ''
+    return
+  }
+  const line = state.lines.find((candidate) => candidate.id === requestedLine || getLineUrlKey(candidate) === requestedLine)
+  if (line) state.activeLineId = line.id
+}
+
 async function syncDialogFromUrl() {
   const url = new URL(window.location.href)
   state.isSyncingFromUrl = true
@@ -1897,6 +1917,7 @@ async function syncDialogFromUrl() {
       await switchSystem(requestedSystemId, { updateUrl: false, preserveDialog: false })
     }
 
+    applyActiveLineFromUrl()
     render()
 
     const requestedDialog = (url.searchParams.get('dialog') ?? '').trim().toLowerCase()
@@ -2798,7 +2819,10 @@ async function switchSystem(systemId, { updateUrl = true, preserveDialog = false
     if (state.systemsById.has(systemId) && !state.systemsById.get(systemId)?.lines) {
       // 继续加载数据
     } else {
-      if (updateUrl) setSystemParam(state.activeSystemId)
+      if (updateUrl) {
+        setSystemParam(state.activeSystemId)
+        syncActiveLineToUrl()
+      }
       return
     }
   }
@@ -2821,7 +2845,10 @@ async function switchSystem(systemId, { updateUrl = true, preserveDialog = false
   closeTrainDialog()
   closeAlertDialog()
   render()
-  if (updateUrl) setSystemParam(systemId)
+  if (updateUrl) {
+    setSystemParam(systemId)
+    syncActiveLineToUrl()
+  }
   await refreshVehicles()
 }
 
