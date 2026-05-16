@@ -3,6 +3,7 @@ import {
   clamp,
   formatDistanceMeters,
   getDistanceMeters,
+  getWalkingMinutes,
   normalizeName,
   parseClockToSeconds,
   pluralizeVehicleLabel,
@@ -40,6 +41,22 @@ describe('utils', () => {
 
     it('handles non-finite input', () => {
       expect(formatDistanceMeters(NaN)).toBe('')
+    })
+  })
+
+  describe('getWalkingMinutes', () => {
+    it('estimates walking time at a city walking pace', () => {
+      expect(getWalkingMinutes(80)).toBe(1)
+      expect(getWalkingMinutes(400)).toBe(5)
+    })
+
+    it('returns at least one minute for very close stations', () => {
+      expect(getWalkingMinutes(0)).toBe(1)
+      expect(getWalkingMinutes(30)).toBe(1)
+    })
+
+    it('handles non-finite input', () => {
+      expect(getWalkingMinutes(NaN)).toBeNull()
     })
   })
 

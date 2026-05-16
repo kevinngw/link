@@ -1,4 +1,4 @@
-import { normalizeName, formatDistanceMeters, getDistanceMeters } from './utils'
+import { normalizeName, formatDistanceMeters, getDistanceMeters, getWalkingMinutes } from './utils'
 
 const RECENT_SEARCHES_KEY = 'link-pulse-recent-searches'
 const RECENT_SEARCHES_MAX = 5
@@ -288,8 +288,12 @@ export function createStationSearch({
             : index === state.highlightedNearbyStationIndex
           const displayName = normalizeName(result.stationName)
           const titleHtml = hasQuery ? highlightMatch(displayName, query) : displayName
+          const nearbyWalkMinutes = isNearby ? getWalkingMinutes(result.distanceMeters) : null
+          const nearbyDistanceMeta = isNearby
+            ? [formatDistanceMeters(result.distanceMeters), nearbyWalkMinutes ? copyValue('walkMinutes', nearbyWalkMinutes) : ''].filter(Boolean).join(' · ')
+            : ''
           const meta = isNearby
-            ? `${formatDistanceMeters(result.distanceMeters)} · ${result.lineName} · ${result.systemName}`
+            ? `${nearbyDistanceMeta} · ${result.lineName} · ${result.systemName}`
             : `${result.lineName} · ${result.systemName}`
           return `
             <div

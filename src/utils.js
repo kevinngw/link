@@ -44,6 +44,7 @@ export function parseClockToSeconds(value) {
 const EARTH_RADIUS_METERS = 6_371_000
 const METERS_TO_MILES = 0.000_621_371
 const METERS_TO_FEET = 3.280_84
+const WALKING_METERS_PER_MINUTE = 80
 
 export function getDistanceMeters(lat1, lon1, lat2, lon2) {
   const toRadians = (value) => (value * Math.PI) / 180
@@ -66,4 +67,9 @@ export function formatDistanceMeters(distanceMeters) {
     return `${feet} ft`
   }
   return `${miles.toFixed(miles >= 10 ? 0 : 1)} mi`
+}
+
+export function getWalkingMinutes(distanceMeters) {
+  if (!Number.isFinite(distanceMeters)) return null
+  return Math.max(1, Math.round(distanceMeters / WALKING_METERS_PER_MINUTE))
 }
