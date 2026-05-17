@@ -8,6 +8,7 @@ export function getDialogElements() {
     dialogServiceSummary: document.querySelector('#dialog-service-summary'),
     dialogStatusPillElement: document.querySelector('#dialog-status-pill'),
     dialogUpdatedAtElement: document.querySelector('#dialog-updated-at'),
+    dialogDirections: document.querySelector('#dialog-directions'),
     dialogShare: document.querySelector('#dialog-share'),
     dialogDisplay: document.querySelector('#dialog-display'),
     dialogDirectionTabs: [...document.querySelectorAll('[data-dialog-direction]')],

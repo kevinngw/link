@@ -22,6 +22,7 @@ import { createVehicleDisplay } from './vehicle-display'
 import { createStationSearch } from './station-search'
 import { createFavoritesManager } from './favorites'
 import { createRecentStationsManager } from './recent-stations'
+import { buildWalkingDirectionsUrl, hasStationCoordinates } from './station-directions'
 
 const ALERT_STRIP_DISMISS_STORAGE_KEY = 'link-pulse-alert-strip-dismissed'
 const FAVORITES_SORT_STORAGE_KEY = 'link-pulse-favorites-sort'
@@ -187,6 +188,7 @@ document.querySelector('#app').innerHTML = `
         </div>
         <div class="dialog-actions">
           <button id="dialog-favorite" class="dialog-close dialog-favorite-button" type="button" aria-label="Add to favorites">☆</button>
+          <button id="dialog-directions" class="dialog-close dialog-directions-button" type="button" aria-label="Walking directions">Directions</button>
           <button id="dialog-share" class="dialog-close dialog-share-button" type="button" aria-label="Share arrivals">Share</button>
           <button id="dialog-display" class="dialog-close dialog-mode-button" type="button" aria-label="Toggle display mode">Board</button>
           <button id="station-dialog-close" class="dialog-close" type="button" aria-label="Close station dialog">&times;</button>
@@ -332,6 +334,7 @@ const {
   dialogServiceSummary,
   dialogStatusPillElement,
   dialogUpdatedAtElement,
+  dialogDirections,
   dialogShare,
   dialogDisplay,
   dialogDirectionTabs,
@@ -361,6 +364,7 @@ const {
 
 const dialogShareButton = document.querySelector('#dialog-share')
 const dialogFavoriteButton = document.querySelector('#dialog-favorite')
+const dialogDirectionsButton = document.querySelector('#dialog-directions')
 
 dialogDisplay.addEventListener('click', () => toggleDialogDisplayMode())
 
@@ -370,6 +374,10 @@ if (dialogShareButton) {
     if (!state.currentDialogStation) return
     shareArrivals()
   })
+}
+
+if (dialogDirectionsButton) {
+  dialogDirectionsButton.addEventListener('click', () => openStationDirections())
 }
 
 trainDialogShare.addEventListener('click', () => shareTrainStatus())
@@ -729,6 +737,13 @@ function updateFavoriteButton() {
   dialogFavoriteButton.textContent = fav ? '★' : '☆'
   dialogFavoriteButton.setAttribute('aria-label', fav ? copyValue('removeFavorite') : copyValue('addFavorite'))
   dialogFavoriteButton.classList.toggle('is-favorite', fav)
+}
+
+function updateDirectionsButton() {
+  if (!dialogDirectionsButton) return
+  dialogDirectionsButton.textContent = copyValue('walkingDirections')
+  dialogDirectionsButton.setAttribute('aria-label', copyValue('walkingDirectionsAria'))
+  dialogDirectionsButton.disabled = !hasStationCoordinates(state.currentDialogStation)
 }
 
 function getSystemVehicleLabel(systemId, { plural = false } = {}) {
@@ -1694,6 +1709,16 @@ async function shareArrivals() {
   await sharePayload(`${station.name} - ${getActiveSystemMeta().title}`, shareText)
 }
 
+function openStationDirections() {
+  if (!state.currentDialogStation) return
+  const url = buildWalkingDirectionsUrl(state.currentDialogStation)
+  if (!url) {
+    showToast(copyValue('directionsUnavailable'))
+    return
+  }
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
 async function shareTrainStatus() {
   const vehicle = getAllVehicles().find((candidate) => candidate.id === state.currentTrainId)
   if (!vehicle) {
@@ -2316,6 +2341,7 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
   if (updateUrl) setStationParam(station)
   startDialogAutoRefresh()
   updateFavoriteButton()
+  updateDirectionsButton()
   const dialogStations = getDialogStations(station)
   const firstMatch = dialogStations[0]
   if (firstMatch) addRecentStation(firstMatch.station, firstMatch.line, state.activeSystemId, getActiveSystemMeta().label)
@@ -2569,6 +2595,7 @@ function renderDialogCopy() {
     dialogShare.textContent = copyValue('shareArrivals')
     dialogShare.setAttribute('aria-label', copyValue('shareArrivalsAria'))
   }
+  updateDirectionsButton()
   if (trainDialogShare) {
     trainDialogShare.textContent = copyValue('shareTrainStatus')
     trainDialogShare.setAttribute('aria-label', copyValue('shareTrainStatusAria'))

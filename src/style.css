@@ -3108,6 +3108,7 @@ button.train-list-item {
   }
 
   .dialog-actions .dialog-share-button,
+  .dialog-actions .dialog-directions-button,
   .dialog-actions .dialog-mode-button {
     padding: 0 10px;
     font-size: 0.72rem;
@@ -3161,7 +3162,7 @@ button.train-list-item {
     font-size: 0.74rem;
   }
 
-  .dialog-actions > .dialog-close:not(.dialog-share-button):not(.dialog-mode-button):not(.dialog-favorite-button) {
+  .dialog-actions > .dialog-close:not(.dialog-share-button):not(.dialog-directions-button):not(.dialog-mode-button):not(.dialog-favorite-button) {
     width: 36px;
     height: 36px;
     font-size: 1.2rem;
@@ -4838,7 +4839,8 @@ dialog.is-closing::backdrop {
 
 /* ─── Share button styles ─── */
 
-.dialog-share-button {
+.dialog-share-button,
+.dialog-directions-button {
   width: auto;
   min-width: 72px;
   height: 48px;
@@ -4855,8 +4857,14 @@ dialog.is-closing::backdrop {
   flex: 0 0 auto;
 }
 
-.dialog-share-button:hover {
+.dialog-share-button:hover,
+.dialog-directions-button:hover:not(:disabled) {
   background: var(--surface-active);
   color: var(--text-primary);
   border-color: color-mix(in srgb, var(--status-info) 40%, var(--border-color));
+}
+
+.dialog-directions-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
