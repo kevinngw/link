@@ -16,7 +16,8 @@ import { createStationDialogDisplayController } from './dialogs/station-display'
 import { createStationDialogRenderers } from './dialogs/station-render'
 import { createOverlayDialogs } from './dialogs/overlays'
 import { applySystemState, bootstrapApp, loadStaticData, loadSystemDataById } from './static-data'
-import { clearDialogParams, clearStationParam, getActiveLineFromUrl, getPageFromUrl, isOptionalNavigationEnabled, setActiveLineParam, setAlertDialogParams, setInsightsDialogParams, setPageParam, setStationParam, setStationSearchParams, setSystemParam, setTrainDialogParams } from './url-state'
+import { clearDialogParams, clearStationParam, getActiveLineFromUrl, isOptionalNavigationEnabled, setActiveLineParam, setAlertDialogParams, setInsightsDialogParams, setPageParam, setStationParam, setStationSearchParams, setSystemParam, setTrainDialogParams } from './url-state'
+import { getPreferredLineId, getPreferredPage, getPreferredSystemId, saveLastView } from './view-preferences'
 import { createToast } from './toast'
 import { createVehicleDisplay } from './vehicle-display'
 import { createStationSearch } from './station-search'
@@ -460,6 +461,7 @@ tabButtons.forEach((button) => {
     setTimeout(() => {
       state.activeTab = button.dataset.tab
       setPageParam(state.activeTab)
+      persistLastView()
       render()
       boardElement.style.opacity = '1'
     }, 150)
@@ -607,6 +609,7 @@ boardElement.addEventListener('click', (e) => {
   if (lineSwitchBtn) {
     state.activeLineId = lineSwitchBtn.dataset.lineSwitch
     syncActiveLineToUrl()
+    persistLastView()
     render()
     return
   }
@@ -1906,10 +1909,15 @@ function findStationByParam(stationParam) {
 
 
 function getSystemIdFromUrl() {
-  const url = new URL(window.location.href)
-  const requested = url.searchParams.get('system')
-  if (requested && state.systemsById.has(requested)) return requested
-  return DEFAULT_SYSTEM_ID
+  return getPreferredSystemId({ systemsById: state.systemsById })
+}
+
+function persistLastView() {
+  saveLastView({
+    systemId: state.activeSystemId,
+    page: state.activeTab,
+    lineId: state.activeLineId,
+  })
 }
 
 function getLineUrlKey(line) {
@@ -1924,7 +1932,7 @@ function syncActiveLineToUrl() {
 function applyActiveLineFromUrl() {
   const requestedLine = getActiveLineFromUrl()
   if (!requestedLine) {
-    state.activeLineId = state.lines[0]?.id ?? ''
+    state.activeLineId = getPreferredLineId({ activeSystemId: state.activeSystemId, lines: state.lines }) || state.lines[0]?.id || ''
     return
   }
   const line = state.lines.find((candidate) => candidate.id === requestedLine || getLineUrlKey(candidate) === requestedLine)
@@ -1935,7 +1943,7 @@ async function syncDialogFromUrl() {
   const url = new URL(window.location.href)
   state.isSyncingFromUrl = true
   try {
-    state.activeTab = getPageFromUrl()
+    state.activeTab = getPreferredPage()
 
     const requestedSystemId = url.searchParams.get('system')
     if (requestedSystemId && state.systemsById.has(requestedSystemId) && requestedSystemId !== state.activeSystemId) {
@@ -2876,6 +2884,7 @@ async function switchSystem(systemId, { updateUrl = true, preserveDialog = false
     setSystemParam(systemId)
     syncActiveLineToUrl()
   }
+  persistLastView()
   await refreshVehicles()
 }
 
@@ -2958,7 +2967,7 @@ const handleViewportResize = () => {
   syncCompactLayoutFromBoard()
 }
 
-state.activeTab = getPageFromUrl()
+state.activeTab = getPreferredPage()
 const init = bootstrapApp({
   state,
   getPreferredLanguage,
