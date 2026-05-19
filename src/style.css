@@ -4795,6 +4795,10 @@ dialog.is-closing::backdrop {
   color: var(--text-primary);
 }
 
+.favorite-action-directions:hover {
+  color: var(--accent-strong);
+}
+
 .favorite-action-remove:hover {
   color: var(--danger, #e53e3e);
 }

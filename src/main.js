@@ -905,6 +905,7 @@ function renderFavoritesView() {
               <button type="button" class="favorite-action-btn" data-fav-move="up" data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('moveUp')}">▲ ${copyValue('moveUp')}</button>
               <button type="button" class="favorite-action-btn" data-fav-move="down" data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('moveDown')}">▼ ${copyValue('moveDown')}</button>
             ` : ''}
+            ${fav.exists ? `<button type="button" class="favorite-action-btn favorite-action-directions" data-fav-directions data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('walkingDirectionsAria')}">↗ ${copyValue('walkingDirections')}</button>` : ''}
             <button type="button" class="favorite-action-btn favorite-action-remove" data-fav-remove data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('removeFavorite')}">× ${copyValue('removeFavorite')}</button>
           </div>
         </div>
@@ -945,6 +946,14 @@ boardElement.addEventListener('click', (e) => {
     renderBoard()
     return
   }
+  const directionsBtn = e.target.closest('[data-fav-directions]')
+  if (directionsBtn) {
+    e.stopPropagation()
+    const fav = getFavorites().find((f) => f.stationId === directionsBtn.dataset.favStation && f.lineId === directionsBtn.dataset.favLine && f.systemId === directionsBtn.dataset.favSystem)
+    if (fav) openFavoriteDirections(fav)
+    return
+  }
+
   const removeBtn = e.target.closest('[data-fav-remove]')
   if (removeBtn) {
     e.stopPropagation()
@@ -1720,6 +1729,20 @@ function openStationDirections() {
     return
   }
   window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+async function openFavoriteDirections(favorite) {
+  try {
+    const { station } = await resolveFavoriteRecord(favorite)
+    const url = buildWalkingDirectionsUrl(station)
+    if (!url) {
+      showToast(copyValue('directionsUnavailable'))
+      return
+    }
+    window.open(url, '_blank', 'noopener,noreferrer')
+  } catch {
+    showToast(copyValue('directionsUnavailable'))
+  }
 }
 
 async function shareTrainStatus() {
