@@ -1,3 +1,4 @@
+import { buildWalkingDirectionsUrl, hasStationCoordinates } from './station-directions'
 import { normalizeName, formatDistanceMeters, getDistanceMeters, getWalkingMinutes } from './utils'
 
 const RECENT_SEARCHES_KEY = 'link-pulse-recent-searches'
@@ -16,6 +17,7 @@ export function createStationSearch({
   setStationSearchParams,
   getRecentStations,
   loadSystemDataById,
+  showToast,
 }) {
   const {
     stationSearchDialog,
@@ -56,7 +58,7 @@ export function createStationSearch({
     const recents = getRecentSearches()
     const key = `${result.systemId}:${result.lineId}:${result.stationId}`
     const updated = [
-      { key, systemId: result.systemId, lineId: result.lineId, stationId: result.stationId, stationName: result.stationName, lineName: result.lineName, lineColor: result.lineColor, systemName: result.systemName },
+      { key, systemId: result.systemId, lineId: result.lineId, stationId: result.stationId, stationName: result.stationName, lineName: result.lineName, lineColor: result.lineColor, systemName: result.systemName, lat: result.lat, lon: result.lon },
       ...recents.filter((item) => item.key !== key),
     ].slice(0, RECENT_SEARCHES_MAX)
     try { window.localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated)) } catch {}
@@ -128,6 +130,16 @@ export function createStationSearch({
     return [...deduped.values()]
       .sort((left, right) => left.distanceMeters - right.distanceMeters || left.stationName.localeCompare(right.stationName))
       .slice(0, 8)
+  }
+
+  function openSearchResultDirections(result) {
+    const url = buildWalkingDirectionsUrl(result)
+    if (!url) {
+      showToast?.(copyValue('directionsUnavailable'))
+      return
+    }
+
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   async function findNearbyStations() {
@@ -245,6 +257,8 @@ export function createStationSearch({
       normalizedStationName: normalizeName(recent.stationName),
       lineName: recent.lineName,
       lineColor: recent.lineColor,
+      lat: recent.lat,
+      lon: recent.lon,
     }))
   }
 
@@ -311,11 +325,22 @@ export function createStationSearch({
               </span>
               <span class="station-search-result-actions">
                 ${isNearby ? `<span class="station-search-nearby-badge">${copyValue('nearbyStationBadge')}</span>` : ''}
+                ${hasStationCoordinates(result) ? `<button class="station-search-directions" type="button" data-station-search-directions-index="${index}" aria-label="${copyValue('searchResultDirectionsAria', displayName)}">↗ ${copyValue('walkingDirections')}</button>` : ''}
               </span>
             </div>
           `
         }).join('')
       : `<div class="arrival-item muted">${hasQuery ? copyValue('noStationSearchResults') : (state.geolocationError || state.geolocationStatus || copyValue('nearbyStationsHint'))}</div>`
+
+    const directionsButtons = stationSearchResultsElement.querySelectorAll('[data-station-search-directions-index]')
+    directionsButtons.forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation()
+        const source = hasQuery ? state.stationSearchResults : (nearbyResults.length ? state.nearbyStations : (recentStationResults.length ? recentStationResults : recentResults))
+        const selected = source[Number(button.dataset.stationSearchDirectionsIndex)]
+        if (selected) openSearchResultDirections(selected)
+      })
+    })
 
     const buttons = stationSearchResultsElement.querySelectorAll('[data-station-search-index]')
     buttons.forEach((button) => {

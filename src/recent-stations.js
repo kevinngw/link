@@ -52,6 +52,8 @@ export function createRecentStationsManager() {
       lineColor: line.color,
       systemId,
       systemName,
+      lat: station.lat,
+      lon: station.lon,
       viewedAt: Date.now(),
     })
 

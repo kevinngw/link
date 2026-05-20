@@ -349,6 +349,30 @@
   white-space: nowrap;
 }
 
+.station-search-directions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent-strong) 38%, var(--border-color));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent-strong) 10%, transparent);
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.station-search-directions:hover,
+.station-search-directions:focus-visible {
+  background: color-mix(in srgb, var(--accent-strong) 18%, transparent);
+  border-color: var(--accent-strong);
+  outline: none;
+}
+
 body {
   margin: 0;
   background:
