@@ -906,7 +906,8 @@ function renderFavoritesView() {
               <button type="button" class="favorite-action-btn" data-fav-move="up" data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('moveUp')}">▲ ${copyValue('moveUp')}</button>
               <button type="button" class="favorite-action-btn" data-fav-move="down" data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('moveDown')}">▼ ${copyValue('moveDown')}</button>
             ` : ''}
-            ${fav.exists ? `<button type="button" class="favorite-action-btn favorite-action-directions" data-fav-directions data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('walkingDirectionsAria')}">↗ ${copyValue('walkingDirections')}</button>` : ''}
+            ${fav.exists ? `<button type="button" class="favorite-action-btn favorite-action-share" data-fav-share data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('shareFavoriteArrivalsAria')}">↗ ${copyValue('shareArrivals')}</button>` : ''}
+            ${fav.exists ? `<button type="button" class="favorite-action-btn favorite-action-directions" data-fav-directions data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('walkingDirectionsAria')}">⌖ ${copyValue('walkingDirections')}</button>` : ''}
             <button type="button" class="favorite-action-btn favorite-action-remove" data-fav-remove data-fav-station="${fav.stationId}" data-fav-line="${fav.lineId}" data-fav-system="${fav.systemId}" aria-label="${copyValue('removeFavorite')}">× ${copyValue('removeFavorite')}</button>
           </div>
         </div>
@@ -947,6 +948,14 @@ boardElement.addEventListener('click', (e) => {
     renderBoard()
     return
   }
+  const shareBtn = e.target.closest('[data-fav-share]')
+  if (shareBtn) {
+    e.stopPropagation()
+    const fav = getFavorites().find((f) => f.stationId === shareBtn.dataset.favStation && f.lineId === shareBtn.dataset.favLine && f.systemId === shareBtn.dataset.favSystem)
+    if (fav) shareFavoriteArrivals(fav)
+    return
+  }
+
   const directionsBtn = e.target.closest('[data-fav-directions]')
   if (directionsBtn) {
     e.stopPropagation()
@@ -1680,46 +1689,75 @@ async function sharePayload(title, text, successKey = 'shareSuccess', copiedKey 
   }
 }
 
-async function shareArrivals() {
-  if (!state.currentDialogStation) return
-  
-  const station = state.currentDialogStation
-  const dialogStations = getDialogStations(station)
-  
-  // Get cached arrivals for both directions
-  const arrivalsByLine = dialogStations.map(({ station: s, line }) => {
-    return getCachedArrivalsForStation(s, line) ?? { nb: [], sb: [] }
+function formatArrivalShareLines(label, arrivals, vehicleLabel) {
+  if (!arrivals.length) return ''
+
+  const lines = [`\n${label}:`]
+  arrivals.slice(0, 3).forEach((arrival) => {
+    const timeStr = formatArrivalTime(Math.floor((arrival.arrivalTime - Date.now()) / 1000))
+    lines.push(`• ${arrival.lineName} ${vehicleLabel} ${arrival.vehicleId}: ${timeStr}${arrival.destination ? ` ${copyValue('shareArrivalDestination', arrival.destination)}` : ''}`)
   })
-  const arrivals = mergeArrivalBuckets(arrivalsByLine)
-  
-  // Format share text
-  const nbArrivals = arrivals.nb.slice(0, 3)
-  const sbArrivals = arrivals.sb.slice(0, 3)
-  
-  let shareText = `${station.name}\n`
-  
-  if (nbArrivals.length > 0) {
-    shareText += `\n${copyValue('northboundLabel')}:\n`
-    nbArrivals.forEach((a) => {
-      const timeStr = formatArrivalTime(Math.floor((a.arrivalTime - Date.now()) / 1000))
-      shareText += `• ${a.lineName} ${getVehicleLabel()} ${a.vehicleId}: ${timeStr}${a.destination ? ' to ' + a.destination : ''}\n`
-    })
+  return `${lines.join('\n')}\n`
+}
+
+function buildArrivalsShareText({ stationName, systemId, arrivals, vehicleLabel }) {
+  const nbArrivals = arrivals.nb ?? []
+  const sbArrivals = arrivals.sb ?? []
+  const baseUrl = window.location.origin + window.location.pathname
+  const stationParam = encodeURIComponent(stationName.toLowerCase().replace(/\s+/g, '-'))
+  let shareText = `${stationName}\n`
+
+  shareText += formatArrivalShareLines(copyValue('northboundLabel'), nbArrivals, vehicleLabel)
+  shareText += formatArrivalShareLines(copyValue('southboundLabel'), sbArrivals, vehicleLabel)
+
+  if (!nbArrivals.length && !sbArrivals.length) {
+    shareText += `\n${copyValue('favoritesNoUpcoming', getSystemVehicleLabel(systemId, { plural: true }).toLowerCase())}\n`
   }
 
-  if (sbArrivals.length > 0) {
-    shareText += `\n${copyValue('southboundLabel')}:\n`
-    sbArrivals.forEach((a) => {
-      const timeStr = formatArrivalTime(Math.floor((a.arrivalTime - Date.now()) / 1000))
-      shareText += `• ${a.lineName} ${getVehicleLabel()} ${a.vehicleId}: ${timeStr}${a.destination ? ' to ' + a.destination : ''}\n`
-    })
-  }
-  
-  // Add app link
-  const baseUrl = window.location.origin + window.location.pathname
-  const stationParam = encodeURIComponent(station.name.toLowerCase().replace(/\s+/g, '-'))
-  shareText += `\n${baseUrl}?system=${state.activeSystemId}&station=${stationParam}`
-  
+  shareText += `\n${baseUrl}?system=${systemId}&station=${stationParam}`
+  return shareText
+}
+
+async function shareArrivals() {
+  if (!state.currentDialogStation) return
+
+  const station = state.currentDialogStation
+  const dialogStations = getDialogStations(station)
+  const arrivalsByLine = dialogStations.map(({ station: s, line }) => getCachedArrivalsForStation(s, line) ?? { nb: [], sb: [] })
+  const arrivals = mergeArrivalBuckets(arrivalsByLine)
+  const shareText = buildArrivalsShareText({
+    stationName: station.name,
+    systemId: state.activeSystemId,
+    arrivals,
+    vehicleLabel: getVehicleLabel(),
+  })
+
   await sharePayload(`${station.name} - ${getActiveSystemMeta().title}`, shareText)
+}
+
+async function shareFavoriteArrivals(favorite) {
+  try {
+    const { station } = await resolveFavoriteRecord(favorite)
+    if (!station) {
+      showToast(copyValue('favoritesStationMissing'))
+      return
+    }
+
+    await refreshFavoriteArrivals()
+    const snapshot = state.favoriteArrivals.get(getFavoriteKey(favorite))
+    const shareText = buildArrivalsShareText({
+      stationName: favorite.stationName,
+      systemId: favorite.systemId,
+      arrivals: snapshot?.arrivals ?? { nb: [], sb: [] },
+      vehicleLabel: getSystemVehicleLabel(favorite.systemId),
+    })
+    const systemTitle = SYSTEM_META[favorite.systemId]?.title ?? favorite.systemName ?? getActiveSystemMeta().title
+
+    await sharePayload(`${favorite.stationName} - ${systemTitle}`, shareText)
+  } catch (error) {
+    console.warn(`Failed to share favorite arrivals for ${favorite.stationName}:`, error)
+    showToast(copyValue('shareFailed'))
+  }
 }
 
 function openStationDirections() {

@@ -4819,6 +4819,7 @@ dialog.is-closing::backdrop {
   color: var(--text-primary);
 }
 
+.favorite-action-share:hover,
 .favorite-action-directions:hover {
   color: var(--accent-strong);
 }
