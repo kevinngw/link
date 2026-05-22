@@ -155,6 +155,80 @@ describe('createFavoritesManager', () => {
     })
   })
 
+
+  describe('exportFavoritesData / importFavoritesData', () => {
+    it('exports favorites with portable metadata', () => {
+      const system = makeSystem()
+      const { addFavorite, exportFavoritesData } = createFavoritesManager({
+        state: makeState(new Map([['system-a', system]])),
+        showStationDialog: vi.fn(),
+        switchSystem: vi.fn(),
+        showToast: vi.fn(),
+      })
+
+      addFavorite(system.lines[0].stops[0], system.lines[0], 'system-a')
+      const exported = exportFavoritesData()
+
+      expect(exported.app).toBe('Link Pulse')
+      expect(exported.version).toBe(1)
+      expect(exported.favorites).toHaveLength(1)
+      expect(exported.favorites[0].stationId).toBe('stop-1')
+    })
+
+    it('imports favorites from a JSON payload and merges without duplicates', () => {
+      const system = makeSystem()
+      const { addFavorite, importFavoritesData, getFavorites } = createFavoritesManager({
+        state: makeState(new Map([['system-a', system]])),
+        showStationDialog: vi.fn(),
+        switchSystem: vi.fn(),
+        showToast: vi.fn(),
+      })
+
+      addFavorite(system.lines[0].stops[0], system.lines[0], 'system-a')
+      const result = importFavoritesData(JSON.stringify({
+        favorites: [
+          {
+            stationId: 'stop-2',
+            stationName: 'Station Two',
+            lineId: 'line-2',
+            lineName: 'Line 2',
+            lineColor: '#00ff00',
+            systemId: 'system-a',
+            systemName: 'System A',
+          },
+          {
+            stationId: 'stop-1',
+            stationName: 'Station One',
+            lineId: 'line-1',
+            lineName: 'Line 1',
+            lineColor: '#ff0000',
+            systemId: 'system-a',
+            systemName: 'System A',
+          },
+          { stationId: '', stationName: 'Broken' },
+        ],
+      }))
+
+      expect(result.importedCount).toBe(2)
+      expect(result.skippedCount).toBe(1)
+      expect(getFavorites().map((favorite) => favorite.stationId)).toEqual(['stop-2', 'stop-1'])
+    })
+
+    it('throws for invalid import payloads without changing saved favorites', () => {
+      const system = makeSystem()
+      const { addFavorite, importFavoritesData, getFavorites } = createFavoritesManager({
+        state: makeState(new Map([['system-a', system]])),
+        showStationDialog: vi.fn(),
+        switchSystem: vi.fn(),
+        showToast: vi.fn(),
+      })
+
+      addFavorite(system.lines[0].stops[0], system.lines[0], 'system-a')
+      expect(() => importFavoritesData('{"wrong":true}')).toThrow()
+      expect(getFavorites()).toHaveLength(1)
+    })
+  })
+
   describe('handleFavoriteClick', () => {
     it('calls showStationDialog for existing station', async () => {
       const system = makeSystem()

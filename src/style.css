@@ -4584,6 +4584,14 @@ dialog.is-closing::backdrop {
   gap: 14px;
 }
 
+.favorites-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .favorites-sort {
   display: inline-flex;
   gap: 4px;
@@ -4594,7 +4602,13 @@ dialog.is-closing::backdrop {
   flex: 0 0 auto;
 }
 
-.favorites-sort-button {
+.favorites-transfer-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.favorites-sort-button,
+.favorites-transfer-button {
   min-height: 30px;
   padding: 0 10px;
   border: none;
@@ -4607,7 +4621,13 @@ dialog.is-closing::backdrop {
   transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
 }
 
-.favorites-sort-button:hover {
+.favorites-transfer-button {
+  border: 1px solid var(--border-color);
+  background: var(--surface-soft);
+}
+
+.favorites-sort-button:hover,
+.favorites-transfer-button:hover {
   color: var(--text-primary);
   background: var(--surface-active);
 }
@@ -4833,11 +4853,14 @@ dialog.is-closing::backdrop {
     display: grid;
   }
 
-  .favorites-sort {
+  .favorites-header-actions,
+  .favorites-sort,
+  .favorites-transfer-actions {
     width: 100%;
   }
 
-  .favorites-sort-button {
+  .favorites-sort-button,
+  .favorites-transfer-button {
     flex: 1;
   }
 

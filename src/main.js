@@ -122,6 +122,7 @@ const state = {
   favoriteArrivalsRequestId: 0,
   favoriteArrivalsRefreshPromise: null,
   favoritesSort: getStoredFavoritesSort(),
+  favoriteImportInput: null,
 }
 
 function closeDialogAnimated(dialogEl) {
@@ -604,6 +605,52 @@ boardElement.addEventListener('keydown', (e) => {
 })
 
 // Board: handles line-switch, train, alert, station, insights, terminal clicks
+function downloadFavoritesExport() {
+  const data = exportFavoritesData()
+  const blob = new Blob([`${JSON.stringify(data, null, 2)}\n`], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  const dateKey = new Date().toISOString().slice(0, 10)
+  anchor.href = url
+  anchor.download = `link-pulse-favorites-${dateKey}.json`
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+  showToast(copyValue('favoritesExported'))
+}
+
+function ensureFavoriteImportInput() {
+  if (state.favoriteImportInput) return state.favoriteImportInput
+
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'application/json,.json'
+  input.hidden = true
+  input.addEventListener('change', async () => {
+    const file = input.files?.[0]
+    input.value = ''
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      const result = importFavoritesData(text, { merge: true })
+      showToast(copyValue('favoritesImported', result.importedCount))
+      renderBoard()
+      refreshFavoriteArrivals({ force: true })
+    } catch {
+      showToast(copyValue('favoritesImportFailed'), { tone: 'warn' })
+    }
+  })
+  document.body.append(input)
+  state.favoriteImportInput = input
+  return input
+}
+
+function openFavoritesImportPicker() {
+  ensureFavoriteImportInput().click()
+}
+
 boardElement.addEventListener('click', (e) => {
   const lineSwitchBtn = e.target.closest('[data-line-switch]')
   if (lineSwitchBtn) {
@@ -723,6 +770,8 @@ const {
   moveFavorite,
   removeFavorite,
   getFavoriteDisplayData,
+  exportFavoritesData,
+  importFavoritesData,
   handleFavoriteClick,
 } = createFavoritesManager({
   state,
@@ -922,7 +971,13 @@ function renderFavoritesView() {
           <h2>${copyValue('favoritesTitle')}</h2>
           <p class="updated-at">${state.favoritesSort === FAVORITES_SORT_SOONEST ? copyValue('favoritesSoonestHint') : copyValue('favoritesLiveHint')}</p>
         </div>
-        ${renderFavoritesSortControls()}
+        <div class="favorites-header-actions">
+          ${renderFavoritesSortControls()}
+          <div class="favorites-transfer-actions">
+            <button type="button" class="favorites-transfer-button" data-fav-export>${copyValue('favoritesExport')}</button>
+            <button type="button" class="favorites-transfer-button" data-fav-import>${copyValue('favoritesImport')}</button>
+          </div>
+        </div>
       </header>
       <div class="favorites-list">
         ${items}
@@ -932,6 +987,20 @@ function renderFavoritesView() {
 }
 
 boardElement.addEventListener('click', (e) => {
+  const exportBtn = e.target.closest('[data-fav-export]')
+  if (exportBtn) {
+    e.stopPropagation()
+    downloadFavoritesExport()
+    return
+  }
+
+  const importBtn = e.target.closest('[data-fav-import]')
+  if (importBtn) {
+    e.stopPropagation()
+    openFavoritesImportPicker()
+    return
+  }
+
   const sortBtn = e.target.closest('[data-fav-sort]')
   if (sortBtn) {
     e.stopPropagation()

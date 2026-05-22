@@ -1,6 +1,66 @@
 const FAVORITES_STORAGE_KEY = 'link-pulse-favorites'
 const FAVORITES_MAX_COUNT = 20
 
+function getFavoriteKey(favorite) {
+  return `${favorite.systemId}:${favorite.lineId}:${favorite.stationId}`
+}
+
+function sanitizeFavorite(favorite) {
+  if (!favorite || typeof favorite !== 'object') return null
+
+  const stationId = String(favorite.stationId ?? '').trim()
+  const stationName = String(favorite.stationName ?? '').trim()
+  const lineId = String(favorite.lineId ?? '').trim()
+  const lineName = String(favorite.lineName ?? '').trim()
+  const systemId = String(favorite.systemId ?? '').trim()
+  const systemName = String(favorite.systemName ?? systemId).trim() || systemId
+  const lineColor = String(favorite.lineColor ?? '#888888').trim() || '#888888'
+
+  if (!stationId || !stationName || !lineId || !lineName || !systemId) return null
+
+  return {
+    stationId,
+    stationName,
+    lineId,
+    lineName,
+    lineColor,
+    systemId,
+    systemName,
+    addedAt: Number.isFinite(Number(favorite.addedAt)) ? Number(favorite.addedAt) : Date.now(),
+  }
+}
+
+function normalizeFavoritesPayload(payload) {
+  const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload
+  const rawFavorites = Array.isArray(parsed) ? parsed : parsed?.favorites
+  if (!Array.isArray(rawFavorites)) {
+    throw new Error('invalid-favorites-payload')
+  }
+
+  const seen = new Set()
+  const favorites = []
+  let skippedCount = 0
+
+  for (const rawFavorite of rawFavorites) {
+    const favorite = sanitizeFavorite(rawFavorite)
+    if (!favorite) {
+      skippedCount += 1
+      continue
+    }
+
+    const key = getFavoriteKey(favorite)
+    if (seen.has(key)) {
+      skippedCount += 1
+      continue
+    }
+
+    seen.add(key)
+    favorites.push(favorite)
+  }
+
+  return { favorites: favorites.slice(0, FAVORITES_MAX_COUNT), skippedCount }
+}
+
 /**
  * Create favorites manager
  */
@@ -16,7 +76,8 @@ export function createFavoritesManager({ state, showStationDialog, switchSystem,
 
   function saveFavorites(favorites) {
     try {
-      window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites.slice(0, FAVORITES_MAX_COUNT)))
+      const normalized = normalizeFavoritesPayload(favorites).favorites
+      window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(normalized))
     } catch {}
   }
 
@@ -96,6 +157,38 @@ export function createFavoritesManager({ state, showStationDialog, switchSystem,
     })
   }
 
+  function exportFavoritesData() {
+    return {
+      app: 'Link Pulse',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      favorites: getFavorites(),
+    }
+  }
+
+  function importFavoritesData(payload, { merge = true } = {}) {
+    const { favorites: importedFavorites, skippedCount } = normalizeFavoritesPayload(payload)
+    const existingFavorites = merge ? getFavorites() : []
+    const seen = new Set(importedFavorites.map(getFavoriteKey))
+    const mergedFavorites = [
+      ...importedFavorites,
+      ...existingFavorites.filter((favorite) => {
+        const key = getFavoriteKey(favorite)
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      }),
+    ].slice(0, FAVORITES_MAX_COUNT)
+
+    saveFavorites(mergedFavorites)
+
+    return {
+      favorites: mergedFavorites,
+      importedCount: importedFavorites.length,
+      skippedCount,
+    }
+  }
+
   async function handleFavoriteClick(fav) {
     if (fav.systemId !== state.activeSystemId) {
       await switchSystem(fav.systemId, { updateUrl: true, preserveDialog: false })
@@ -118,6 +211,8 @@ export function createFavoritesManager({ state, showStationDialog, switchSystem,
     toggleFavorite,
     moveFavorite,
     getFavoriteDisplayData,
+    exportFavoritesData,
+    importFavoritesData,
     handleFavoriteClick,
   }
 }
