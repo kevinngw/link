@@ -826,12 +826,22 @@ function renderFavoriteArrivalLane(directionLabel, arrivals, systemId) {
 
   const chips = arrivals
     .slice(0, 2)
-    .map((arrival) => `
-      <span class="favorite-arrival-chip ${arrival.isRealtime ? 'is-live' : ''}">
-        <span>${formatArrivalTime(Math.floor((arrival.arrivalTime - Date.now()) / 1000))}</span>
-        ${arrival.isRealtime ? `<span class="favorite-arrival-chip-badge">${copyValue('realtimeBadge')}</span>` : ''}
-      </span>
-    `)
+    .map((arrival) => {
+      const arrivalLabel = formatArrivalTime(Math.floor((arrival.arrivalTime - Date.now()) / 1000))
+      const destination = String(arrival.destination ?? '').trim()
+      const destinationLabel = destination && destination !== copyValue('terminalFallback') ? destination : ''
+      const accessibilityLabel = destinationLabel
+        ? `${arrivalLabel} ${copyValue('shareArrivalDestination', destinationLabel)}`
+        : arrivalLabel
+
+      return `
+        <span class="favorite-arrival-chip ${arrival.isRealtime ? 'is-live' : ''}" aria-label="${escapeAttribute(accessibilityLabel)}" title="${escapeAttribute(accessibilityLabel)}">
+          <span class="favorite-arrival-chip-time">${escapeHtml(arrivalLabel)}</span>
+          ${destinationLabel ? `<span class="favorite-arrival-chip-destination">${escapeHtml(destinationLabel)}</span>` : ''}
+          ${arrival.isRealtime ? `<span class="favorite-arrival-chip-badge">${copyValue('realtimeBadge')}</span>` : ''}
+        </span>
+      `
+    })
     .join('')
 
   return `

@@ -4753,6 +4753,7 @@ dialog.is-closing::backdrop {
   align-items: center;
   gap: 6px;
   min-height: 30px;
+  max-width: 100%;
   padding: 0 10px;
   border-radius: 999px;
   background: var(--surface-active);
@@ -4763,6 +4764,26 @@ dialog.is-closing::backdrop {
 
 .favorite-arrival-chip.is-live {
   background: color-mix(in srgb, var(--status-ok) 18%, var(--surface-active));
+}
+
+.favorite-arrival-chip-time,
+.favorite-arrival-chip-badge {
+  flex: 0 0 auto;
+}
+
+.favorite-arrival-chip-destination {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.favorite-arrival-chip-destination::before {
+  content: '→ ';
+  color: var(--text-tertiary, var(--text-secondary));
 }
 
 .favorite-arrival-chip-badge {
