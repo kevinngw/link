@@ -852,6 +852,22 @@ function renderFavoriteArrivalLane(directionLabel, arrivals, systemId) {
   `
 }
 
+function renderFavoriteServiceMeta(favorite) {
+  if (!favorite.line) return ''
+
+  const reminder = getServiceReminder(favorite.line)
+  const todaySpan = getTodayServiceSpan(favorite.line)
+  const summary = `${todaySpan} · ${reminder.compact}`
+
+  return `
+    <p class="favorite-service-meta favorite-service-${reminder.tone}" aria-label="${escapeAttribute(summary)}">
+      <span>${escapeHtml(todaySpan)}</span>
+      <span aria-hidden="true">·</span>
+      <span>${escapeHtml(reminder.compact)}</span>
+    </p>
+  `
+}
+
 function renderFavoriteArrivalPreview(favorite, snapshot) {
   if (!favorite.exists) {
     return `<p class="favorite-arrival-status">${copyValue('favoritesStationMissing')}</p>`
@@ -957,6 +973,7 @@ function renderFavoritesView() {
             <div>
               <p class="favorite-item-title">${fav.stationName}</p>
               <p class="favorite-item-meta">${fav.lineName}${isCurrentSystem ? '' : ` · ${fav.systemName}`}</p>
+              ${renderFavoriteServiceMeta(fav)}
             </div>
           </div>
           ${renderFavoriteArrivalPreview(fav, snapshot)}

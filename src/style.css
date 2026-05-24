@@ -4819,6 +4819,33 @@ dialog.is-closing::backdrop {
   font-size: 0.78rem;
 }
 
+.favorite-service-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 6px 0 0;
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.favorite-service-active span:last-child {
+  color: var(--status-healthy);
+}
+
+.favorite-service-upcoming span:last-child {
+  color: var(--status-info);
+}
+
+.favorite-service-ended span:last-child {
+  color: var(--status-warn);
+}
+
+.favorite-service-muted span:last-child {
+  color: var(--text-muted);
+}
+
 .favorite-item-arrow {
   color: var(--text-secondary);
   font-size: 1.2rem;
@@ -4904,6 +4931,7 @@ dialog.is-closing::backdrop {
   }
 
   .favorite-item-meta,
+  .favorite-service-meta,
   .favorite-arrival-status,
   .favorite-arrival-empty {
     font-size: 0.74rem;
