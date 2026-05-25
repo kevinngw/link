@@ -10,6 +10,7 @@ import { parseVehicle } from './vehicles'
 import { createMapRenderer } from './renderers/map'
 import { createTrainRenderers } from './renderers/trains'
 import { createInsightsRenderers } from './renderers/insights'
+import { keyboardShortcuts } from './keyboard-nav'
 
 import { getDialogElements } from './dialogs/dom'
 import { createStationDialogDisplayController } from './dialogs/station-display'
@@ -150,6 +151,7 @@ document.querySelector('#app').innerHTML = `
       </div>
       <div class="screen-pills">
         <button id="station-search-toggle" class="theme-toggle station-search-toggle" type="button" aria-label="Open station search">Search</button>
+        <button id="shortcut-help-toggle" class="theme-toggle shortcut-help-toggle" type="button" aria-label="Open keyboard shortcuts">?</button>
         <button id="language-toggle" class="theme-toggle" type="button" aria-label="Switch to Chinese">中文</button>
         <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">Light</button>
         <button id="status-pill" class="status-pill" type="button" aria-label="Refresh data">SYNC</button>
@@ -288,6 +290,20 @@ document.querySelector('#app').innerHTML = `
       </div>
     </div>
   </dialog>
+  <dialog id="shortcut-help-dialog" class="station-dialog shortcut-help-dialog">
+    <div class="dialog-content">
+      <header class="dialog-header">
+        <div>
+          <h3 id="shortcut-help-title">Keyboard shortcuts</h3>
+          <p id="shortcut-help-summary" class="dialog-service-summary">Move faster with one-key navigation.</p>
+        </div>
+        <div class="dialog-actions">
+          <button id="shortcut-help-close" class="dialog-close" type="button" aria-label="Close keyboard shortcuts">&times;</button>
+        </div>
+      </header>
+      <div id="shortcut-help-body" class="shortcut-help-body"></div>
+    </div>
+  </dialog>
   <dialog id="insights-detail-dialog" class="station-dialog train-dialog">
     <div class="dialog-content">
       <header class="dialog-header">
@@ -313,6 +329,7 @@ const systemBarElement = document.querySelector('#system-bar')
 const viewBarElement = document.querySelector('#view-bar')
 const tabButtons = [...document.querySelectorAll('.tab-button')]
 const stationSearchToggleButton = document.querySelector('#station-search-toggle')
+const shortcutHelpToggleButton = document.querySelector('#shortcut-help-toggle')
 const languageToggleButton = document.querySelector('#language-toggle')
 const themeToggleButton = document.querySelector('#theme-toggle')
 const alertStripElement = document.querySelector('#alert-strip')
@@ -329,6 +346,11 @@ const stationSearchResultsElement = document.querySelector('#station-search-resu
 const stationSearchCloseButton = document.querySelector('#station-search-close')
 const stationLocationButton = document.querySelector('#station-location-button')
 const stationLocationStatusElement = document.querySelector('#station-location-status')
+const shortcutHelpDialog = document.querySelector('#shortcut-help-dialog')
+const shortcutHelpTitleElement = document.querySelector('#shortcut-help-title')
+const shortcutHelpSummaryElement = document.querySelector('#shortcut-help-summary')
+const shortcutHelpBodyElement = document.querySelector('#shortcut-help-body')
+const shortcutHelpCloseButton = document.querySelector('#shortcut-help-close')
 
 const dialogElements = getDialogElements()
 const {
@@ -426,6 +448,9 @@ stationSearchDialog.addEventListener('close', () => {
     clearDialogParams({ keepPage: true, keepSystem: true, keepStation: true })
   }
 })
+shortcutHelpDialog.addEventListener('close', () => {
+  shortcutHelpToggleButton?.focus()
+})
 insightsDetailDialog.addEventListener('close', () => {
   if (!state.isSyncingFromUrl) {
     clearDialogParams({ keepPage: true, keepSystem: true, keepStation: true })
@@ -455,18 +480,60 @@ dialog.addEventListener('close', () => {
   state.dialogOpenerElement?.focus()
   state.dialogOpenerElement = null
 })
+function activateTab(tab, { animate = true } = {}) {
+  if (!tab || tab === state.activeTab) return
+
+  const switchTab = () => {
+    state.activeTab = tab
+    setPageParam(state.activeTab)
+    persistLastView()
+    render()
+    boardElement.style.opacity = '1'
+  }
+
+  if (!animate) {
+    switchTab()
+    return
+  }
+
+  boardElement.style.opacity = '0'
+  setTimeout(switchTab, 150)
+}
+
+function renderShortcutHelpBody() {
+  const shortcuts = keyboardShortcuts[state.language] ?? keyboardShortcuts.en
+  const sections = [
+    { title: copyValue('shortcutSectionNavigation'), items: shortcuts.navigation },
+    { title: copyValue('shortcutSectionActions'), items: shortcuts.actions },
+    { title: copyValue('shortcutSectionTabs'), items: shortcuts.tabs },
+  ]
+
+  shortcutHelpBodyElement.innerHTML = sections.map((section) => `
+    <section class="shortcut-help-section">
+      <h4>${escapeHtml(section.title)}</h4>
+      <div class="shortcut-help-grid">
+        ${section.items.map((item) => `
+          <div class="shortcut-help-row">
+            <kbd>${escapeHtml(item.key)}</kbd>
+            <span>${escapeHtml(item.desc)}</span>
+          </div>
+        `).join('')}
+      </div>
+    </section>
+  `).join('')
+}
+
+function openShortcutHelp() {
+  renderShortcutHelpBody()
+  shortcutHelpDialog.showModal()
+}
+
+function closeShortcutHelp() {
+  closeDialogAnimated(shortcutHelpDialog)
+}
+
 tabButtons.forEach((button) => {
-  button.addEventListener('click', () => {
-    if (button.dataset.tab === state.activeTab) return
-    boardElement.style.opacity = '0'
-    setTimeout(() => {
-      state.activeTab = button.dataset.tab
-      setPageParam(state.activeTab)
-      persistLastView()
-      render()
-      boardElement.style.opacity = '1'
-    }, 150)
-  })
+  button.addEventListener('click', () => activateTab(button.dataset.tab))
 })
 themeToggleButton.addEventListener('click', () => {
   const nextTheme = state.theme === 'dark' ? 'light' : 'dark'
@@ -482,6 +549,13 @@ themeToggleButton.addEventListener('click', () => {
 })
 stationSearchToggleButton.addEventListener('click', () => {
   openStationSearch()
+})
+shortcutHelpToggleButton.addEventListener('click', () => {
+  openShortcutHelp()
+})
+shortcutHelpCloseButton.addEventListener('click', () => closeShortcutHelp())
+shortcutHelpDialog.addEventListener('click', (e) => {
+  if (e.target === shortcutHelpDialog) closeShortcutHelp()
 })
 stationLocationButton?.addEventListener('click', async () => {
   await findNearbyStations()
@@ -537,13 +611,53 @@ stationSearchInput.addEventListener('keydown', async (event) => {
 document.addEventListener('keydown', (event) => {
   const target = event.target
   const isTypingTarget = target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-  if (event.key === '/' && !isTypingTarget && !event.metaKey && !event.ctrlKey && !event.altKey) {
+  const hasModifier = event.metaKey || event.ctrlKey || event.altKey
+  if (isTypingTarget && event.key !== 'Escape') return
+
+  if (event.key === 'Escape') {
+    if (shortcutHelpDialog.open) closeShortcutHelp()
+    else if (stationSearchDialog.open) closeStationSearch()
+    return
+  }
+
+  if (hasModifier || dialog.open || trainDialog.open || alertDialog.open || stationSearchDialog.open || insightsDetailDialog.open || shortcutHelpDialog.open) return
+
+  if (event.key === '/') {
     event.preventDefault()
     openStationSearch()
     return
   }
-  if (event.key === 'Escape' && stationSearchDialog.open) {
-    closeStationSearch()
+
+  if (event.key === '?') {
+    event.preventDefault()
+    openShortcutHelp()
+    return
+  }
+
+  if (event.key === 'r') {
+    event.preventDefault()
+    statusPillElement.textContent = '...'
+    showToast(copyValue('refreshingData'))
+    refreshVisibleRealtime()
+      .then(() => showToast(copyValue('dataRefreshed')))
+      .catch(console.error)
+    return
+  }
+
+  const tabShortcuts = { 1: 'map', 2: 'trains', 3: 'favorites', 4: 'insights' }
+  if (tabShortcuts[event.key]) {
+    event.preventDefault()
+    activateTab(tabShortcuts[event.key])
+    return
+  }
+
+  if (event.key === 'h' || event.key === 'ArrowLeft' || event.key === 'l' || event.key === 'ArrowRight') {
+    const tabs = ['map', 'trains', 'favorites', 'insights']
+    const currentIndex = Math.max(0, tabs.indexOf(state.activeTab))
+    const delta = event.key === 'h' || event.key === 'ArrowLeft' ? -1 : 1
+    const nextTab = tabs[(currentIndex + delta + tabs.length) % tabs.length]
+    event.preventDefault()
+    activateTab(nextTab)
   }
 })
 document.addEventListener('visibilitychange', () => {
@@ -2729,6 +2843,8 @@ function renderShellCopy() {
 
   stationSearchToggleButton.textContent = copyValue('openStationSearch')
   stationSearchToggleButton.setAttribute('aria-label', copyValue('openStationSearch'))
+  shortcutHelpToggleButton.textContent = copyValue('shortcutHelpButton')
+  shortcutHelpToggleButton.setAttribute('aria-label', copyValue('shortcutHelpTitle'))
   stationSearchTitleElement.textContent = copyValue('openStationSearch')
   stationSearchSummaryElement.textContent = copyValue('stationSearchHint')
   stationSearchInput.setAttribute('placeholder', copyValue('stationSearchPlaceholder'))
@@ -2782,6 +2898,10 @@ function renderDialogCopy() {
     alertDialogTitle.textContent = copyValue('serviceAlert')
     alertDialogSubtitle.textContent = copyValue('transitAdvisory')
   }
+  shortcutHelpTitleElement.textContent = copyValue('shortcutHelpTitle')
+  shortcutHelpSummaryElement.textContent = copyValue('shortcutHelpSummary')
+  shortcutHelpCloseButton.setAttribute('aria-label', copyValue('shortcutHelpClose'))
+  if (shortcutHelpDialog.open) renderShortcutHelpBody()
 }
 
 function renderSkeleton() {

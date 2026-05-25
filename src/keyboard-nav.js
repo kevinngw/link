@@ -32,7 +32,8 @@ export function createKeyboardNavigation(state, actions) {
     // Tabs
     '1': 'tabMap',
     '2': 'tabTrains',
-    '3': 'tabInsights',
+    '3': 'tabFavorites',
+    '4': 'tabInsights',
     
     // Direction
     'b': 'directionBoth',
@@ -223,11 +224,13 @@ export const keyboardShortcuts = {
       { key: 'Space', desc: 'Toggle display mode' },
       { key: 'r', desc: 'Refresh data' },
       { key: '/', desc: 'Search stations' },
+      { key: '?', desc: 'Show keyboard shortcuts' },
     ],
     tabs: [
       { key: '1', desc: 'Map view' },
       { key: '2', desc: 'Trains view' },
-      { key: '3', desc: 'Insights view' },
+      { key: '3', desc: 'Favorites view' },
+      { key: '4', desc: 'Insights view' },
     ]
   },
   'zh-CN': {
@@ -243,11 +246,13 @@ export const keyboardShortcuts = {
       { key: 'Space', desc: '切换显示模式' },
       { key: 'r', desc: '刷新数据' },
       { key: '/', desc: '搜索站点' },
+      { key: '?', desc: '显示键盘快捷键' },
     ],
     tabs: [
       { key: '1', desc: '地图视图' },
       { key: '2', desc: '列车视图' },
-      { key: '3', desc: '洞察视图' },
+      { key: '3', desc: '收藏视图' },
+      { key: '4', desc: '洞察视图' },
     ]
   }
 }
