@@ -4838,8 +4838,16 @@ dialog.is-closing::backdrop {
 }
 
 .favorite-arrival-chip-time,
+.favorite-arrival-chip-clock,
 .favorite-arrival-chip-badge {
   flex: 0 0 auto;
+}
+
+.favorite-arrival-chip-clock {
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 .favorite-arrival-chip-destination {
