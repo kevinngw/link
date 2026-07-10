@@ -206,6 +206,19 @@ export function createVehicleDisplay({ state, copyValue, formatArrivalTime, form
       statusElement.textContent = statusLabel
       statusElement.className = `arrival-status arrival-status-${serviceTone}`
     })
+
+    // Update favorite arrival chip countdowns
+    const favoriteChips = document.querySelectorAll('.favorite-arrival-chip[data-arrival-time]')
+    favoriteChips.forEach((chip) => {
+      const arrivalTime = Number(chip.dataset.arrivalTime)
+      if (!Number.isFinite(arrivalTime)) return
+
+      const countdownElement = chip.querySelector('.favorite-arrival-chip-time')
+      if (!countdownElement) return
+
+      const diffSeconds = Math.floor((arrivalTime - Date.now()) / 1000)
+      countdownElement.textContent = formatArrivalTime(diffSeconds)
+    })
   }
 
   return {

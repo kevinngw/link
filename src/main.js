@@ -951,7 +951,7 @@ function renderFavoriteArrivalLane(directionLabel, arrivals, systemId) {
         : timeLabel
 
       return `
-        <span class="favorite-arrival-chip ${arrival.isRealtime ? 'is-live' : ''}" aria-label="${escapeAttribute(accessibilityLabel)}" title="${escapeAttribute(accessibilityLabel)}">
+        <span class="favorite-arrival-chip ${arrival.isRealtime ? 'is-live' : ''}" data-arrival-time="${arrival.arrivalTime}" aria-label="${escapeAttribute(accessibilityLabel)}" title="${escapeAttribute(accessibilityLabel)}">
           <span class="favorite-arrival-chip-time">${escapeHtml(arrivalLabel)}</span>
           ${clockLabel ? `<span class="favorite-arrival-chip-clock">${escapeHtml(clockLabel)}</span>` : ''}
           ${destinationLabel ? `<span class="favorite-arrival-chip-destination">${escapeHtml(destinationLabel)}</span>` : ''}
