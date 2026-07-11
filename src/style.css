@@ -4882,6 +4882,69 @@ dialog.is-closing::backdrop {
   margin-top: 8px;
 }
 
+/* Nearby stations in favorites view */
+.nearby-prompt-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 18px;
+  min-height: 44px;
+  padding: 0 24px;
+  border: 1px solid color-mix(in srgb, var(--accent-strong) 50%, var(--border-color));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent-strong) 12%, var(--surface-soft));
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.nearby-prompt-button:hover {
+  background: color-mix(in srgb, var(--accent-strong) 20%, var(--surface-active));
+  border-color: var(--accent-strong);
+}
+
+.nearby-prompt-button.is-loading {
+  opacity: 0.7;
+  cursor: wait;
+  animation: pulse-opacity 1s ease-in-out infinite;
+}
+
+@keyframes pulse-opacity {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 0.4; }
+}
+
+.nearby-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.nearby-prompt-error {
+  margin: 0;
+  color: var(--status-warn);
+  font-size: 0.78rem;
+}
+
+.nearby-section {
+  margin-top: 28px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border-color);
+}
+
+.nearby-section-title {
+  margin: 0 0 14px;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .favorite-item-title {
   margin: 0;
   color: var(--text-primary);

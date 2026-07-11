@@ -3,7 +3,7 @@ import { registerSW } from 'virtual:pwa-register'
 import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
-import { clamp, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
+import { clamp, formatDistanceMeters, getDistanceMeters, getWalkingMinutes, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
 import { createObaClient } from './oba'
 import { createArrivalsHelpers, getLineRouteId, getStatusTone } from './arrivals'
 import { parseVehicle } from './vehicles'
@@ -124,6 +124,12 @@ const state = {
   favoriteArrivalsRefreshPromise: null,
   favoritesSort: getStoredFavoritesSort(),
   favoriteImportInput: null,
+
+  // Nearby stations in favorites view
+  nearbyFavoritesStations: [],
+  nearbyFavoritesStatus: '', // '', 'loading', 'error', 'found'
+  nearbyFavoritesError: '',
+  nearbyFavoritesArrivals: new Map(),
 }
 
 function closeDialogAnimated(dialogEl) {
@@ -1062,16 +1068,266 @@ function renderFavoritesSortControls() {
   `
 }
 
+function renderNearbyStationsPrompt() {
+  if (state.nearbyFavoritesStatus === 'loading') {
+    return `<button type="button" class="nearby-prompt-button is-loading" data-nearby-find disabled>${copyValue('nearbyLoading')}</button>`
+  }
+
+  if (state.nearbyFavoritesError) {
+    return `
+      <div class="nearby-prompt">
+        <button type="button" class="nearby-prompt-button" data-nearby-find>${copyValue('nearbyPrompt')}</button>
+        <p class="nearby-prompt-error">${state.nearbyFavoritesError}</p>
+      </div>
+    `
+  }
+
+  return `<button type="button" class="nearby-prompt-button" data-nearby-find>${copyValue('nearbyPrompt')}</button>`
+}
+
+function renderNearbyStationsSection(favorites) {
+  const stations = state.nearbyFavoritesStations
+  if (!stations.length && state.nearbyFavoritesStatus !== 'loading') return ''
+
+  if (state.nearbyFavoritesStatus === 'loading') {
+    return `
+      <section class="nearby-section">
+        <h3 class="nearby-section-title">${copyValue('nearbyTitle')}</h3>
+        <p class="muted">${copyValue('nearbyLoading')}</p>
+      </section>
+    `
+  }
+
+  if (!stations.length) {
+    return `
+      <section class="nearby-section">
+        <h3 class="nearby-section-title">${copyValue('nearbyTitle')}</h3>
+        <p class="muted">${copyValue('nearbyNone')}</p>
+      </section>
+    `
+  }
+
+  const items = stations.map((entry) => {
+    const key = `nearby:${entry.systemId}:${entry.lineId}:${entry.stationId}`
+    const snapshot = state.nearbyFavoritesArrivals.get(key)
+    const walkingMin = getWalkingMinutes(entry.distanceMeters)
+    const walkingLabel = walkingMin ? copyValue('walkMinutes', walkingMin) : ''
+    const distanceLabel = formatDistanceMeters(entry.distanceMeters)
+    const meta = [walkingLabel, distanceLabel].filter(Boolean).join(' · ')
+
+    return `
+      <div class="favorite-item nearby-station-item"
+           data-nearby-station="${entry.systemId}:${entry.lineId}:${entry.stationId}"
+           role="button" tabindex="0">
+        <span class="arrival-line-token" style="--line-color:${entry.lineColor};">${entry.lineName[0]}</span>
+        <div class="favorite-item-content">
+          <div class="favorite-item-header">
+            <div>
+              <p class="favorite-item-title">${entry.stationName}</p>
+              <p class="favorite-item-meta">${entry.lineName} · ${entry.systemName}${meta ? ` · ${meta}` : ''}</p>
+            </div>
+          </div>
+          ${renderNearbyArrivalPreview(key, snapshot, entry)}
+        </div>
+      </div>
+    `
+  }).join('')
+
+  return `
+    <section class="nearby-section">
+      <h3 class="nearby-section-title">${copyValue('nearbyTitle')}</h3>
+      <div class="favorites-list">
+        ${items}
+      </div>
+    </section>
+  `
+}
+
+function renderNearbyArrivalPreview(key, snapshot, entry) {
+  if (!snapshot || snapshot.loading) {
+    return `<p class="favorite-arrival-status">${copyValue('favoritesArrivalsLoading')}</p>`
+  }
+
+  if (snapshot.error) {
+    return `<p class="favorite-arrival-status">${copyValue('favoritesArrivalsUnavailable')}</p>`
+  }
+
+  const nbLabel = copyValue('northboundShort')
+  const sbLabel = copyValue('southboundShort')
+  const systemId = entry.systemId
+
+  return `
+    <div class="favorite-arrivals-preview">
+      <div class="favorite-arrivals-grid">
+        ${renderFavoriteArrivalLane(nbLabel, snapshot.arrivals?.nb ?? [], systemId)}
+        ${renderFavoriteArrivalLane(sbLabel, snapshot.arrivals?.sb ?? [], systemId)}
+      </div>
+    </div>
+  `
+}
+
+async function findNearbyStationsForFavorites() {
+  if (!navigator.geolocation) {
+    state.nearbyFavoritesError = copyValue('nearbyUnavailable')
+    state.nearbyFavoritesStatus = 'error'
+    render()
+    return
+  }
+
+  state.nearbyFavoritesStatus = 'loading'
+  state.nearbyFavoritesError = ''
+  state.nearbyFavoritesStations = []
+  state.nearbyFavoritesArrivals.clear()
+  renderBoard()
+
+  try {
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 120000,
+      })
+    })
+
+    const latitude = position.coords?.latitude
+    const longitude = position.coords?.longitude
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw new Error('invalid-location')
+    }
+
+    // Build station entries from all systems
+    const entries = []
+    for (const system of state.systemsById.values()) {
+      for (const line of system.lines ?? []) {
+        for (const station of line.stops ?? []) {
+          const lat = Number(station.lat)
+          const lon = Number(station.lon)
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue
+          const distanceMeters = getDistanceMeters(latitude, longitude, lat, lon)
+          entries.push({
+            systemId: system.id,
+            systemName: system.name,
+            lineId: line.id,
+            lineName: line.name,
+            lineColor: line.color,
+            stationId: station.id,
+            stationName: station.name,
+            lat: station.lat,
+            lon: station.lon,
+            distanceMeters,
+          })
+        }
+      }
+    }
+
+    // Dedupe by station name within a system
+    const deduped = new Map()
+    for (const entry of entries) {
+      const dedupeKey = `${entry.systemId}:${entry.stationName.toLowerCase()}`
+      const existing = deduped.get(dedupeKey)
+      if (!existing || entry.distanceMeters < existing.distanceMeters) {
+        deduped.set(dedupeKey, entry)
+      }
+    }
+
+    // Sort by distance, take top 8
+    const nearby = [...deduped.values()]
+      .sort((a, b) => a.distanceMeters - b.distanceMeters || a.stationName.localeCompare(b.stationName))
+      .slice(0, 8)
+
+    state.nearbyFavoritesStations = nearby
+    state.nearbyFavoritesStatus = 'found'
+    state.nearbyFavoritesError = ''
+    renderBoard()
+
+    // Fetch arrivals for nearby stations
+    for (const entry of nearby) {
+      const key = `nearby:${entry.systemId}:${entry.lineId}:${entry.stationId}`
+      state.nearbyFavoritesArrivals.set(key, { loading: true, error: '', arrivals: { nb: [], sb: [] } })
+
+      try {
+        // Load system data if needed
+        if (!state.systemsById.get(entry.systemId)?.lines) {
+          await loadSystemDataById(state, entry.systemId)
+        }
+
+        const system = state.systemsById.get(entry.systemId)
+        const line = system?.lines?.find((l) => l.id === entry.lineId)
+        const station = line?.stops?.find((s) => s.id === entry.stationId)
+        if (!line || !station) {
+          state.nearbyFavoritesArrivals.set(key, { loading: false, error: 'missing', arrivals: { nb: [], sb: [] } })
+          continue
+        }
+
+        const stopIds = getStationStopIds(station, line)
+        const feed = await fetchArrivalsForStopIds(stopIds)
+        const arrivals = buildArrivalsForLine(feed, line, stopIds)
+        state.nearbyFavoritesArrivals.set(key, { loading: false, error: '', arrivals, fetchedAt: Date.now() })
+      } catch (err) {
+        state.nearbyFavoritesArrivals.set(key, { loading: false, error: 'request-failed', arrivals: { nb: [], sb: [] } })
+      }
+
+      if (state.activeTab === 'favorites') render()
+    }
+  } catch (error) {
+    const code = error?.code
+    state.nearbyFavoritesStations = []
+    state.nearbyFavoritesStatus = 'error'
+    state.nearbyFavoritesError = code === 1
+      ? copyValue('nearbyPermissionDenied')
+      : code === 2
+        ? copyValue('nearbyUnavailable')
+        : copyValue('nearbyError')
+    render()
+  }
+}
+
+function clearNearbyStations() {
+  state.nearbyFavoritesStations = []
+  state.nearbyFavoritesStatus = ''
+  state.nearbyFavoritesError = ''
+  state.nearbyFavoritesArrivals.clear()
+}
+
+async function handleNearbyStationClick(key) {
+  const [systemId, lineId, stationId] = key.split(':')
+  const entry = state.nearbyFavoritesStations.find(
+    (e) => e.systemId === systemId && e.lineId === lineId && e.stationId === stationId,
+  )
+  if (!entry) return
+
+  try {
+    if (systemId !== state.activeSystemId) {
+      await switchSystem(systemId, { updateUrl: true, preserveDialog: false })
+    }
+
+    const line = state.lines.find((l) => l.id === lineId)
+    const station = line?.stops?.find((s) => s.id === stationId)
+    if (station) {
+      await showStationDialog(station)
+    } else {
+      showToast(`"${entry.stationName}" is not available in current data`, { tone: 'warn' })
+    }
+  } catch (err) {
+    console.error('Failed to open nearby station:', err)
+  }
+}
+
 function renderFavoritesView() {
   const favorites = sortFavoritesForDisplay(getFavoriteDisplayData())
 
-  if (!favorites.length) {
+  // Build nearby stations HTML when available
+  const nearbyHtml = renderNearbyStationsSection(favorites)
+  const hasNearby = !!nearbyHtml
+
+  if (!favorites.length && !hasNearby) {
     return `
       <section class="board" style="grid-template-columns: 1fr;">
         <article class="panel-card">
           <h2>${copyValue('favoritesTitle')}</h2>
           <p class="muted">${copyValue('noFavorites')}</p>
           <p class="muted">${copyValue('favoritesHint')}</p>
+          ${renderNearbyStationsPrompt()}
         </article>
       </section>
     `
@@ -1126,6 +1382,7 @@ function renderFavoritesView() {
       <div class="favorites-list">
         ${items}
       </div>
+      ${nearbyHtml}
     </article>
   `
 }
@@ -1186,10 +1443,28 @@ boardElement.addEventListener('click', (e) => {
     return
   }
   const favItem = e.target.closest('[data-favorite-key]')
-  if (!favItem) return
-  const key = favItem.dataset.favoriteKey
-  const fav = getFavorites().find((f) => `${f.systemId}:${f.lineId}:${f.stationId}` === key)
-  if (fav) handleFavoriteClick(fav)
+  if (favItem) {
+    const key = favItem.dataset.favoriteKey
+    const fav = getFavorites().find((f) => `${f.systemId}:${f.lineId}:${f.stationId}` === key)
+    if (fav) handleFavoriteClick(fav)
+    return
+  }
+
+  // Nearby station click
+  const nearbyItem = e.target.closest('[data-nearby-station]')
+  if (nearbyItem) {
+    e.stopPropagation()
+    handleNearbyStationClick(nearbyItem.dataset.nearbyStation)
+    return
+  }
+
+  // Nearby find button
+  const nearbyFind = e.target.closest('[data-nearby-find]')
+  if (nearbyFind && !nearbyFind.disabled) {
+    e.stopPropagation()
+    findNearbyStationsForFavorites().catch(console.error)
+    return
+  }
 })
 
 function setArrivalsTitleHtml(element, text) {
