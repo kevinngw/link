@@ -3,7 +3,7 @@ import { registerSW } from 'virtual:pwa-register'
 import { ARRIVALS_CACHE_TTL_MS, COMPACT_LAYOUT_BREAKPOINT, DEFAULT_SYSTEM_ID, GHOST_HISTORY_LIMIT, GHOST_MAX_AGE_MS, IS_PUBLIC_TEST_KEY, LANGUAGE_STORAGE_KEY, OBA_BASE_URL, OBA_KEY, SYSTEM_META, THEME_STORAGE_KEY, UI_COPY, VEHICLE_REFRESH_INTERVAL_MS } from './config'
 import { formatAlertEffect, formatAlertSeverity, formatArrivalTime as formatArrivalTimeValue, formatClockTime as formatClockTimeValue, formatCurrentTime as formatCurrentTimeValue, formatDurationFromMs as formatDurationFromMsValue, formatEtaClockFromNow as formatEtaClockFromNowValue, formatRelativeTime as formatRelativeTimeValue, formatServiceClock as formatServiceClockValue, getDateKeyWithOffset, getServiceDateTime, getTodayDateKey } from './formatters'
 import { classifyHeadwayHealth, computeGapStats, computeLineHeadways, formatPercent, getDelayBuckets, getLineAttentionReasons } from './insights'
-import { clamp, formatDistanceMeters, getDistanceMeters, getWalkingMinutes, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
+import { clamp, formatDistanceMeters, getDistanceMeters, getTravelTimeBetweenStations, getWalkingMinutes, normalizeName, parseClockToSeconds, pluralizeVehicleLabel, sleep, slugifyStation } from './utils'
 import { createObaClient } from './oba'
 import { createArrivalsHelpers, getLineRouteId, getStatusTone } from './arrivals'
 import { parseVehicle } from './vehicles'
@@ -125,6 +125,9 @@ const state = {
   favoritesSort: getStoredFavoritesSort(),
   favoriteImportInput: null,
 
+  // Travel time in station dialog
+  travelTimeDestination: '',
+
   // Nearby stations in favorites view
   nearbyFavoritesStations: [],
   nearbyFavoritesStatus: '', // '', 'loading', 'error', 'found'
@@ -195,6 +198,13 @@ document.querySelector('#app').innerHTML = `
             </div>
           </div>
           <p id="dialog-service-summary" class="dialog-service-summary">Service summary</p>
+          <div id="dialog-travel-time" class="dialog-travel-time" hidden>
+            <label for="dialog-travel-time-select" id="dialog-travel-time-label" class="dialog-travel-time-label">Travel time to</label>
+            <div class="dialog-travel-time-row">
+              <select id="dialog-travel-time-select" class="dialog-travel-time-select"></select>
+              <span id="dialog-travel-time-result" class="dialog-travel-time-result"></span>
+            </div>
+          </div>
         </div>
         <div class="dialog-actions">
           <button id="dialog-favorite" class="dialog-close dialog-favorite-button" type="button" aria-label="Add to favorites">☆</button>
@@ -390,6 +400,10 @@ const {
   insightsDetailSubtitle,
   insightsDetailBody,
   insightsDetailClose,
+  dialogTravelTime,
+  dialogTravelTimeLabel,
+  dialogTravelTimeSelect,
+  dialogTravelTimeResult,
 } = dialogElements
 
 const dialogShareButton = document.querySelector('#dialog-share')
@@ -408,6 +422,13 @@ if (dialogShareButton) {
 
 if (dialogDirectionsButton) {
   dialogDirectionsButton.addEventListener('click', () => openStationDirections())
+}
+
+if (dialogTravelTimeSelect) {
+  dialogTravelTimeSelect.addEventListener('change', () => {
+    state.travelTimeDestination = dialogTravelTimeSelect.value
+    renderTravelTimeResult()
+  })
 }
 
 trainDialogShare.addEventListener('click', () => shareTrainStatus())
@@ -2889,6 +2910,7 @@ async function showStationDialog(station, { updateUrl = true } = {}) {
   state.currentDialogStationId = station.id
   setDialogTitle(getDialogStationTitle(station))
   renderStationServiceSummary(station)
+  renderTravelTimeSection(station)
   clearStationDialogContent()
   renderArrivalLists({ nb: [], sb: [] }, true)
   if (!dialog.open) {
@@ -3139,6 +3161,97 @@ function renderShellCopy() {
 
   systemBarElement.setAttribute('aria-label', copyValue('transitSystems'))
   viewBarElement.setAttribute('aria-label', copyValue('boardViews'))
+}
+
+function getStationLineLayout(station) {
+  if (!station) return null
+  for (const line of state.lines) {
+    const layout = state.layouts.get(line.id)
+    if (layout?.stationIndexByStopId.has(station.id)) {
+      return { line, layout }
+    }
+  }
+  return null
+}
+
+function renderTravelTimeSection(station) {
+  if (!dialogTravelTime || !dialogTravelTimeSelect || !station) {
+    if (dialogTravelTime) dialogTravelTime.hidden = true
+    return
+  }
+
+  const lineLayout = getStationLineLayout(station)
+  if (!lineLayout) {
+    dialogTravelTime.hidden = true
+    return
+  }
+
+  const { line, layout } = lineLayout
+  const stops = layout.stations
+  if (!stops || stops.length < 2) {
+    dialogTravelTime.hidden = true
+    return
+  }
+
+  // Build destination options (all stations except the current one)
+  const currentStopId = station.id
+  const hasAliases = line.stationAliases?.[currentStopId]
+  const stopIdsToExclude = new Set([currentStopId, ...(hasAliases || [])])
+
+  const options = stops
+    .filter((s) => !stopIdsToExclude.has(s.id))
+    .map((s) => ({
+      id: s.id,
+      name: s.label || s.name,
+      minutes: getTravelTimeBetweenStations(layout, currentStopId, s.id),
+    }))
+    .filter((o) => o.minutes != null && o.minutes > 0)
+
+  if (!options.length) {
+    dialogTravelTime.hidden = true
+    return
+  }
+
+  // Sort by travel time ascending for better UX
+  options.sort((a, b) => a.minutes - b.minutes)
+
+  dialogTravelTimeLabel.textContent = copyValue('travelTimeLabel')
+
+  const currentValue = state.travelTimeDestination
+  const hasCurrentOption = options.some((o) => o.id === currentValue)
+  if (!hasCurrentOption) state.travelTimeDestination = ''
+
+  dialogTravelTimeSelect.innerHTML = [
+    `<option value="">${copyValue('travelTimePlaceholder')}</option>`,
+    ...options.map((o) => `<option value="${o.id}"${o.id === state.travelTimeDestination ? ' selected' : ''}>${o.name} (~${o.minutes} min)</option>`),
+  ].join('')
+
+  dialogTravelTime.hidden = false
+  renderTravelTimeResult()
+}
+
+function renderTravelTimeResult() {
+  if (!dialogTravelTimeResult) return
+
+  const dest = state.travelTimeDestination
+  if (!dest || !state.currentDialogStation) {
+    dialogTravelTimeResult.textContent = ''
+    return
+  }
+
+  const lineLayout = getStationLineLayout(state.currentDialogStation)
+  if (!lineLayout) {
+    dialogTravelTimeResult.textContent = ''
+    return
+  }
+
+  const minutes = getTravelTimeBetweenStations(lineLayout.layout, state.currentDialogStation.id, dest)
+  if (minutes == null || minutes <= 0) {
+    dialogTravelTimeResult.textContent = ''
+    return
+  }
+
+  dialogTravelTimeResult.textContent = copyValue('travelTimeResult', minutes)
 }
 
 function renderDialogCopy() {

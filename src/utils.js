@@ -73,3 +73,24 @@ export function getWalkingMinutes(distanceMeters) {
   if (!Number.isFinite(distanceMeters)) return null
   return Math.max(1, Math.round(distanceMeters / WALKING_METERS_PER_MINUTE))
 }
+
+/**
+ * Compute estimated travel time (in minutes) between two stations on the same line,
+ * using pre-computed cumulative segment minutes from the layout.
+ * Returns null if either station is not found in the layout.
+ */
+export function getTravelTimeBetweenStations(layout, fromStopId, toStopId) {
+  if (!layout || !fromStopId || !toStopId || fromStopId === toStopId) return null
+
+  const stops = layout.stations
+  if (!stops || stops.length < 2) return null
+
+  const fromIndex = layout.stationIndexByStopId.get(fromStopId)
+  const toIndex = layout.stationIndexByStopId.get(toStopId)
+  if (fromIndex == null || toIndex == null) return null
+
+  const fromMinutes = stops[fromIndex].cumulativeMinutes ?? 0
+  const toMinutes = stops[toIndex].cumulativeMinutes ?? 0
+
+  return Math.abs(toMinutes - fromMinutes)
+}

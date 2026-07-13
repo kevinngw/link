@@ -3,6 +3,7 @@ import {
   clamp,
   formatDistanceMeters,
   getDistanceMeters,
+  getTravelTimeBetweenStations,
   getWalkingMinutes,
   normalizeName,
   parseClockToSeconds,
@@ -144,6 +145,55 @@ describe('utils', () => {
 
     it('returns 0 for same point', () => {
       expect(getDistanceMeters(47.6, -122.3, 47.6, -122.3)).toBe(0)
+    })
+  })
+
+  describe('getTravelTimeBetweenStations', () => {
+    function makeLayout(stations) {
+      const stationIndexByStopId = new Map()
+      stations.forEach((s, i) => stationIndexByStopId.set(s.id, i))
+      return { stations, stationIndexByStopId }
+    }
+
+    it('computes cumulative travel time between two stations', () => {
+      const layout = makeLayout([
+        { id: 'A', cumulativeMinutes: 0 },
+        { id: 'B', cumulativeMinutes: 5 },
+        { id: 'C', cumulativeMinutes: 12 },
+      ])
+      expect(getTravelTimeBetweenStations(layout, 'A', 'C')).toBe(12)
+      expect(getTravelTimeBetweenStations(layout, 'C', 'A')).toBe(12)
+      expect(getTravelTimeBetweenStations(layout, 'A', 'B')).toBe(5)
+      expect(getTravelTimeBetweenStations(layout, 'B', 'C')).toBe(7)
+    })
+
+    it('returns null for unknown stations', () => {
+      const layout = makeLayout([
+        { id: 'A', cumulativeMinutes: 0 },
+        { id: 'B', cumulativeMinutes: 5 },
+      ])
+      expect(getTravelTimeBetweenStations(layout, 'A', 'Z')).toBeNull()
+      expect(getTravelTimeBetweenStations(layout, 'Z', 'A')).toBeNull()
+    })
+
+    it('returns null for same station', () => {
+      const layout = makeLayout([
+        { id: 'A', cumulativeMinutes: 0 },
+        { id: 'B', cumulativeMinutes: 5 },
+      ])
+      expect(getTravelTimeBetweenStations(layout, 'A', 'A')).toBeNull()
+    })
+
+    it('returns null for null/undefined inputs', () => {
+      const layout = makeLayout([{ id: 'A', cumulativeMinutes: 0 }])
+      expect(getTravelTimeBetweenStations(null, 'A', 'B')).toBeNull()
+      expect(getTravelTimeBetweenStations(layout, '', 'B')).toBeNull()
+      expect(getTravelTimeBetweenStations(layout, 'A', '')).toBeNull()
+    })
+
+    it('returns null when layout has fewer than 2 stations', () => {
+      const layout = makeLayout([{ id: 'A', cumulativeMinutes: 0 }])
+      expect(getTravelTimeBetweenStations(layout, 'A', 'X')).toBeNull()
     })
   })
 })

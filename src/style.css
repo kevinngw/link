@@ -3099,6 +3099,70 @@ button.train-list-item {
   line-height: 1.45;
 }
 
+.dialog-travel-time {
+  margin: 10px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dialog-travel-time-label {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dialog-travel-time-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dialog-travel-time-select {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--surface-soft);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M3 4.5l3 3 3-3'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 28px;
+}
+
+.dialog-travel-time-select:hover {
+  border-color: var(--text-secondary);
+}
+
+.dialog-travel-time-select:focus {
+  outline: none;
+  border-color: var(--accent-color, #4db6ac);
+}
+
+.dialog-travel-time-result {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--surface-active);
+  color: var(--accent-color, #4db6ac);
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dialog-travel-time-result:empty {
+  display: none;
+}
+
 .dialog-title {
   max-width: 100%;
   overflow: hidden;
@@ -3655,6 +3719,10 @@ button.arrival-item {
   margin-top: 10px;
   font-size: 0.98rem;
   color: var(--text-secondary);
+}
+
+.station-dialog.is-display-mode .dialog-travel-time {
+  display: none;
 }
 
 .station-dialog.is-display-mode .dialog-header h3 {

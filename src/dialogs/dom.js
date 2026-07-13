@@ -6,6 +6,10 @@ export function getDialogElements() {
     dialogTitleText: document.querySelector('#dialog-title-text'),
     dialogTitleTextClone: document.querySelector('#dialog-title-text-clone'),
     dialogServiceSummary: document.querySelector('#dialog-service-summary'),
+    dialogTravelTime: document.querySelector('#dialog-travel-time'),
+    dialogTravelTimeLabel: document.querySelector('#dialog-travel-time-label'),
+    dialogTravelTimeSelect: document.querySelector('#dialog-travel-time-select'),
+    dialogTravelTimeResult: document.querySelector('#dialog-travel-time-result'),
     dialogStatusPillElement: document.querySelector('#dialog-status-pill'),
     dialogUpdatedAtElement: document.querySelector('#dialog-updated-at'),
     dialogDirections: document.querySelector('#dialog-directions'),
@@ -40,5 +44,11 @@ export function getDialogElements() {
     insightsDetailSubtitle: document.querySelector('#insights-detail-subtitle'),
     insightsDetailBody: document.querySelector('#insights-detail-body'),
     insightsDetailClose: document.querySelector('#insights-detail-close'),
+
+    // Travel time elements (aliased for station display controller)
+    travelTimeSection: document.querySelector('#dialog-travel-time'),
+    travelTimeLabel: document.querySelector('#dialog-travel-time-label'),
+    travelTimeSelect: document.querySelector('#dialog-travel-time-select'),
+    travelTimeResult: document.querySelector('#dialog-travel-time-result'),
   }
 }
