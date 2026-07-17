@@ -845,6 +845,31 @@ boardElement.addEventListener('click', (e) => {
     return
   }
 
+  const stationListToggle = e.target.closest('[data-station-list-toggle]')
+  if (stationListToggle) {
+    const lineId = stationListToggle.dataset.stationListToggle
+    const list = document.querySelector(`[data-station-list="${CSS.escape(lineId)}"]`)
+    if (list) {
+      const isExpanded = list.hidden
+      list.hidden = !isExpanded
+      stationListToggle.setAttribute('aria-expanded', String(isExpanded))
+    }
+    return
+  }
+
+  const stationListItem = e.target.closest('[data-station-list-item]')
+  if (stationListItem) {
+    const stopId = stationListItem.dataset.stationListItem
+    const lineId = stationListItem.dataset.stationListLine
+    const line = state.lines.find((c) => c.id === lineId)
+    const layout = state.layouts.get(lineId)
+    const station = layout?.stations.find((s) => s.id === stopId)
+    if (station) {
+      showStationDialog(station)
+    }
+    return
+  }
+
   const terminalEl = e.target.closest('[data-terminal-line-id]')
   if (terminalEl) {
     const layout = state.layouts.get(terminalEl.dataset.terminalLineId)

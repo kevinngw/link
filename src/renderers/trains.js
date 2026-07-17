@@ -47,6 +47,39 @@ export function createTrainRenderers(deps) {
     `
   }
 
+  function renderStationList(line) {
+    const layout = state.layouts.get(line.id)
+    if (!layout || !layout.stations.length) return ''
+
+    const stations = layout.stations
+
+    const items = stations.map((station) => {
+      const timeFromStart = station.cumulativeMinutes
+      const timeStr = timeFromStart > 0 ? `${timeFromStart} min` : ''
+
+      return `
+        <button class="station-list-item" type="button" data-station-list-item="${station.id}" data-station-list-line="${line.id}">
+          <span class="station-list-marker" style="--line-color:${line.color};">
+            ${station.isTerminal ? `<span class="station-list-terminal">${line.name[0]}</span>` : '<span class="station-list-dot"></span>'}
+          </span>
+          <span class="station-list-name">${station.label}</span>
+          <span class="station-list-time">${timeStr}</span>
+        </button>
+      `
+    }).join('')
+
+    return `
+      <div class="station-list-container">
+        <button class="station-list-toggle" type="button" data-station-list-toggle="${line.id}" aria-expanded="false" aria-label="${copyValue('stationListToggleAria')}">
+          ${copyValue('stationListToggle')}
+        </button>
+        <div class="station-list" data-station-list="${line.id}" hidden>
+          ${items}
+        </div>
+      </div>
+    `
+  }
+
   function renderDirectionFilter(lineId) {
     const current = state.directionFilterByLine.get(lineId) || 'all'
     const options = [
@@ -186,6 +219,7 @@ export function createTrainRenderers(deps) {
             <div class="line-readout train-columns train-stack-layout">
               ${renderVehicleCardsWithGaps(filteredVehicles, vehicleLabel)}
             </div>
+            ${renderStationList(line)}
           </article>
         `
       })
